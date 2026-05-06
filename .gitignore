@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+.DS_Store
+
+.env
+.env.*
+
+state.json
+aws.context.json
