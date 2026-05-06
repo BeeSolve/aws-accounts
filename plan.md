@@ -10,19 +10,19 @@ Scope for this increment:
 
 ## Phase 1: Implement scanning (local execution)
 
-- [ ] Define local scan command contract (`scan`) and CLI arguments/env handling (`profile`, `region`).
-- [ ] Define canonical local state shape (`state.json`) for OUs, accounts, IAM Identity Center users/groups/permission sets/assignments.
-- [ ] Implement AWS SDK v3 read-only clients setup (Organizations + Identity Center related APIs).
-- [ ] Implement scanner module to fetch:
-  - [ ] OU tree
-  - [ ] accounts and OU placement
-  - [ ] identity center users/groups
-  - [ ] permission sets and account assignments
-- [ ] Implement pagination/retry/error handling for scanner calls.
-- [ ] Persist scan output locally to `state.json` (workspace path), with deterministic ordering for stable diffs.
-- [ ] Add validation of produced state with valibot schemas.
-- [ ] Add node test runner coverage for scanner normalization and schema validation.
-- [ ] Add CLI output summarizing discovered resources and output file path.
+- [x] Define local scan command contract (`scan`) and CLI arguments/env handling (`profile`, `region`).
+- [x] Define canonical local state shape (`state.json`) for OUs, accounts, IAM Identity Center users/groups/permission sets/assignments.
+- [x] Implement AWS SDK v3 read-only clients setup (Organizations + Identity Center related APIs).
+- [x] Implement scanner module to fetch:
+  - [x] OU tree
+  - [x] accounts and OU placement
+  - [x] identity center users/groups
+  - [x] permission sets and account assignments
+- [x] Implement pagination/retry/error handling for scanner calls.
+- [x] Persist scan output locally to `state.json` (workspace path), with deterministic ordering for stable diffs.
+- [x] Add validation of produced state with valibot schemas.
+- [x] Add node test runner coverage for scanner normalization and schema validation.
+- [x] Add CLI output summarizing discovered resources and output file path.
 
 ## Phase 2: Bootstrap OUs (Pending, Graveyard) locally-first flow
 
@@ -87,10 +87,10 @@ Scope for this increment:
 
 ## Cross-cutting implementation checklist
 
-- [ ] Keep CLI logic in one primary file (helpers extracted only when reused).
+- [x] Keep CLI logic in one primary file (helpers extracted only when reused).
 - [ ] Keep Lambda handler code in one file (placeholder only in increment 1 if not used yet).
-- [ ] Use esbuild for build outputs and local run wiring.
-- [ ] Use TypeScript 6+ conventions and camelCase naming.
-- [ ] Avoid barrel files.
+- [x] Use esbuild for build outputs and local run wiring.
+- [x] Use TypeScript 6+ conventions and camelCase naming.
+- [x] Avoid barrel files.
 - [ ] Add consistent error model and exit codes for CLI commands.
 - [ ] Add README usage notes for local increment commands and safety constraints.
