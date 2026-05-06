@@ -1,10 +1,16 @@
 {
   "name": "@beesolve/aws-accounts",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Local-first AWS Organizations and IAM Identity Center management CLI",
+  "main": "dist/cli.js",
+  "bin": {
+    "aws-accounts": "dist/cli.js"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "esbuild src/cli.ts src/commands/scan.ts src/state.ts src/awsClientConfig.ts src/retry.ts --platform=node --target=node24 --format=esm --outdir=dist --outbase=src && chmod +x dist/cli.js",
+    "cli": "npm run build && node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "test": "find src -name '*.test.ts' -print0 | xargs -0 node --experimental-strip-types --test"
   },
   "keywords": [],
   "author": "",
@@ -14,6 +20,7 @@
     "@aws-sdk/client-identitystore": "^3.1043.0",
     "@aws-sdk/client-organizations": "^3.1043.0",
     "@aws-sdk/client-sso-admin": "^3.1043.0",
+    "@aws-sdk/credential-providers": "^3.1043.0",
     "valibot": "^1.4.0"
   },
   "devDependencies": {
