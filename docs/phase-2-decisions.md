@@ -1,11 +1,11 @@
 # Phase 2 Decisions
 
-This file records agreed behaviour before implementing phase 2 (`bootstrap`): ensure **`Pending`** and **`Graveyard`** organisational units exist and persist context locally.
+This file records agreed behaviour before implementing phase 2 (`bootstrap`): ensure **`Pending`** and **`Graveyard`** organizational units exist and persist context locally.
 
 ## Scope
 
 - **OU-only**: `bootstrap` creates or discovers OUs only. It does **not** create or edit `aws.config.ts`, `state.json`, or deploy Lambda/S3.
-- **Parent OU**: **`Pending`** and **`Graveyard`** are always created as **direct children of the organisation root** (no `--parent-ou-id`).
+- **Parent OU**: **`Pending`** and **`Graveyard`** are always created as **direct children of the organization root** (no `--parent-ou-id`).
 - **Names**: fixed **`Pending`** and **`Graveyard`** (exact name match). No configurable names in this phase.
 
 ## CLI contract
@@ -26,7 +26,7 @@ This file records agreed behaviour before implementing phase 2 (`bootstrap`): en
 
 - **No merging** of ambiguous or partial updates.
 - If **`aws.context.json` already exists**:
-  - After resolving the authoritative picture from AWS (and after any creates requested in this run), compare persisted **`organisation`** / **`identityCenter`** identifiers against what we resolved.
+  - After resolving the authoritative picture from AWS (and after any creates requested in this run), compare persisted **`organization`** / **`identityCenter`** identifiers against what we resolved.
   - If any stored identifier **disagrees** with live resolution (for example stored `pendingOuId` does not match the live OU named `Pending` under root), **fail** with a descriptive error. User must fix the file or AWS manually.
 
 ## AWS behaviour
@@ -64,7 +64,7 @@ Proposed minimal schema for phase 2:
 {
   "version": "1",
   "generatedAt": "2026-05-06T00:00:00.000Z",
-  "organisation": {
+  "organization": {
     "managementAccountId": "string",
     "rootId": "string",
     "pendingOuId": "string",
