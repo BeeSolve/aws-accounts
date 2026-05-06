@@ -11,6 +11,7 @@ Agreed structure for implementation, with phase 1 emphasis.
 ├── tsconfig.json
 ├── docs/
 │   ├── phase-1-decisions.md
+│   ├── phase-2-decisions.md
 │   └── repository-structure.md
 ├── src/
 │   ├── cli.ts

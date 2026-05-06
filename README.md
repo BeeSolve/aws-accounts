@@ -5,6 +5,7 @@ Local-first AWS Organizations and IAM Identity Center management CLI.
 ## Project docs
 
 - Decision log for phase 1 scan: `docs/phase-1-decisions.md`
+- Decision log for phase 2 bootstrap: `docs/phase-2-decisions.md`
 - Agreed repository structure: `docs/repository-structure.md`
 
 ## IAM permissions by command
