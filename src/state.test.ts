@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeState, validateState } from "./state.ts";
+import { normalizeState, validateState } from "./state.js";
 
 test("normalizeState sorts by ids/arns before names", () => {
   const input = {

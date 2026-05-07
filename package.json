@@ -7,10 +7,10 @@
     "aws-accounts": "dist/cli.js"
   },
   "scripts": {
-    "build": "esbuild src/cli.ts src/commands/scan.ts src/state.ts src/awsClientConfig.ts src/retry.ts --platform=node --target=node24 --format=esm --outdir=dist --outbase=src && chmod +x dist/cli.js",
+    "build": "esbuild src/cli.ts src/commands/scan.ts src/commands/bootstrap.ts src/state.ts src/awsClientConfig.ts src/retry.ts src/state.test.ts src/commands/bootstrap.test.ts --platform=node --target=node24 --format=esm --outdir=dist --outbase=src && chmod +x dist/cli.js",
     "cli": "npm run build && node dist/cli.js",
     "typecheck": "tsc --noEmit",
-    "test": "find src -name '*.test.ts' -print0 | xargs -0 node --experimental-strip-types --test"
+    "test": "npm run build && node --test dist/state.test.js dist/commands/bootstrap.test.js"
   },
   "keywords": [],
   "author": "",

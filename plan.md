@@ -26,18 +26,18 @@ Scope for this increment:
 
 ## Phase 2: Bootstrap OUs (Pending, Graveyard) locally-first flow
 
-- [ ] Define bootstrap command contract (`bootstrap`) for local-first mode (no Lambda/S3 setup in increment 1).
-- [ ] Define idempotent logic to ensure required OUs exist: `Pending`, `Graveyard`.
-- [ ] Implement read-before-write checks to avoid duplicate OU creation.
-- [ ] Implement OU creation in AWS Organizations for missing required OUs (`Pending`, `Graveyard`).
-- [ ] Implement safe guards:
-  - [ ] no deletion
-  - [ ] no re-parenting except explicitly required by command scope
-  - [ ] clear prompt/log before any create operation
-- [ ] Persist discovered/created OU IDs into local context file (`aws.context.json`).
-- [ ] Ensure generated/updated context structure is future-compatible with later Lambda/S3 fields.
-- [ ] Add tests for bootstrap decision logic (exists vs create).
-- [ ] Add CLI summary showing OU actions planned/executed.
+- [x] Define bootstrap command contract (`bootstrap`) for local-first mode (no Lambda/S3 setup in increment 1).
+- [x] Define idempotent logic to ensure required OUs exist: `Pending`, `Graveyard`.
+- [x] Implement read-before-write checks to avoid duplicate OU creation.
+- [x] Implement OU creation in AWS Organizations for missing required OUs (`Pending`, `Graveyard`).
+- [x] Implement safe guards:
+  - [x] no deletion
+  - [x] no re-parenting except explicitly required by command scope
+  - [x] clear prompt/log before any create operation
+- [x] Persist discovered/created OU IDs into local context file (`aws.context.json`).
+- [x] Ensure generated/updated context structure is future-compatible with later Lambda/S3 fields.
+- [x] Add tests for bootstrap decision logic (exists vs create).
+- [x] Add CLI summary showing OU actions planned/executed.
 
 ## Phase 3: Implement `state.json` -> `aws.config.ts` + `aws.context.json`
 

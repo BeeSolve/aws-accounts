@@ -8,6 +8,8 @@ Local-first AWS Organizations and IAM Identity Center management CLI.
 - Decision log for phase 2 bootstrap: `docs/phase-2-decisions.md`
 - Agreed repository structure: `docs/repository-structure.md`
 
+Tests compile with esbuild to `dist/*.test.js` and run with `node --test` (`npm test`).
+
 ## IAM permissions by command
 
 Use these as inline role policies for the profile/role used by the CLI.
@@ -71,6 +73,12 @@ Use these as inline role policies for the profile/role used by the CLI.
         "organizations:ListOrganizationalUnitsForParent",
         "organizations:CreateOrganizationalUnit"
       ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IdentityCenterInstancesReadForBootstrap",
+      "Effect": "Allow",
+      "Action": ["sso:ListInstances"],
       "Resource": "*"
     }
   ]

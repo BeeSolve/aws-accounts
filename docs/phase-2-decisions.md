@@ -14,13 +14,13 @@ This file records agreed behaviour before implementing phase 2 (`bootstrap`): en
 - Options (aligned with phase 1 credential resolution):
   - `--profile` (fallback: `AWS_PROFILE`)
   - `--region` (fallback: `AWS_REGION`, then `AWS_DEFAULT_REGION`)
-  - `--instance-arn` (optional; see Identity Center below)
+  - `--instance-arn` (required only when multiple Identity Center instances exist)
   - `--yes` skip interactive confirmation (required in non-interactive environments when mutations would occur)
 
 ### Confirmation behaviour
 
-- **Interactive** (stdin is a TTY): print planned actions, then prompt before any `CreateOrganizationalUnit`.
-- **Non-interactive** (no TTY): if creates would run, **require `--yes`**; otherwise exit with a clear error (CI-safe).
+- `bootstrap` command receives `planConfirmation: (props) => Promise<boolean>` through props.
+- CLI owns TTY/`--yes` handling and passes callback behavior to command logic.
 
 ## Conflict handling (`aws.context.json`)
 
@@ -45,18 +45,18 @@ This file records agreed behaviour before implementing phase 2 (`bootstrap`): en
 - Reuse the same **pagination + limited retry** approach as phase 1 for throttling/transient errors on **read** paths.
 - Retries on failed **create** are **not** used to mask conflicts (still fail fast on hard errors).
 
-## Identity Center metadata (optional enrichment)
+## Identity Center metadata (required)
 
-Bootstrap remains OU-first; still **`aws.context.json`** should carry fields useful for later phases.
+Bootstrap remains OU-first but **`aws.context.json` always requires `identityCenter`**.
 
-- Call **`sso:ListInstances`** (same semantics as phase 1 for instance selection):
-  - **Exactly one** instance: persist `instanceArn` and `identityStoreId` under **`identityCenter`** in context.
-  - **Zero** instances: omit **`identityCenter`** or set nullable fields; OU bootstrap still succeeds.
-  - **Multiple** instances: if **`--instance-arn`** is provided, persist that instance’s ARN + store id; otherwise **omit** Identity Center fields and **warn** (do not fail OU bootstrap). Users can re-run with `--instance-arn` or rely on `scan` later.
+- Call **`sso:ListInstances`**:
+  - **Exactly one** instance: persist `instanceArn` and `identityStoreId`.
+  - **Zero** instances: fail bootstrap.
+  - **Multiple** instances: require `--instance-arn` and fail when omitted.
 
 ## `aws.context.json` shape (phase 2 target)
 
-Single file at repository root. **camelCase** keys. Unknown keys on read are rejected when we add validation (same strict policy as `state.json`).
+Single file at repository root. **camelCase** keys. Unknown keys on read are rejected (same strict policy as `state.json`).
 
 Proposed minimal schema for phase 2:
 

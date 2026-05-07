@@ -1,4 +1,11 @@
 import { parseArgs } from "node:util";
+import { createInterface } from "node:readline/promises";
+import {
+  buildAwsClientConfig,
+  resolveAwsProfile,
+  resolveAwsRegion,
+} from "./awsClientConfig.js";
+import { runBootstrapCommand } from "./commands/bootstrap.js";
 import { runScanCommand } from "./commands/scan.js";
 
 type CommandName = "scan" | "bootstrap" | "create-account" | "plan" | "apply";
@@ -10,9 +17,9 @@ async function main(): Promise<void> {
       region: { type: "string" },
       "instance-arn": { type: "string" },
       yes: { type: "boolean", default: false },
-      help: { type: "boolean", default: false }
+      help: { type: "boolean", default: false },
     },
-    allowPositionals: true
+    allowPositionals: true,
   });
 
   const command = args.positionals[0] as CommandName | undefined;
@@ -21,26 +28,76 @@ async function main(): Promise<void> {
     return;
   }
 
+  const profile = resolveAwsProfile({ profileArg: args.values.profile });
+  const region = resolveAwsRegion({ regionArg: args.values.region });
+  const clientConfig = buildAwsClientConfig({
+    profile,
+    region,
+  });
+
   if (command === "scan") {
     const result = await runScanCommand({
-      profile: args.values.profile,
-      region: args.values.region,
-      instanceArn: args.values["instance-arn"]
+      clientConfig,
+      instanceArn: args.values["instance-arn"],
     });
 
     console.log("");
     console.log("Scan complete.");
-    console.log(`Organization OUs: ${result.state.organization.organizationalUnits.length}`);
-    console.log(`Organization accounts: ${result.state.organization.accounts.length}`);
-    console.log(`Identity Center users: ${result.state.identityCenter.users.length}`);
-    console.log(`Identity Center groups: ${result.state.identityCenter.groups.length}`);
-    console.log(`Permission sets: ${result.state.identityCenter.permissionSets.length}`);
-    console.log(`Account assignments: ${result.state.identityCenter.accountAssignments.length}`);
+    console.log(
+      `Organization OUs: ${result.state.organization.organizationalUnits.length}`,
+    );
+    console.log(
+      `Organization accounts: ${result.state.organization.accounts.length}`,
+    );
+    console.log(
+      `Identity Center users: ${result.state.identityCenter.users.length}`,
+    );
+    console.log(
+      `Identity Center groups: ${result.state.identityCenter.groups.length}`,
+    );
+    console.log(
+      `Permission sets: ${result.state.identityCenter.permissionSets.length}`,
+    );
+    console.log(
+      `Account assignments: ${result.state.identityCenter.accountAssignments.length}`,
+    );
     console.log(`Output: ${result.outputPath}`);
     return;
   }
 
-  if (command === "bootstrap" || command === "create-account" || command === "plan" || command === "apply") {
+  if (command === "bootstrap") {
+    const planConfirmation = buildBootstrapPlanConfirmation({
+      yes: args.values.yes,
+      isTty: process.stdin.isTTY,
+    });
+    const result = await runBootstrapCommand({
+      clientConfig,
+      profile: profile ?? "",
+      region: region ?? "",
+      instanceArn: args.values["instance-arn"],
+      planConfirmation,
+    });
+
+    console.log("");
+    console.log("Bootstrap complete.");
+    console.log(
+      `Pending OU (${result.pendingOuId}): ${result.pendingCreated ? "created" : "reused"}`,
+    );
+    console.log(
+      `Graveyard OU (${result.graveyardOuId}): ${result.graveyardCreated ? "created" : "reused"}`,
+    );
+    console.log(
+      `Identity Center metadata: ${result.identityCenterCaptured ? "captured" : "missing"}`,
+    );
+    console.log(`Output: ${result.outputPath}`);
+    return;
+  }
+
+  if (
+    command === "create-account" ||
+    command === "plan" ||
+    command === "apply"
+  ) {
     console.log(`Command '${command}' is not implemented yet.`);
     return;
   }
@@ -53,11 +110,52 @@ function printHelp(): void {
   console.log("@beesolve/aws-accounts");
   console.log("");
   console.log("Usage:");
-  console.log("  npm run cli -- scan [--profile <name>] [--region <region>] [--instance-arn <arn>]");
-  console.log("  npm run cli -- <bootstrap|create-account|plan|apply>");
+  console.log(
+    "  npm run cli -- scan [--profile <name>] [--region <region>] [--instance-arn <arn>]",
+  );
+  console.log(
+    "  npm run cli -- bootstrap [--profile <name>] [--region <region>] [--instance-arn <arn>] [--yes]",
+  );
+  console.log("  npm run cli -- <create-account|plan|apply>");
   console.log("");
   console.log("Environment fallback:");
   console.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
+}
+
+type BuildBootstrapPlanConfirmationProps = {
+  yes: boolean;
+  isTty: boolean | undefined;
+};
+
+function buildBootstrapPlanConfirmation(
+  props: BuildBootstrapPlanConfirmationProps,
+): (props: { planLines: string[] }) => Promise<boolean> {
+  return async (planProps: { planLines: string[] }): Promise<boolean> => {
+    if (planProps.planLines.length === 0) {
+      return true;
+    }
+    if (props.yes) {
+      return true;
+    }
+    if (props.isTty !== true) {
+      throw new Error(
+        "Refusing to create organizational units in non-interactive mode without --yes.",
+      );
+    }
+    const readlineInterface = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    try {
+      const answer = await readlineInterface.question(
+        "Proceed with creating organizational units? [y/N] ",
+      );
+      const normalized = answer.trim().toLowerCase();
+      return normalized === "y" || normalized === "yes";
+    } finally {
+      readlineInterface.close();
+    }
+  };
 }
 
 main().catch((error: unknown) => {

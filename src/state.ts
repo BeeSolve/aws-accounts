@@ -1,16 +1,16 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { strictObject, array, string, pipe, minLength, parse } from "valibot";
+import * as v from "valibot";
 
-const nonEmptyString = pipe(string(), minLength(1));
+const nonEmptyString = v.pipe(v.string(), v.minLength(1));
 
-const organizationalUnitSchema = strictObject({
+const organizationalUnitSchema = v.strictObject({
   id: nonEmptyString,
   parentId: nonEmptyString,
   arn: nonEmptyString,
   name: nonEmptyString
 });
 
-const accountSchema = strictObject({
+const accountSchema = v.strictObject({
   id: nonEmptyString,
   arn: nonEmptyString,
   name: nonEmptyString,
@@ -19,32 +19,32 @@ const accountSchema = strictObject({
   parentId: nonEmptyString
 });
 
-const userSchema = strictObject({
+const userSchema = v.strictObject({
   userId: nonEmptyString,
   userName: nonEmptyString,
-  displayName: string(),
-  emails: array(string())
+  displayName: v.string(),
+  emails: v.array(v.string())
 });
 
-const groupSchema = strictObject({
+const groupSchema = v.strictObject({
   groupId: nonEmptyString,
   displayName: nonEmptyString
 });
 
-const permissionSetSchema = strictObject({
+const permissionSetSchema = v.strictObject({
   permissionSetArn: nonEmptyString,
   name: nonEmptyString,
-  description: string()
+  description: v.string()
 });
 
-const accountAssignmentSchema = strictObject({
+const accountAssignmentSchema = v.strictObject({
   accountId: nonEmptyString,
   permissionSetArn: nonEmptyString,
   principalId: nonEmptyString,
   principalType: nonEmptyString
 });
 
-const accessRoleSchema = strictObject({
+const accessRoleSchema = v.strictObject({
   accountId: nonEmptyString,
   permissionSetArn: nonEmptyString,
   principalId: nonEmptyString,
@@ -52,95 +52,36 @@ const accessRoleSchema = strictObject({
   roleName: nonEmptyString
 });
 
-const stateSchema = strictObject({
+const stateSchema = v.strictObject({
   version: nonEmptyString,
   generatedAt: nonEmptyString,
-  organization: strictObject({
+  organization: v.strictObject({
     rootId: nonEmptyString,
-    organizationalUnits: array(organizationalUnitSchema),
-    accounts: array(accountSchema)
+    organizationalUnits: v.array(organizationalUnitSchema),
+    accounts: v.array(accountSchema)
   }),
-  identityCenter: strictObject({
+  identityCenter: v.strictObject({
     instanceArn: nonEmptyString,
     identityStoreId: nonEmptyString,
-    users: array(userSchema),
-    groups: array(groupSchema),
-    permissionSets: array(permissionSetSchema),
-    accountAssignments: array(accountAssignmentSchema),
-    accessRoles: array(accessRoleSchema)
+    users: v.array(userSchema),
+    groups: v.array(groupSchema),
+    permissionSets: v.array(permissionSetSchema),
+    accountAssignments: v.array(accountAssignmentSchema),
+    accessRoles: v.array(accessRoleSchema)
   })
 });
 
-export type OrganizationalUnitState = {
-  id: string;
-  parentId: string;
-  arn: string;
-  name: string;
-};
-
-export type AccountState = {
-  id: string;
-  arn: string;
-  name: string;
-  email: string;
-  status: string;
-  parentId: string;
-};
-
-export type UserState = {
-  userId: string;
-  userName: string;
-  displayName: string;
-  emails: string[];
-};
-
-export type GroupState = {
-  groupId: string;
-  displayName: string;
-};
-
-export type PermissionSetState = {
-  permissionSetArn: string;
-  name: string;
-  description: string;
-};
-
-export type AccountAssignmentState = {
-  accountId: string;
-  permissionSetArn: string;
-  principalId: string;
-  principalType: string;
-};
-
-export type AccessRoleState = {
-  accountId: string;
-  permissionSetArn: string;
-  principalId: string;
-  principalType: string;
-  roleName: string;
-};
-
-export type StateFile = {
-  version: string;
-  generatedAt: string;
-  organization: {
-    rootId: string;
-    organizationalUnits: OrganizationalUnitState[];
-    accounts: AccountState[];
-  };
-  identityCenter: {
-    instanceArn: string;
-    identityStoreId: string;
-    users: UserState[];
-    groups: GroupState[];
-    permissionSets: PermissionSetState[];
-    accountAssignments: AccountAssignmentState[];
-    accessRoles: AccessRoleState[];
-  };
-};
+export type OrganizationalUnitState = v.InferOutput<typeof organizationalUnitSchema>;
+export type AccountState = v.InferOutput<typeof accountSchema>;
+export type UserState = v.InferOutput<typeof userSchema>;
+export type GroupState = v.InferOutput<typeof groupSchema>;
+export type PermissionSetState = v.InferOutput<typeof permissionSetSchema>;
+export type AccountAssignmentState = v.InferOutput<typeof accountAssignmentSchema>;
+export type AccessRoleState = v.InferOutput<typeof accessRoleSchema>;
+export type StateFile = v.InferOutput<typeof stateSchema>;
 
 export function validateState(value: unknown): StateFile {
-  return parse(stateSchema, value);
+  return v.parse(stateSchema, value);
 }
 
 export function normalizeState(state: StateFile): StateFile {
