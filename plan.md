@@ -91,24 +91,29 @@ Scope for this increment:
 
 ## Phase 5: Implement add/modify flow (config-driven reconciliation)
 
+> Design decisions: [`docs/phase-5-decisions.md`](docs/phase-5-decisions.md). Working plan with file paths and ordering: [`docs/phase-5-plan.md`](docs/phase-5-plan.md).
+
 - [ ] Define reconciliation command pair for local mode:
   - [ ] `plan` (load `aws.config.ts` → transform to next `state.json` shape → diff current `state.json` vs next; emit operations list).
   - [ ] `apply` (execute approved operations directly via AWS SDK in CLI for increment 1).
 - [ ] Implement `mapAwsConfigToState` transform:
   - [ ] load `aws.config.ts` via the phase 3 loader.
-  - [ ] resolve names to AWS-issued ids using current `state.json` (entities present in both keep their existing ids; entities only in config get placeholder ids interpreted by the diff as "to be created").
+  - [x] resolve names to AWS-issued ids using current `state.json` (entities present in both keep their existing ids; entities only in config get placeholder ids interpreted by the diff as "to be created").
 - [ ] Implement state-vs-state diff engine producing human-readable and machine-readable plan.
 - [ ] Define operation model for supported mutations in increment 1:
-  - [ ] move account between OUs
-  - [ ] add account metadata entries
+  - [x] move account between OUs
 - [ ] Exclude IAM Identity Center assignment mutations from increment 1 apply scope.
+- [ ] Exclude account metadata reconciliation (tags, alternate contacts, account-name drift) from increment 1 apply scope; deferred to a later increment.
 - [ ] Implement safety policy:
   - [ ] default no destructive actions
-  - [ ] explicit guardrails for unsupported/destructive diffs
+  - [ ] strict default: refuse apply when any unsupported diff is present
+  - [ ] `--ignore-unsupported` flag proceeds past non-destructive unsupported diffs only
+  - [ ] destructive unsupported diffs (account removal from config, OU deletion) always refuse, no flag override
   - [ ] require confirmation before apply (interactive prompt)
   - [ ] support non-interactive approval via `--yes`
 - [ ] Implement apply executor with per-operation progress + final outcome summary.
 - [ ] After apply succeeds, write the post-apply state to `state.json` from the planned-next-state. Do not regenerate `aws.config.ts`. Do not auto re-scan in the normal apply loop.
+- [ ] On per-operation failure during apply: abort, persist `state.json` reflecting only successful ops, exit non-zero with guidance to run `scan` then re-`apply`.
 - [ ] Add tests for `mapAwsConfigToState`, plan generation (state-vs-state), and apply sequencing.
 
 ## Out of scope for increment 1
@@ -118,6 +123,8 @@ Scope for this increment:
 - Watcher mode for `regenerate`. A future `watch` command will run `regenerate` on `aws.config.ts` change; for increment 1 the user runs it manually.
 - IAM Identity Center mutation operations in `apply` (creating users / groups / assignments).
 - Cloud-backed flow: Lambda deployment, S3 state storage, signed-URL state download. Increment 1 is local-only.
+- Saved plan artifact (Terraform-style `plan.json` for separate `plan` then `apply` runs across sessions / pipelines). `apply` recomputes the plan inline in increment 1. Deferred to increment 2 alongside the cloud-backed flow.
+- Account metadata reconciliation in `apply` (tags, alternate contacts, primary contact info, account-name drift). Phase 4 sets `name` / `email` at create time; subsequent edits are not applied in increment 1. Tags are the natural next-up but require schema additions and a follow-up increment.
 
 ## Cross-cutting implementation checklist
 

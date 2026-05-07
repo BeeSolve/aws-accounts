@@ -4,9 +4,15 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build as esbuildBuild } from "esbuild";
 import * as v from "valibot";
-import { readStateFile, type StateFile } from "./state.js";
+import {
+  createAccessRoleName,
+  readStateFile,
+  type StateFile,
+  validateState,
+} from "./state.js";
 
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
+const pendingCreationId = "__pending_creation__" as const;
 
 const awsContextSchema = v.strictObject({
   version: nonEmptyString,
@@ -130,6 +136,12 @@ type FileWriteResult = {
 type MapAssignmentPrincipalResult =
   | { kind: "group"; value: string }
   | { kind: "user"; value: string };
+
+type MapAwsConfigToStateProps = {
+  config: AwsConfigModel;
+  currentState: StateFile;
+  context: AwsContextFile;
+};
 
 export async function writeAwsConfigFromState(
   props: WriteAwsConfigFromStateInput,
@@ -481,6 +493,233 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
   return v.parse(awsConfigModelSchema, mapped);
 }
 
+function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile {
+  const organizationalUnitByName = new Map(
+    props.currentState.organization.organizationalUnits.map((ou) => [ou.name, ou]),
+  );
+  const accountByName = new Map(
+    props.currentState.organization.accounts.map((account) => [account.name, account]),
+  );
+  const userByUserName = new Map(
+    props.currentState.identityCenter.users.map((user) => [user.userName, user]),
+  );
+  const groupByDisplayName = new Map(
+    props.currentState.identityCenter.groups.map((group) => [group.displayName, group]),
+  );
+  const permissionSetByName = new Map(
+    props.currentState.identityCenter.permissionSets.map((permissionSet) => [
+      permissionSet.name,
+      permissionSet,
+    ]),
+  );
+  const configOrganizationalUnitNameSet = new Set(
+    props.config.organizationalUnits.map((organizationalUnit) => organizationalUnit.name),
+  );
+  const mappedOrganizationalUnitIdByName = new Map<string, string>();
+
+  for (const organizationalUnit of props.config.organizationalUnits) {
+    if (
+      organizationalUnit.name !== "root" &&
+      organizationalUnit.parentName != null &&
+      configOrganizationalUnitNameSet.has(organizationalUnit.parentName) === false
+    ) {
+      throw new Error(
+        `Organizational unit "${organizationalUnit.name}" references unknown parentName "${organizationalUnit.parentName}".`,
+      );
+    }
+    const mappedId = resolveOrganizationalUnitId({
+      organizationalUnitName: organizationalUnit.name,
+      matchedOrganizationalUnit: organizationalUnitByName.get(organizationalUnit.name),
+      context: props.context,
+    });
+    mappedOrganizationalUnitIdByName.set(organizationalUnit.name, mappedId);
+  }
+
+  const mappedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] = [];
+  for (const organizationalUnit of props.config.organizationalUnits) {
+    if (organizationalUnit.name === "root") {
+      continue;
+    }
+    const mappedId = mappedOrganizationalUnitIdByName.get(organizationalUnit.name);
+    if (mappedId == null) {
+      throw new Error(
+        `Could not resolve mapped id for organizational unit "${organizationalUnit.name}".`,
+      );
+    }
+    const parentId =
+      organizationalUnit.parentName == null
+        ? props.context.organization.rootId
+        : (mappedOrganizationalUnitIdByName.get(organizationalUnit.parentName) ??
+          pendingCreationId);
+    const matchedOrganizationalUnit = organizationalUnitByName.get(
+      organizationalUnit.name,
+    );
+    mappedOrganizationalUnits.push({
+      id: mappedId,
+      parentId: parentId,
+      arn: matchedOrganizationalUnit?.arn ?? pendingCreationId,
+      name: organizationalUnit.name,
+    });
+  }
+
+  const mappedAccountIdByName = new Map<string, string>();
+  const mappedAccounts: StateFile["organization"]["accounts"] = [];
+  for (const organizationalUnit of props.config.organizationalUnits) {
+    const ownerParentId = mappedOrganizationalUnitIdByName.get(organizationalUnit.name);
+    if (ownerParentId == null) {
+      throw new Error(
+        `Could not resolve mapped parent id for organizational unit "${organizationalUnit.name}".`,
+      );
+    }
+    for (const account of organizationalUnit.accounts) {
+      const matchedAccount = accountByName.get(account.name);
+      const mappedId = matchedAccount?.id ?? pendingCreationId;
+      mappedAccounts.push({
+        id: mappedId,
+        arn: matchedAccount?.arn ?? pendingCreationId,
+        name: account.name,
+        email: account.email,
+        status: matchedAccount?.status ?? "ACTIVE",
+        parentId: ownerParentId,
+      });
+      mappedAccountIdByName.set(account.name, mappedId);
+    }
+  }
+
+  const mappedUsers: StateFile["identityCenter"]["users"] = props.config.users.map(
+    (user) => {
+      const matchedUser = userByUserName.get(user.userName);
+      return {
+        userId: matchedUser?.userId ?? pendingCreationId,
+        userName: user.userName,
+        displayName: user.displayName,
+        emails: [...user.emails],
+      };
+    },
+  );
+  const mappedUserIdByUserName = new Map(
+    mappedUsers.map((user) => [user.userName, user.userId]),
+  );
+
+  const mappedGroups: StateFile["identityCenter"]["groups"] = props.config.groups.map(
+    (group) => {
+      const matchedGroup = groupByDisplayName.get(group.displayName);
+      return {
+        groupId: matchedGroup?.groupId ?? pendingCreationId,
+        displayName: group.displayName,
+      };
+    },
+  );
+  const mappedGroupIdByDisplayName = new Map(
+    mappedGroups.map((group) => [group.displayName, group.groupId]),
+  );
+
+  const mappedPermissionSets: StateFile["identityCenter"]["permissionSets"] =
+    props.config.permissionSets.map((permissionSet) => {
+      const matchedPermissionSet = permissionSetByName.get(permissionSet.name);
+      return {
+        permissionSetArn:
+          matchedPermissionSet?.permissionSetArn ?? pendingCreationId,
+        name: permissionSet.name,
+        description: permissionSet.description,
+      };
+    });
+  const mappedPermissionSetArnByName = new Map(
+    mappedPermissionSets.map((permissionSet) => [
+      permissionSet.name,
+      permissionSet.permissionSetArn,
+    ]),
+  );
+
+  const mappedAccountAssignments: StateFile["identityCenter"]["accountAssignments"] = [];
+  for (const assignment of props.config.assignments) {
+    const hasGroupPrincipal = assignment.group != null;
+    const hasUserPrincipal = assignment.user != null;
+    if (hasGroupPrincipal === hasUserPrincipal) {
+      throw new Error(
+        `Assignment for permission set "${assignment.permissionSet}" must include exactly one principal (group or user).`,
+      );
+    }
+    const mappedPrincipal =
+      hasGroupPrincipal === true
+        ? {
+            principalId:
+              mappedGroupIdByDisplayName.get(assignment.group ?? "") ??
+              pendingCreationId,
+            principalType: "GROUP" as const,
+          }
+        : {
+            principalId:
+              mappedUserIdByUserName.get(assignment.user ?? "") ??
+              pendingCreationId,
+            principalType: "USER" as const,
+          };
+    const permissionSetArn =
+      mappedPermissionSetArnByName.get(assignment.permissionSet) ??
+      pendingCreationId;
+    for (const accountName of assignment.accounts) {
+      mappedAccountAssignments.push({
+        accountId: mappedAccountIdByName.get(accountName) ?? pendingCreationId,
+        permissionSetArn: permissionSetArn,
+        principalId: mappedPrincipal.principalId,
+        principalType: mappedPrincipal.principalType,
+      });
+    }
+  }
+
+  const mapped: StateFile = {
+    version: props.currentState.version,
+    generatedAt: props.currentState.generatedAt,
+    organization: {
+      rootId: props.context.organization.rootId,
+      organizationalUnits: mappedOrganizationalUnits,
+      accounts: mappedAccounts,
+    },
+    identityCenter: {
+      instanceArn: props.context.identityCenter.instanceArn,
+      identityStoreId: props.context.identityCenter.identityStoreId,
+      users: mappedUsers,
+      groups: mappedGroups,
+      permissionSets: mappedPermissionSets,
+      accountAssignments: mappedAccountAssignments,
+      accessRoles: mappedAccountAssignments.map((assignment) => ({
+        accountId: assignment.accountId,
+        permissionSetArn: assignment.permissionSetArn,
+        principalId: assignment.principalId,
+        principalType: assignment.principalType,
+        roleName: createAccessRoleName(assignment),
+      })),
+    },
+  };
+
+  assertUniqueNames({
+    values: props.config.organizationalUnits.map((organizationalUnit) =>
+      organizationalUnit.name,
+    ),
+    entityName: "organizational unit",
+  });
+  assertUniqueNames({
+    values: props.config.organizationalUnits.flatMap((organizationalUnit) =>
+      organizationalUnit.accounts.map((account) => account.name),
+    ),
+    entityName: "account",
+  });
+  assertUniqueNames({
+    values: props.config.groups.map((group) => group.displayName),
+    entityName: "group",
+  });
+  assertUniqueNames({
+    values: props.config.users.map((user) => user.userName),
+    entityName: "user",
+  });
+  assertUniqueNames({
+    values: props.config.permissionSets.map((permissionSet) => permissionSet.name),
+    entityName: "permission set",
+  });
+
+  return validateState(mapped);
+}
+
 function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
   const childrenByParentName = new Map<
     string | null,
@@ -760,6 +999,23 @@ function mapAssignmentPrincipal(props: {
   throw new Error(
     `Unsupported principal type "${props.assignment.principalType}" in account assignment.`,
   );
+}
+
+function resolveOrganizationalUnitId(props: {
+  organizationalUnitName: string;
+  matchedOrganizationalUnit?: StateFile["organization"]["organizationalUnits"][number];
+  context: AwsContextFile;
+}): string {
+  if (props.organizationalUnitName === "root") {
+    return props.context.organization.rootId;
+  }
+  if (props.organizationalUnitName === "Pending") {
+    return props.context.organization.pendingOuId;
+  }
+  if (props.organizationalUnitName === "Graveyard") {
+    return props.context.organization.graveyardOuId;
+  }
+  return props.matchedOrganizationalUnit?.id ?? pendingCreationId;
 }
 
 function renderPicklistSchema(props: { values: string[] }): string {

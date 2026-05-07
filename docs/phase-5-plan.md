@@ -34,16 +34,17 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
 
 ## Phase 5.2: `mapAwsConfigToState` transform
 
-- [ ] Add `mapAwsConfigToState` in `src/awsConfig.ts` (sits next to existing `mapStateToAwsConfig` at `src/awsConfig.ts:319`).
-- [ ] Signature: `mapAwsConfigToState(props: { config: AwsConfigModel; currentState: LocalState; context: AwsContext }): LocalState`.
-- [ ] Behavior:
+- [x] Add `mapAwsConfigToState` in `src/awsConfig.ts` (sits next to existing `mapStateToAwsConfig` at `src/awsConfig.ts:319`).
+- [x] Signature: `mapAwsConfigToState(props: { config: AwsConfigModel; currentState: StateFile; context: AwsContextFile }): StateFile`.
+- [x] Behavior:
   - For entities present in both config and state (matched by name), copy AWS-issued ids from current state.
-  - For entities only in config, emit a sentinel id (e.g., `'__pending_creation__'` or a typed `{ status: 'toCreate' }` wrapper). Diff engine treats sentinel ids as "to-create" markers.
+  - For entities only in config, emit a sentinel id via `pendingCreationId = "__pending_creation__" as const`. Diff engine treats sentinel ids as "to-create" markers.
   - Synthetic `{ name: 'root', parentName: null }` OU resolves to `context.organization.rootId`.
   - `Pending` and `Graveyard` resolved from `context` (not state) for stability.
   - Account assignments are flattened back from `(principal, permissionSet, accounts[])` into one row per `(principal, permissionSet, accountId)`.
-- [ ] Validation: name uniqueness re-checked (defense in depth even though `awsConfigSchema` enforces picklists).
-- [ ] Returns a `LocalState` shaped like `state.json` but with sentinel ids where AWS ids are unknown.
+- [x] Validation: name uniqueness re-checked (defense in depth even though `awsConfigSchema` enforces picklists).
+- [x] Returns a `StateFile` shaped like `state.json` but with sentinel ids where AWS ids are unknown.
+- [ ] Add/extend tests for `mapAwsConfigToState` behavior (tracked in Phase 5.7).
 
 ## Phase 5.3: Diff engine
 
