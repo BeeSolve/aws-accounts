@@ -2,6 +2,7 @@ import { IdentitystoreClient } from "@aws-sdk/client-identitystore";
 import { OrganizationsClient } from "@aws-sdk/client-organizations";
 import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import { writeAwsConfigFromState } from "../awsConfig.js";
+import type { Logger } from "../logger.js";
 import { runBootstrapCommand } from "./bootstrap.js";
 import { runScanCommand } from "./scan.js";
 
@@ -9,6 +10,7 @@ type InitCommandInput = {
   organizationsClient: OrganizationsClient;
   ssoAdminClient: SSOAdminClient;
   identityStoreClient: IdentitystoreClient;
+  logger: Logger;
   profile: string;
   region: string;
   instanceArn?: string;
@@ -34,6 +36,7 @@ export async function runInitCommand(
   const bootstrapResult = await runBootstrapCommand({
     organizationsClient: props.organizationsClient,
     ssoAdminClient: props.ssoAdminClient,
+    logger: props.logger,
     profile: props.profile,
     region: props.region,
     instanceArn: props.instanceArn,
@@ -44,6 +47,7 @@ export async function runInitCommand(
     organizationsClient: props.organizationsClient,
     ssoAdminClient: props.ssoAdminClient,
     identityStoreClient: props.identityStoreClient,
+    logger: props.logger,
     instanceArn: props.instanceArn,
     outputPath: props.statePath,
   });
@@ -52,6 +56,7 @@ export async function runInitCommand(
     contextPath: bootstrapResult.outputPath,
     configPath: props.configPath ?? "aws.config.ts",
     typesPath: props.typesPath ?? "aws.config.types.ts",
+    logger: props.logger,
     overwriteConfirmation: props.overwriteConfirmation,
   });
   return {

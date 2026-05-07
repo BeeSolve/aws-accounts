@@ -6,8 +6,10 @@ import {
 import { diffStates } from "../diff.js";
 import { readStateFile } from "../state.js";
 import type { Plan } from "../operations.js";
+import type { Logger } from "../logger.js";
 
 type PlanCommandInput = {
+  logger: Logger;
   configPath: string;
   typesPath: string;
   statePath: string;
@@ -42,26 +44,26 @@ export async function runPlanCommand(
   });
 
   if (props.output === "json") {
-    console.log(JSON.stringify(plan, null, 2));
+    props.logger.log(JSON.stringify(plan, null, 2));
     return {
       plan: plan,
     };
   }
 
-  console.log(
+  props.logger.log(
     `Plan: ${plan.operations.length} operation(s), ${plan.unsupported.length} unsupported diff(s)`,
   );
   for (const operation of plan.operations) {
     if (operation.kind === "moveAccount") {
-      console.log(
+      props.logger.log(
         `  move account "${operation.accountName}" (${operation.accountId}) from ${operation.fromOuName} -> ${operation.toOuName}`,
       );
     }
   }
   if (plan.unsupported.length > 0) {
-    console.log("Unsupported diffs:");
+    props.logger.log("Unsupported diffs:");
     for (const diff of plan.unsupported) {
-      console.log(`  - ${diff.description} [${diff.category}]`);
+      props.logger.log(`  - ${diff.description} [${diff.category}]`);
     }
   }
 

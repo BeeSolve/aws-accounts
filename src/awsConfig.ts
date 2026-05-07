@@ -11,6 +11,7 @@ import {
   validateState,
 } from "./state.js";
 import { assertUnreachable } from "./helpers.js";
+import type { Logger } from "./logger.js";
 
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
 const pendingCreationId = "__pending_creation__" as const;
@@ -86,6 +87,7 @@ type WriteAwsConfigFromStateInput = {
   contextPath: string;
   configPath: string;
   typesPath: string;
+  logger: Logger;
   overwriteConfirmation: (props: {
     fileSummaries: string[];
   }) => Promise<boolean>;
@@ -100,6 +102,7 @@ type WriteAwsConfigFromStateResult = {
 type RegenerateAwsConfigTypesInput = {
   configPath: string;
   typesPath: string;
+  logger: Logger;
   overwriteConfirmation: (props: {
     fileSummaries: string[];
   }) => Promise<boolean>;
@@ -191,7 +194,7 @@ export async function writeAwsConfigFromState(
   }
 
   if (changedFiles.length === 0) {
-    console.log("No changes.");
+    props.logger.log("No changes.");
     return {
       configPath: props.configPath,
       typesPath: props.typesPath,
@@ -212,15 +215,15 @@ export async function writeAwsConfigFromState(
     (file) => `${file.path}: ${file.previousBytes} -> ${file.nextBytes} bytes`,
   );
   for (const fileSummary of fileSummaries) {
-    console.log(fileSummary);
+    props.logger.log(fileSummary);
   }
-  console.log(`Review with: git diff ${props.configPath} ${props.typesPath}`);
+  props.logger.log(`Review with: git diff ${props.configPath} ${props.typesPath}`);
 
   const shouldWrite = await props.overwriteConfirmation({
     fileSummaries: fileSummaries,
   });
   if (!shouldWrite) {
-    console.log("Config write cancelled.");
+    props.logger.log("Config write cancelled.");
     return {
       configPath: props.configPath,
       typesPath: props.typesPath,
@@ -282,7 +285,7 @@ export async function regenerateAwsConfigTypes(
   });
   const currentTypesContent = await readIfExists(props.typesPath);
   if (currentTypesContent === nextTypesContent) {
-    console.log("No changes.");
+    props.logger.log("No changes.");
     return {
       typesPath: props.typesPath,
       changed: false,
@@ -296,14 +299,14 @@ export async function regenerateAwsConfigTypes(
   }
 
   const fileSummary = `${props.typesPath}: ${Buffer.byteLength(currentTypesContent ?? "", "utf8")} -> ${Buffer.byteLength(nextTypesContent, "utf8")} bytes`;
-  console.log(fileSummary);
-  console.log(`Review with: git diff ${props.typesPath}`);
+  props.logger.log(fileSummary);
+  props.logger.log(`Review with: git diff ${props.typesPath}`);
 
   const shouldWrite = await props.overwriteConfirmation({
     fileSummaries: [fileSummary],
   });
   if (!shouldWrite) {
-    console.log("Types write cancelled.");
+    props.logger.log("Types write cancelled.");
     return {
       typesPath: props.typesPath,
       changed: false,

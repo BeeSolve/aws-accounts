@@ -7,6 +7,7 @@ import {
   writeAwsConfigFromState,
 } from "./awsConfig.js";
 import { createTestWorkspace } from "./helpers.test.js";
+import { noopLogger } from "./logger.js";
 
 test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
@@ -25,6 +26,7 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => {
         confirmationCalls += 1;
         return true;
@@ -65,6 +67,7 @@ test("writeAwsConfigFromState no-op does not call confirmation", async () => {
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
@@ -74,6 +77,7 @@ test("writeAwsConfigFromState no-op does not call confirmation", async () => {
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => {
         confirmationCalls += 1;
         return true;
@@ -118,6 +122,7 @@ test("writeAwsConfigFromState fails on context mismatch", async () => {
           contextPath: contextPath,
           configPath: configPath,
           typesPath: typesPath,
+          logger: noopLogger,
           overwriteConfirmation: async () => true,
         }),
       /Pending OU id/,
@@ -143,6 +148,7 @@ test("regenerateAwsConfigTypes reports no changes when types are up to date", as
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
@@ -150,6 +156,7 @@ test("regenerateAwsConfigTypes reports no changes when types are up to date", as
     const result = await regenerateAwsConfigTypes({
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => {
         confirmationCalls += 1;
         return true;
@@ -179,6 +186,7 @@ test("regenerateAwsConfigTypes writes when types are stale", async () => {
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
@@ -187,6 +195,7 @@ test("regenerateAwsConfigTypes writes when types are stale", async () => {
     const result = await regenerateAwsConfigTypes({
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     assert.equal(result.changed, true);
@@ -214,6 +223,7 @@ test("writeAwsConfigFromState reports would-write when confirmation is rejected"
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => false,
     });
     assert.deepEqual(result.files, [
@@ -241,6 +251,7 @@ test("regenerateAwsConfigTypes reports would-write when confirmation is rejected
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     const previousTypes = await readFile(typesPath, "utf8");
@@ -248,6 +259,7 @@ test("regenerateAwsConfigTypes reports would-write when confirmation is rejected
     const result = await regenerateAwsConfigTypes({
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => false,
     });
     assert.equal(result.changed, false);

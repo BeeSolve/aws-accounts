@@ -24,6 +24,7 @@ import {
 } from "@aws-sdk/client-sso-admin";
 import { runScanCommand } from "./scan.js";
 import { createTestWorkspace } from "../helpers.test.js";
+import { noopLogger } from "../logger.js";
 
 test(
   "runScanCommand writes state with organization and identity center data",
@@ -44,6 +45,7 @@ test(
           ],
         }),
         identityStoreClient: createIdentityStoreClientMock(),
+        logger: noopLogger,
         outputPath: outputPath,
       });
 
@@ -86,6 +88,7 @@ test("runScanCommand fails when organization root is missing", async () => {
           ],
         }),
         identityStoreClient: createIdentityStoreClientMock(),
+        logger: noopLogger,
       }),
     /No organization root found/,
   );
@@ -111,6 +114,7 @@ test("runScanCommand fails when multiple identity center instances exist without
           ],
         }),
         identityStoreClient: createIdentityStoreClientMock(),
+        logger: noopLogger,
       }),
     /Multiple IAM Identity Center instances found/,
   );

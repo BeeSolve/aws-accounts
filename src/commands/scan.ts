@@ -24,6 +24,7 @@ import {
   type AccountAssignmentState,
   type StateFile,
 } from "../state.js";
+import type { Logger } from "../logger.js";
 
 const outputPath = "state.json";
 
@@ -31,6 +32,7 @@ type ScanCommandInput = {
   organizationsClient: OrganizationsClient;
   ssoAdminClient: SSOAdminClient;
   identityStoreClient: IdentitystoreClient;
+  logger: Logger;
   instanceArn?: string;
   outputPath?: string;
 };
@@ -43,7 +45,7 @@ type ScanCommandResult = {
 export async function runScanCommand(
   props: ScanCommandInput,
 ): Promise<ScanCommandResult> {
-  console.log("Scanning organization and identity center...");
+  props.logger.log("Scanning organization and identity center...");
   const [organization, identityCenter] = await Promise.all([
     scanOrganization({
       organizationsClient: props.organizationsClient,
@@ -63,7 +65,7 @@ export async function runScanCommand(
   };
 
   const resolvedOutputPath = props.outputPath ?? outputPath;
-  console.log(`Writing ${resolvedOutputPath}...`);
+  props.logger.log(`Writing ${resolvedOutputPath}...`);
   await writeStateFile(resolvedOutputPath, state);
   return { outputPath: resolvedOutputPath, state };
 }

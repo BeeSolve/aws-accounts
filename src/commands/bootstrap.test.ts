@@ -12,6 +12,7 @@ import {
 import { ListInstancesCommand, type SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import { runBootstrapCommand } from "./bootstrap.js";
 import { createTestWorkspace } from "../helpers.test.js";
+import { noopLogger } from "../logger.js";
 
 test(
   "runBootstrapCommand creates missing root OUs and writes context file",
@@ -33,6 +34,7 @@ test(
             },
           ],
         }),
+        logger: noopLogger,
         profile: "default",
         region: "eu-central-1",
         outputPath: outputPath,
@@ -83,6 +85,7 @@ test(
                 },
               ],
             }),
+            logger: noopLogger,
             profile: "default",
             region: "eu-central-1",
             outputPath: outputPath,
@@ -127,6 +130,7 @@ test(
             },
           ],
         }),
+        logger: noopLogger,
         profile: "default",
         region: "eu-central-1",
         outputPath: outputPath,
@@ -180,6 +184,7 @@ test(
             },
           ],
         }),
+        logger: noopLogger,
         profile: "default",
         region: "eu-central-1",
         outputPath: outputPath,
@@ -236,6 +241,7 @@ test(
               },
             ],
           }),
+          logger: noopLogger,
           profile: "default",
           region: "eu-central-1",
           planConfirmation: async () => true,
@@ -303,6 +309,7 @@ test(
                 },
               ],
             }),
+            logger: noopLogger,
             profile: "default",
             region: "eu-central-1",
             outputPath: outputPath,
@@ -352,6 +359,7 @@ test(
                 },
               ],
             }),
+            logger: noopLogger,
             profile: "default",
             region: "eu-central-1",
             outputPath: outputPath,
@@ -399,6 +407,7 @@ test(
             },
           ],
         }),
+        logger: noopLogger,
         profile: "default",
         region: "eu-central-1",
         instanceArn: "arn:aws:sso:::instance/ssoins-2",

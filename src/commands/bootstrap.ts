@@ -11,6 +11,7 @@ import {
 } from "@aws-sdk/client-sso-admin";
 import { readFile, writeFile } from "node:fs/promises";
 import * as v from "valibot";
+import type { Logger } from "../logger.js";
 
 const pendingOuName = "Pending";
 const graveyardOuName = "Graveyard";
@@ -20,6 +21,7 @@ const contextFilePath = "aws.context.json";
 type BootstrapCommandInput = {
   organizationsClient: OrganizationsClient;
   ssoAdminClient: SSOAdminClient;
+  logger: Logger;
   profile: string;
   region: string;
   instanceArn?: string;
@@ -40,7 +42,7 @@ export async function runBootstrapCommand(
   props: BootstrapCommandInput,
 ): Promise<BootstrapCommandResult> {
   const resolvedOutputPath = props.outputPath ?? contextFilePath;
-  console.log("Reading organization...");
+  props.logger.log("Reading organization...");
   const [organizationDescription, rootsResponse] = await Promise.all([
     props.organizationsClient.send(new DescribeOrganizationCommand({})),
     props.organizationsClient.send(new ListRootsCommand({})),
@@ -69,7 +71,7 @@ export async function runBootstrapCommand(
     rootId: rootId,
   });
   for (const line of planLines) {
-    console.log(line);
+    props.logger.log(line);
   }
   if (planLines.length > 0) {
     const confirmed = await props.planConfirmation({ planLines: planLines });
@@ -80,6 +82,7 @@ export async function runBootstrapCommand(
 
   await createMissingRequiredOus({
     organizationsClient: props.organizationsClient,
+    logger: props.logger,
     rootId: rootId,
     analysis: initialDiscovery.analysis,
   });
@@ -129,7 +132,7 @@ export async function runBootstrapCommand(
     });
   }
 
-  console.log(`Writing ${resolvedOutputPath}...`);
+  props.logger.log(`Writing ${resolvedOutputPath}...`);
   await writeAwsContextFile({
     path: resolvedOutputPath,
     context: nextContext,
@@ -323,11 +326,12 @@ function buildBootstrapPlanLines(props: {
 
 async function createMissingRequiredOus(props: {
   organizationsClient: OrganizationsClient;
+  logger: Logger;
   rootId: string;
   analysis: Exclude<BootstrapOuAnalysis, { ok: false }>;
 }): Promise<void> {
   if (props.analysis.needsPendingCreate) {
-    console.log(`Creating organizational unit "${pendingOuName}"...`);
+    props.logger.log(`Creating organizational unit "${pendingOuName}"...`);
     await props.organizationsClient.send(
       new CreateOrganizationalUnitCommand({
         ParentId: props.rootId,
@@ -336,7 +340,7 @@ async function createMissingRequiredOus(props: {
     );
   }
   if (props.analysis.needsGraveyardCreate) {
-    console.log(`Creating organizational unit "${graveyardOuName}"...`);
+    props.logger.log(`Creating organizational unit "${graveyardOuName}"...`);
     await props.organizationsClient.send(
       new CreateOrganizationalUnitCommand({
         ParentId: props.rootId,

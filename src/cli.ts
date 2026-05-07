@@ -8,6 +8,7 @@ import {
   resolveAwsProfile,
   resolveAwsRegion,
 } from "./awsClientConfig.js";
+import { consoleLogger, type Logger } from "./logger.js";
 import { runBootstrapCommand } from "./commands/bootstrap.js";
 import { runApplyCommand } from "./commands/apply.js";
 import { runInitCommand } from "./commands/init.js";
@@ -25,6 +26,7 @@ type CommandName =
   | "apply";
 
 async function main(): Promise<void> {
+  const logger = consoleLogger;
   const args = parseArgs({
     options: {
       profile: { type: "string" },
@@ -40,7 +42,7 @@ async function main(): Promise<void> {
 
   const command = args.positionals[0] as CommandName | undefined;
   if (args.values.help || !command) {
-    printHelp();
+    printHelp(logger);
     return;
   }
 
@@ -59,30 +61,31 @@ async function main(): Promise<void> {
       organizationsClient: organizationsClient,
       ssoAdminClient: ssoAdminClient,
       identityStoreClient: identityStoreClient,
+      logger: logger,
       instanceArn: args.values["instance-arn"],
     });
 
-    console.log("");
-    console.log("Scan complete.");
-    console.log(
+    logger.log("");
+    logger.log("Scan complete.");
+    logger.log(
       `Organization OUs: ${result.state.organization.organizationalUnits.length}`,
     );
-    console.log(
+    logger.log(
       `Organization accounts: ${result.state.organization.accounts.length}`,
     );
-    console.log(
+    logger.log(
       `Identity Center users: ${result.state.identityCenter.users.length}`,
     );
-    console.log(
+    logger.log(
       `Identity Center groups: ${result.state.identityCenter.groups.length}`,
     );
-    console.log(
+    logger.log(
       `Permission sets: ${result.state.identityCenter.permissionSets.length}`,
     );
-    console.log(
+    logger.log(
       `Account assignments: ${result.state.identityCenter.accountAssignments.length}`,
     );
-    console.log(`Output: ${result.outputPath}`);
+    logger.log(`Output: ${result.outputPath}`);
     return;
   }
 
@@ -96,24 +99,25 @@ async function main(): Promise<void> {
     const result = await runBootstrapCommand({
       organizationsClient: organizationsClient,
       ssoAdminClient: ssoAdminClient,
+      logger: logger,
       profile: profile ?? "",
       region: region ?? "",
       instanceArn: args.values["instance-arn"],
       planConfirmation,
     });
 
-    console.log("");
-    console.log("Bootstrap complete.");
-    console.log(
+    logger.log("");
+    logger.log("Bootstrap complete.");
+    logger.log(
       `Pending OU (${result.pendingOuId}): ${result.pendingCreated ? "created" : "reused"}`,
     );
-    console.log(
+    logger.log(
       `Graveyard OU (${result.graveyardOuId}): ${result.graveyardCreated ? "created" : "reused"}`,
     );
-    console.log(
+    logger.log(
       `Identity Center metadata: ${result.identityCenterCaptured ? "captured" : "missing"}`,
     );
-    console.log(`Output: ${result.outputPath}`);
+    logger.log(`Output: ${result.outputPath}`);
     return;
   }
 
@@ -133,6 +137,7 @@ async function main(): Promise<void> {
       organizationsClient: organizationsClient,
       ssoAdminClient: ssoAdminClient,
       identityStoreClient: identityStoreClient,
+      logger: logger,
       profile: profile ?? "",
       region: region ?? "",
       instanceArn: args.values["instance-arn"],
@@ -140,12 +145,12 @@ async function main(): Promise<void> {
       overwriteConfirmation: overwriteConfirmation,
     });
 
-    console.log("");
-    console.log("Init complete.");
-    console.log(`Context: ${result.contextPath}`);
-    console.log(`State: ${result.statePath}`);
+    logger.log("");
+    logger.log("Init complete.");
+    logger.log(`Context: ${result.contextPath}`);
+    logger.log(`State: ${result.statePath}`);
     for (const file of result.files) {
-      console.log(`${file.path}: ${file.status}`);
+      logger.log(`${file.path}: ${file.status}`);
     }
     return;
   }
@@ -156,19 +161,21 @@ async function main(): Promise<void> {
       isTty: process.stdin.isTTY,
     });
     const result = await runRegenerateCommand({
+      logger: logger,
       overwriteConfirmation: overwriteConfirmation,
     });
 
-    console.log("");
-    console.log("Regenerate complete.");
+    logger.log("");
+    logger.log("Regenerate complete.");
     for (const file of result.files) {
-      console.log(`${file.path}: ${file.status}`);
+      logger.log(`${file.path}: ${file.status}`);
     }
     return;
   }
 
   if (command === "plan") {
     await runPlanCommand({
+      logger: logger,
       configPath: "aws.config.ts",
       typesPath: "aws.config.types.ts",
       statePath: "state.json",
@@ -186,6 +193,7 @@ async function main(): Promise<void> {
     });
     const result = await runApplyCommand({
       organizationsClient: organizationsClient,
+      logger: logger,
       configPath: "aws.config.ts",
       typesPath: "aws.config.types.ts",
       statePath: "state.json",
@@ -193,41 +201,41 @@ async function main(): Promise<void> {
       ignoreUnsupported: args.values["ignore-unsupported"] ?? false,
       planConfirmation: planConfirmation,
     });
-    console.log("");
-    console.log(`Apply status: ${result.status}`);
-    console.log(`State: ${result.statePath}`);
+    logger.log("");
+    logger.log(`Apply status: ${result.status}`);
+    logger.log(`State: ${result.statePath}`);
     return;
   }
 
   if (command === "create-account") {
-    console.log(`Command '${command}' is not implemented yet.`);
+    logger.log(`Command '${command}' is not implemented yet.`);
     return;
   }
 
-  printHelp();
+  printHelp(logger);
   process.exitCode = 1;
 }
 
-function printHelp(): void {
-  console.log("@beesolve/aws-accounts");
-  console.log("");
-  console.log("Usage:");
-  console.log(
+function printHelp(logger: Logger): void {
+  logger.log("@beesolve/aws-accounts");
+  logger.log("");
+  logger.log("Usage:");
+  logger.log(
     "  npm run cli -- scan [--profile <name>] [--region <region>] [--instance-arn <arn>]",
   );
-  console.log(
+  logger.log(
     "  npm run cli -- bootstrap [--profile <name>] [--region <region>] [--instance-arn <arn>] [--yes]",
   );
-  console.log(
+  logger.log(
     "  npm run cli -- init [--profile <name>] [--region <region>] [--instance-arn <arn>] [--yes]",
   );
-  console.log("  npm run cli -- regenerate [--yes]");
-  console.log("  npm run cli -- plan [--json]");
-  console.log("  npm run cli -- apply [--yes] [--ignore-unsupported]");
-  console.log("  npm run cli -- <create-account>");
-  console.log("");
-  console.log("Environment fallback:");
-  console.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
+  logger.log("  npm run cli -- regenerate [--yes]");
+  logger.log("  npm run cli -- plan [--json]");
+  logger.log("  npm run cli -- apply [--yes] [--ignore-unsupported]");
+  logger.log("  npm run cli -- <create-account>");
+  logger.log("");
+  logger.log("Environment fallback:");
+  logger.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
 }
 
 type BuildBootstrapPlanConfirmationProps = {
@@ -306,6 +314,6 @@ function buildOverwriteConfirmation(
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`CLI failed: ${message}`);
+  consoleLogger.error(`CLI failed: ${message}`);
   process.exitCode = 1;
 });

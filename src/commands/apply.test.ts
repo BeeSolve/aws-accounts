@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-organizations";
 import { writeAwsConfigFromState } from "../awsConfig.js";
 import { createTestWorkspace } from "../helpers.test.js";
+import { noopLogger } from "../logger.js";
 import { runApplyCommand } from "./apply.js";
 
 test("runApplyCommand refuses destructive unsupported diffs regardless of flag", async () => {
@@ -23,6 +24,7 @@ test("runApplyCommand refuses destructive unsupported diffs regardless of flag",
       contextPath: paths.contextPath,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
@@ -42,6 +44,7 @@ test("runApplyCommand refuses destructive unsupported diffs regardless of flag",
       () =>
         runApplyCommand({
           organizationsClient: createOrganizationsClientMock({}),
+          logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
           statePath: paths.statePath,
@@ -69,6 +72,7 @@ test("runApplyCommand refuses non-destructive unsupported diffs without flag", a
       contextPath: paths.contextPath,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
@@ -86,6 +90,7 @@ test("runApplyCommand refuses non-destructive unsupported diffs without flag", a
       () =>
         runApplyCommand({
           organizationsClient: createOrganizationsClientMock({}),
+          logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
           statePath: paths.statePath,
@@ -113,6 +118,7 @@ test("runApplyCommand proceeds with ignoreUnsupported for supported operations",
       contextPath: paths.contextPath,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
@@ -148,6 +154,7 @@ test("runApplyCommand proceeds with ignoreUnsupported for supported operations",
           seenMoveInputs.push(input);
         },
       }),
+      logger: noopLogger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
       statePath: paths.statePath,
@@ -176,6 +183,7 @@ test("runApplyCommand returns cancelled when confirmation is rejected", async ()
       contextPath: paths.contextPath,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
@@ -203,6 +211,7 @@ test("runApplyCommand returns cancelled when confirmation is rejected", async ()
           moveCalls += 1;
         },
       }),
+      logger: noopLogger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
       statePath: paths.statePath,
@@ -232,6 +241,7 @@ test("runApplyCommand applies one move and writes next state", async () => {
       contextPath: paths.contextPath,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
@@ -253,6 +263,7 @@ test("runApplyCommand applies one move and writes next state", async () => {
 
     const result = await runApplyCommand({
       organizationsClient: createOrganizationsClientMock({}),
+      logger: noopLogger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
       statePath: paths.statePath,
@@ -287,6 +298,7 @@ test("runApplyCommand persists partial state on operation failure", async () => 
       contextPath: paths.contextPath,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
@@ -337,6 +349,7 @@ test("runApplyCommand persists partial state on operation failure", async () => 
               }
             },
           }),
+          logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
           statePath: paths.statePath,

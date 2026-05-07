@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { runRegenerateCommand } from "./regenerate.js";
 import { writeAwsConfigFromState } from "../awsConfig.js";
 import { createTestWorkspace } from "../helpers.test.js";
+import { noopLogger } from "../logger.js";
 
 test("runRegenerateCommand returns unchanged when types are current", async () => {
   const workspace = await createTestWorkspace({ prefix: "regenerate-test-" });
@@ -22,11 +23,13 @@ test("runRegenerateCommand returns unchanged when types are current", async () =
         contextPath: contextPath,
         configPath: configPath,
         typesPath: typesPath,
+        logger: noopLogger,
         overwriteConfirmation: async () => true,
       });
 
       let confirmationCalls = 0;
       const result = await runRegenerateCommand({
+        logger: noopLogger,
         configPath: configPath,
         typesPath: typesPath,
         overwriteConfirmation: async () => {
@@ -59,12 +62,14 @@ test("runRegenerateCommand writes updated types when stale", async () => {
         contextPath: contextPath,
         configPath: configPath,
         typesPath: typesPath,
+        logger: noopLogger,
         overwriteConfirmation: async () => true,
       });
 
       const previousTypes = await readFile(typesPath, "utf8");
       await writeFile(typesPath, `// stale\n${previousTypes}`, "utf8");
       const result = await runRegenerateCommand({
+        logger: noopLogger,
         configPath: configPath,
         typesPath: typesPath,
         overwriteConfirmation: async () => true,

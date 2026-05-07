@@ -11,9 +11,11 @@ import { diffStates } from "../diff.js";
 import { assertUnreachable } from "../helpers.js";
 import type { Operation, Plan } from "../operations.js";
 import { readStateFile, type StateFile, writeStateFile } from "../state.js";
+import type { Logger } from "../logger.js";
 
 type ApplyCommandInput = {
   organizationsClient: OrganizationsClient;
+  logger: Logger;
   configPath: string;
   typesPath: string;
   statePath: string;
@@ -54,9 +56,9 @@ export async function runApplyCommand(
     (unsupportedDiff) => unsupportedDiff.category === "destructive",
   );
   if (destructiveUnsupported.length > 0) {
-    console.log("Unsupported diffs:");
+    props.logger.log("Unsupported diffs:");
     for (const unsupportedDiff of destructiveUnsupported) {
-      console.log(
+      props.logger.log(
         `  - ${unsupportedDiff.description} [${unsupportedDiff.category}]`,
       );
     }
@@ -66,9 +68,9 @@ export async function runApplyCommand(
   }
 
   if (plan.unsupported.length > 0 && props.ignoreUnsupported === false) {
-    console.log("Unsupported diffs:");
+    props.logger.log("Unsupported diffs:");
     for (const unsupportedDiff of plan.unsupported) {
-      console.log(
+      props.logger.log(
         `  - ${unsupportedDiff.description} [${unsupportedDiff.category}]`,
       );
     }
@@ -77,13 +79,13 @@ export async function runApplyCommand(
     );
   }
   if (plan.unsupported.length > 0 && props.ignoreUnsupported) {
-    console.log(
+    props.logger.log(
       "Proceeding with supported operations only; unsupported diffs are skipped.",
     );
   }
 
   if (plan.operations.length === 0) {
-    console.log("No changes.");
+    props.logger.log("No changes.");
     return {
       plan: plan,
       appliedOperations: 0,
@@ -96,13 +98,13 @@ export async function runApplyCommand(
     plan: plan,
   });
   for (const line of planLines) {
-    console.log(line);
+    props.logger.log(line);
   }
   const confirmed = await props.planConfirmation({
     planLines: planLines,
   });
   if (confirmed !== true) {
-    console.log("Apply cancelled.");
+    props.logger.log("Apply cancelled.");
     return {
       plan: plan,
       appliedOperations: 0,
@@ -117,6 +119,7 @@ export async function runApplyCommand(
     for (const operation of plan.operations) {
       await applyOperation({
         organizationsClient: props.organizationsClient,
+        logger: props.logger,
         operation: operation,
       });
       applyOperationToState({
@@ -134,7 +137,7 @@ export async function runApplyCommand(
   }
 
   await writeStateFile(props.statePath, nextState);
-  console.log(`Apply complete. Applied ${appliedOperations} operation(s).`);
+  props.logger.log(`Apply complete. Applied ${appliedOperations} operation(s).`);
   return {
     plan: plan,
     appliedOperations: appliedOperations,
@@ -145,11 +148,12 @@ export async function runApplyCommand(
 
 async function applyOperation(props: {
   organizationsClient: OrganizationsClient;
+  logger: Logger;
   operation: Operation;
 }): Promise<void> {
   const operation = props.operation;
   if (operation.kind === "moveAccount") {
-    console.log(
+    props.logger.log(
       `Moving "${operation.accountName}" (${operation.accountId}): ${operation.fromOuName} -> ${operation.toOuName}`,
     );
     await props.organizationsClient.send(
@@ -159,7 +163,7 @@ async function applyOperation(props: {
         DestinationParentId: operation.toOuId,
       }),
     );
-    console.log(`Done: "${operation.accountName}"`);
+    props.logger.log(`Done: "${operation.accountName}"`);
     return;
   }
   assertUnreachable(operation.kind, "Unsupported operation kind in apply.");

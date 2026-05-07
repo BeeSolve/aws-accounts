@@ -23,6 +23,7 @@ import {
 import type { IdentitystoreClient } from "@aws-sdk/client-identitystore";
 import { runInitCommand } from "./init.js";
 import { createTestWorkspace } from "../helpers.test.js";
+import { noopLogger } from "../logger.js";
 
 test("runInitCommand writes context/state/config/types in sequence", async () => {
   const workspace = await createTestWorkspace({ prefix: "init-test-" });
@@ -35,6 +36,7 @@ test("runInitCommand writes context/state/config/types in sequence", async () =>
       organizationsClient: createOrganizationsClientMock(),
       ssoAdminClient: createSsoAdminClientMock(),
       identityStoreClient: createIdentityStoreClientMock(),
+      logger: noopLogger,
       profile: "default",
       region: "eu-central-1",
       contextPath: contextPath,
@@ -82,6 +84,7 @@ test("runInitCommand aborts when bootstrap confirmation is rejected", async () =
           organizationsClient: createOrganizationsClientMock(),
           ssoAdminClient: createSsoAdminClientMock(),
           identityStoreClient: createIdentityStoreClientMock(),
+          logger: noopLogger,
           profile: "default",
           region: "eu-central-1",
           contextPath: contextPath,

@@ -1,6 +1,8 @@
 import { regenerateAwsConfigTypes } from "../awsConfig.js";
+import type { Logger } from "../logger.js";
 
 type RegenerateCommandInput = {
+  logger: Logger;
   overwriteConfirmation: (props: { fileSummaries: string[] }) => Promise<boolean>;
   configPath?: string;
   typesPath?: string;
@@ -18,6 +20,7 @@ export async function runRegenerateCommand(
   const result = await regenerateAwsConfigTypes({
     configPath: props.configPath ?? "aws.config.ts",
     typesPath: props.typesPath ?? "aws.config.types.ts",
+    logger: props.logger,
     overwriteConfirmation: props.overwriteConfirmation,
   });
   return {

@@ -4,6 +4,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { writeAwsConfigFromState } from "../awsConfig.js";
 import { createTestWorkspace } from "../helpers.test.js";
+import type { Logger } from "../logger.js";
+import { noopLogger } from "../logger.js";
 import { runPlanCommand } from "./plan.js";
 
 test("runPlanCommand prints human-readable move operations", async () => {
@@ -22,6 +24,7 @@ test("runPlanCommand prints human-readable move operations", async () => {
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
@@ -41,21 +44,25 @@ test("runPlanCommand prints human-readable move operations", async () => {
       },
     });
 
-    const { logs } = await captureConsoleLogs(async () => {
-      const result = await runPlanCommand({
-        configPath: configPath,
-        typesPath: typesPath,
-        statePath: statePath,
-        contextPath: contextPath,
-        output: "human",
-      });
-      assert.equal(result.plan.operations.length, 1);
-      assert.equal(result.plan.unsupported.length, 0);
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger: logger,
+      configPath: configPath,
+      typesPath: typesPath,
+      statePath: statePath,
+      contextPath: contextPath,
+      output: "human",
     });
+    assert.equal(result.plan.operations.length, 1);
+    assert.equal(result.plan.unsupported.length, 0);
     assert.ok(
-      logs.some((line) => line.includes('move account "AppAccount" (111111111111)')),
+      logger.logs.some((line) =>
+        line.includes('move account "AppAccount" (111111111111)'),
+      ),
     );
-    assert.ok(logs.some((line) => line.includes("from Pending -> Engineering")));
+    assert.ok(
+      logger.logs.some((line) => line.includes("from Pending -> Engineering")),
+    );
   } finally {
     await workspace.cleanup();
   }
@@ -77,20 +84,21 @@ test("runPlanCommand prints machine-readable JSON with --json output", async () 
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
-    const { logs } = await captureConsoleLogs(async () => {
-      await runPlanCommand({
-        configPath: configPath,
-        typesPath: typesPath,
-        statePath: statePath,
-        contextPath: contextPath,
-        output: "json",
-      });
+    const logger = createCollectingLogger();
+    await runPlanCommand({
+      logger: logger,
+      configPath: configPath,
+      typesPath: typesPath,
+      statePath: statePath,
+      contextPath: contextPath,
+      output: "json",
     });
-    assert.equal(logs.length, 1);
-    const parsed = JSON.parse(logs[0]) as {
+    assert.equal(logger.logs.length, 1);
+    const parsed = JSON.parse(logger.logs[0]) as {
       operations: unknown[];
       unsupported: unknown[];
     };
@@ -117,6 +125,7 @@ test("runPlanCommand human output includes unsupported categories", async () => 
       contextPath: contextPath,
       configPath: configPath,
       typesPath: typesPath,
+      logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
@@ -130,20 +139,20 @@ test("runPlanCommand human output includes unsupported categories", async () => 
       },
     });
 
-    const { logs } = await captureConsoleLogs(async () => {
-      const result = await runPlanCommand({
-        configPath: configPath,
-        typesPath: typesPath,
-        statePath: statePath,
-        contextPath: contextPath,
-        output: "human",
-      });
-      assert.equal(result.plan.operations.length, 0);
-      assert.equal(result.plan.unsupported.length, 1);
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger: logger,
+      configPath: configPath,
+      typesPath: typesPath,
+      statePath: statePath,
+      contextPath: contextPath,
+      output: "human",
     });
-    assert.ok(logs.some((line) => line.includes("Unsupported diffs:")));
+    assert.equal(result.plan.operations.length, 0);
+    assert.equal(result.plan.unsupported.length, 1);
+    assert.ok(logger.logs.some((line) => line.includes("Unsupported diffs:")));
     assert.ok(
-      logs.some((line) =>
+      logger.logs.some((line) =>
         line.includes('new IdC user "bob" [unsupportedMutation]'),
       ),
     );
@@ -152,22 +161,20 @@ test("runPlanCommand human output includes unsupported categories", async () => 
   }
 });
 
-async function captureConsoleLogs(
-  callback: () => Promise<void>,
-): Promise<{ logs: string[] }> {
+function createCollectingLogger(): Logger & { logs: string[] } {
   const logs: string[] = [];
-  const originalLog = console.log;
-  console.log = (...args: unknown[]): void => {
+  const write = (...args: any[]): void => {
     logs.push(args.map((arg) => String(arg)).join(" "));
   };
-  try {
-    await callback();
-    return {
-      logs: logs,
-    };
-  } finally {
-    console.log = originalLog;
-  }
+  return {
+    log: write,
+    info: write,
+    warn: write,
+    error: write,
+    debug: write,
+    trace: write,
+    logs: logs,
+  };
 }
 
 async function updateConfigModel(props: {
