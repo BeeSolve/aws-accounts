@@ -8,9 +8,18 @@ The tool's lifecycle has three phases:
 
 1. **Init (one-time).** `init` runs `bootstrap` + `scan` and writes `aws.config.ts` + `aws.config.types.ts` from the resulting `state.json`. After this, AWS state is mirrored locally and `aws.config.ts` is your editable source of truth.
 2. **Edit (steady state).** Edit `aws.config.ts` to model the desired state. Run `regenerate` to refresh `aws.config.types.ts` (picklists / IDE autocomplete) after manual edits. A future `watch` command will run `regenerate` automatically.
-3. **Sync (phase 5).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles AWS to match. Out of scope for the current increment.
+3. **Sync (phase 5).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
 
 `bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged in increment 1; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
+
+## Plan/apply safety
+
+- `plan` is local-only in increment 1 and does not require AWS IAM permissions.
+- `apply` recomputes the plan before executing any operations.
+- `apply --yes` skips the interactive confirmation prompt.
+- `apply --ignore-unsupported` proceeds only when unsupported diffs are non-destructive (`unsupportedMutation`).
+- Destructive unsupported diffs always block `apply` (no override).
+- If `apply` fails mid-run, the CLI persists partial `state.json`; recovery flow is: run `scan`, verify state, then re-run `apply`.
 
 ## Project docs
 

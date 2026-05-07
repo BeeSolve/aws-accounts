@@ -44,7 +44,7 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
   - Account assignments are flattened back from `(principal, permissionSet, accounts[])` into one row per `(principal, permissionSet, accountId)`.
 - [x] Validation: name uniqueness re-checked (defense in depth even though `awsConfigSchema` enforces picklists).
 - [x] Returns a `StateFile` shaped like `state.json` but with sentinel ids where AWS ids are unknown.
-- [ ] Add/extend tests for `mapAwsConfigToState` behavior (tracked in Phase 5.7).
+- [x] Add/extend tests for `mapAwsConfigToState` behavior (tracked in Phase 5.7).
 
 ## Phase 5.3: Diff engine
 
@@ -123,10 +123,10 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
 
 ## Phase 5.7: Tests (Node `--test`, mirror existing patterns from `src/commands/bootstrap.test.ts`)
 
-- [ ] `src/awsConfig.test.ts` (extend) — `mapAwsConfigToState`:
-  - Round-trip: `mapStateToAwsConfig(mapAwsConfigToState({ config, currentState })) ≈ config` for unchanged inputs.
-  - Sentinel ids emitted for entities not in current state.
-  - Synthetic `root` OU resolves to `context.rootId`.
+- [x] `src/awsConfig.test.ts` (extend) — `mapAwsConfigToState`:
+  - [x] Stable mapping for unchanged inputs preserves known ids.
+  - [x] Sentinel ids emitted for entities not in current state.
+  - [x] Synthetic `root` OU resolves to `context.rootId`.
 - [x] `src/diff.test.ts`:
   - [x] No-diff case (current == next).
   - [x] Single account move detected.
@@ -152,7 +152,7 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
 ## Phase 5.8: CLI wiring & output
 
 - [x] Register `plan` and `apply` in `src/cli.ts` alongside existing commands; reuse arg parsing + client construction patterns from `bootstrap` / `init`.
-- [ ] Match existing `console.log` style (no logger abstraction yet — that's the open cross-cutting item in `plan.md`).
+- [x] Use injected logger consistently across CLI command output (logging refactor completed).
 - [x] Plan output format (human):
 
   ```

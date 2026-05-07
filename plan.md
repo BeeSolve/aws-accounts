@@ -96,15 +96,15 @@ Scope for this increment:
 - [x] Define reconciliation command pair for local mode:
   - [x] `plan` (load `aws.config.ts` → transform to next `state.json` shape → diff current `state.json` vs next; emit operations list).
   - [x] `apply` (execute approved operations directly via AWS SDK in CLI for increment 1).
-- [ ] Implement `mapAwsConfigToState` transform:
+- [x] Implement `mapAwsConfigToState` transform:
   - [x] load `aws.config.ts` via the phase 3 loader.
   - [x] resolve names to AWS-issued ids using current `state.json` (entities present in both keep their existing ids; entities only in config get placeholder ids interpreted by the diff as "to be created").
 - [x] Implement state-vs-state diff engine producing human-readable and machine-readable plan.
 - [x] Define operation model for supported mutations in increment 1:
   - [x] move account between OUs
 - [x] Exclude IAM Identity Center assignment mutations from increment 1 apply scope.
-- [ ] Exclude account metadata reconciliation (tags, alternate contacts, account-name drift) from increment 1 apply scope; deferred to a later increment.
-- [ ] Implement safety policy:
+- [x] Exclude account metadata reconciliation (tags, alternate contacts, account-name drift) from increment 1 apply scope; deferred to a later increment.
+- [x] Implement safety policy:
   - [x] default no destructive actions
   - [x] strict default: refuse apply when any unsupported diff is present
   - [x] `--ignore-unsupported` flag proceeds past non-destructive unsupported diffs only
@@ -114,7 +114,8 @@ Scope for this increment:
 - [x] Implement apply executor with per-operation progress + final outcome summary.
 - [x] After apply succeeds, write the post-apply state to `state.json` from the planned-next-state. Do not regenerate `aws.config.ts`. Do not auto re-scan in the normal apply loop.
 - [x] On per-operation failure during apply: abort, persist `state.json` reflecting only successful ops, exit non-zero with guidance to run `scan` then re-`apply`.
-- [ ] Add tests for `mapAwsConfigToState`, plan generation (state-vs-state), and apply sequencing.
+- [x] Add tests for `mapAwsConfigToState`, plan generation (state-vs-state), and apply sequencing.
+  - [x] `mapAwsConfigToState` coverage (sentinel IDs, root resolution, stable id reuse)
   - [x] plan generation (state-vs-state diff engine + `plan` command output modes)
   - [x] apply sequencing and failure persistence
 

@@ -3,11 +3,15 @@ import test from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  loadAwsConfigModelFromTsFile,
+  mapAwsConfigToState,
+  readAwsContextFromFile,
   regenerateAwsConfigTypes,
   writeAwsConfigFromState,
 } from "./awsConfig.js";
 import { createTestWorkspace } from "./helpers.test.js";
 import { noopLogger } from "./logger.js";
+import { readStateFile } from "./state.js";
 
 test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
@@ -264,6 +268,224 @@ test("regenerateAwsConfigTypes reports would-write when confirmation is rejected
     });
     assert.equal(result.changed, false);
     assert.deepEqual(result.files, [{ path: typesPath, status: "would-write" }]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("mapAwsConfigToState emits sentinel ids for entities missing in current state", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath: statePath,
+      contextPath: contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: statePath,
+      contextPath: contextPath,
+      configPath: configPath,
+      typesPath: typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    const [config, currentState, context] = await Promise.all([
+      loadAwsConfigModelFromTsFile({
+        configPath: configPath,
+        typesPath: typesPath,
+      }),
+      readStateFile(statePath),
+      readAwsContextFromFile(contextPath),
+    ]);
+    config.organizationalUnits.push({
+      name: "Sandbox",
+      parentName: "root",
+      accounts: [{ name: "SandboxAccount", email: "sandbox@example.com" }],
+    });
+    config.users.push({
+      userName: "bob",
+      displayName: "Bob",
+      emails: ["bob@example.com"],
+    });
+    config.groups.push({
+      displayName: "Operators",
+    });
+    config.permissionSets.push({
+      name: "ReadOnly",
+      description: "Read-only access",
+    });
+    config.assignments.push({
+      permissionSet: "ReadOnly",
+      user: "bob",
+      accounts: ["SandboxAccount"],
+    });
+
+    const mapped = mapAwsConfigToState({
+      config: config,
+      currentState: currentState,
+      context: context,
+    });
+
+    assert.equal(
+      mapped.organization.organizationalUnits.some(
+        (ou) => ou.name === "Sandbox" && ou.id === "__pending_creation__",
+      ),
+      true,
+    );
+    assert.equal(
+      mapped.organization.accounts.some(
+        (account) =>
+          account.name === "SandboxAccount" &&
+          account.id === "__pending_creation__" &&
+          account.arn === "__pending_creation__",
+      ),
+      true,
+    );
+    assert.equal(
+      mapped.identityCenter.users.some(
+        (user) =>
+          user.userName === "bob" && user.userId === "__pending_creation__",
+      ),
+      true,
+    );
+    assert.equal(
+      mapped.identityCenter.permissionSets.some(
+        (permissionSet) =>
+          permissionSet.name === "ReadOnly" &&
+          permissionSet.permissionSetArn === "__pending_creation__",
+      ),
+      true,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("mapAwsConfigToState resolves synthetic root parent from context rootId", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath: statePath,
+      contextPath: contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: statePath,
+      contextPath: contextPath,
+      configPath: configPath,
+      typesPath: typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    const [config, currentState, context] = await Promise.all([
+      loadAwsConfigModelFromTsFile({
+        configPath: configPath,
+        typesPath: typesPath,
+      }),
+      readStateFile(statePath),
+      readAwsContextFromFile(contextPath),
+    ]);
+    context.organization.rootId = "r-alt-root";
+
+    const mapped = mapAwsConfigToState({
+      config: config,
+      currentState: currentState,
+      context: context,
+    });
+
+    assert.equal(mapped.organization.rootId, "r-alt-root");
+    const topLevelOus = mapped.organization.organizationalUnits.filter(
+      (ou) => ou.parentId === "r-alt-root",
+    );
+    assert.equal(topLevelOus.length > 0, true);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("mapAwsConfigToState keeps existing ids for unchanged config entities", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath: statePath,
+      contextPath: contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: statePath,
+      contextPath: contextPath,
+      configPath: configPath,
+      typesPath: typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    const [config, currentState, context] = await Promise.all([
+      loadAwsConfigModelFromTsFile({
+        configPath: configPath,
+        typesPath: typesPath,
+      }),
+      readStateFile(statePath),
+      readAwsContextFromFile(contextPath),
+    ]);
+
+    const mapped = mapAwsConfigToState({
+      config: config,
+      currentState: currentState,
+      context: context,
+    });
+
+    assert.equal(
+      mapped.organization.accounts.some(
+        (account) =>
+          account.name === "AppAccount" && account.id === "111111111111",
+      ),
+      true,
+    );
+    assert.equal(
+      mapped.organization.organizationalUnits.some(
+        (ou) => ou.name === "Pending" && ou.id === "ou-pending",
+      ),
+      true,
+    );
+    assert.equal(
+      mapped.identityCenter.users.some(
+        (user) => user.userName === "alice" && user.userId === "u-123",
+      ),
+      true,
+    );
+    assert.equal(
+      mapped.identityCenter.groups.some(
+        (group) => group.displayName === "Admins" && group.groupId === "g-123",
+      ),
+      true,
+    );
+    assert.equal(
+      mapped.identityCenter.permissionSets.some(
+        (permissionSet) =>
+          permissionSet.name === "AdminAccess" &&
+          permissionSet.permissionSetArn ===
+            "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+      ),
+      true,
+    );
+    assert.equal(
+      mapped.organization.accounts.some(
+        (account) => account.id === "__pending_creation__",
+      ),
+      false,
+    );
   } finally {
     await workspace.cleanup();
   }
