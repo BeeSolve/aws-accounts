@@ -9,6 +9,7 @@ type RegenerateCommandInput = {
 type RegenerateCommandResult = {
   typesPath: string;
   changed: boolean;
+  files: Array<{ path: string; status: "written" | "unchanged" | "would-write" }>;
 };
 
 export async function runRegenerateCommand(
@@ -22,5 +23,6 @@ export async function runRegenerateCommand(
   return {
     typesPath: result.typesPath,
     changed: result.changed,
+    files: result.files,
   };
 }

@@ -74,7 +74,7 @@ Scope for this increment:
 - [x] Add tests for transform correctness, name-uniqueness rejection, assignment grouping, sort stability under shuffled input.
 - [x] Add tests for `init` command (sequences bootstrap → scan → config write with mocked clients).
 - [x] Add tests for `regenerate` command (loads fixture config, re-emits types, no-op when unchanged, confirmation rejected paths).
-- [ ] Add CLI summary showing per-file change status (written / unchanged / would-write).
+- [x] Add CLI summary showing per-file change status (written / unchanged / would-write).
 
 ## Phase 4: Implement account creation (local CLI direct AWS calls)
 

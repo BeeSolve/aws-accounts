@@ -49,6 +49,10 @@ test("runInitCommand writes context/state/config/types in sequence", async () =>
     assert.equal(result.statePath, statePath);
     assert.equal(result.configPath, configPath);
     assert.equal(result.typesPath, typesPath);
+    assert.deepEqual(result.files, [
+      { path: configPath, status: "written" },
+      { path: typesPath, status: "written" },
+    ]);
 
     const [contextRaw, stateRaw, configRaw, typesRaw] = await Promise.all([
       readFile(contextPath, "utf8"),

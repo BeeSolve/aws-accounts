@@ -36,6 +36,7 @@ test("runRegenerateCommand returns unchanged when types are current", async () =
       });
       assert.equal(result.typesPath, typesPath);
       assert.equal(result.changed, false);
+      assert.deepEqual(result.files, [{ path: typesPath, status: "unchanged" }]);
       assert.equal(confirmationCalls, 0);
   } finally {
     await workspace.cleanup();
@@ -69,6 +70,7 @@ test("runRegenerateCommand writes updated types when stale", async () => {
         overwriteConfirmation: async () => true,
       });
       assert.equal(result.changed, true);
+      assert.deepEqual(result.files, [{ path: typesPath, status: "written" }]);
       const typesRaw = await readFile(typesPath, "utf8");
       assert.match(typesRaw, /Generated file\. Do not edit by hand\./);
   } finally {

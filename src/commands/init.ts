@@ -25,6 +25,7 @@ type InitCommandResult = {
   statePath: string;
   configPath: string;
   typesPath: string;
+  files: Array<{ path: string; status: "written" | "unchanged" | "would-write" }>;
 };
 
 export async function runInitCommand(
@@ -58,5 +59,6 @@ export async function runInitCommand(
     statePath: scanResult.outputPath,
     configPath: configWriteResult.configPath,
     typesPath: configWriteResult.typesPath,
+    files: configWriteResult.files,
   };
 }

@@ -140,8 +140,9 @@ async function main(): Promise<void> {
     console.log("Init complete.");
     console.log(`Context: ${result.contextPath}`);
     console.log(`State: ${result.statePath}`);
-    console.log(`Config: ${result.configPath}`);
-    console.log(`Types: ${result.typesPath}`);
+    for (const file of result.files) {
+      console.log(`${file.path}: ${file.status}`);
+    }
     return;
   }
 
@@ -156,8 +157,9 @@ async function main(): Promise<void> {
 
     console.log("");
     console.log("Regenerate complete.");
-    console.log(`Types: ${result.typesPath}`);
-    console.log(`Changed: ${result.changed ? "yes" : "no"}`);
+    for (const file of result.files) {
+      console.log(`${file.path}: ${file.status}`);
+    }
     return;
   }
 

@@ -87,6 +87,7 @@ type WriteAwsConfigFromStateInput = {
 type WriteAwsConfigFromStateResult = {
   configPath: string;
   typesPath: string;
+  files: FileWriteResult[];
 };
 
 type RegenerateAwsConfigTypesInput = {
@@ -100,6 +101,7 @@ type RegenerateAwsConfigTypesInput = {
 type RegenerateAwsConfigTypesResult = {
   typesPath: string;
   changed: boolean;
+  files: FileWriteResult[];
 };
 
 type AwsConfigTypesModule = {
@@ -116,6 +118,13 @@ type ChangedFile = {
   previousBytes: number;
   nextBytes: number;
   content: string;
+};
+
+type FileWriteStatus = "written" | "unchanged" | "would-write";
+
+type FileWriteResult = {
+  path: string;
+  status: FileWriteStatus;
 };
 
 type MapAssignmentPrincipalResult =
@@ -173,6 +182,16 @@ export async function writeAwsConfigFromState(
     return {
       configPath: props.configPath,
       typesPath: props.typesPath,
+      files: [
+        {
+          path: props.configPath,
+          status: "unchanged",
+        },
+        {
+          path: props.typesPath,
+          status: "unchanged",
+        },
+      ],
     };
   }
 
@@ -192,6 +211,22 @@ export async function writeAwsConfigFromState(
     return {
       configPath: props.configPath,
       typesPath: props.typesPath,
+      files: [
+        {
+          path: props.configPath,
+          status:
+            currentConfigContent === nextConfigContent
+              ? "unchanged"
+              : "would-write",
+        },
+        {
+          path: props.typesPath,
+          status:
+            currentTypesContent === nextTypesContent
+              ? "unchanged"
+              : "would-write",
+        },
+      ],
     };
   }
 
@@ -201,6 +236,18 @@ export async function writeAwsConfigFromState(
   return {
     configPath: props.configPath,
     typesPath: props.typesPath,
+    files: [
+      {
+        path: props.configPath,
+        status:
+          currentConfigContent === nextConfigContent ? "unchanged" : "written",
+      },
+      {
+        path: props.typesPath,
+        status:
+          currentTypesContent === nextTypesContent ? "unchanged" : "written",
+      },
+    ],
   };
 }
 
@@ -226,6 +273,12 @@ export async function regenerateAwsConfigTypes(
     return {
       typesPath: props.typesPath,
       changed: false,
+      files: [
+        {
+          path: props.typesPath,
+          status: "unchanged",
+        },
+      ],
     };
   }
 
@@ -241,6 +294,12 @@ export async function regenerateAwsConfigTypes(
     return {
       typesPath: props.typesPath,
       changed: false,
+      files: [
+        {
+          path: props.typesPath,
+          status: "would-write",
+        },
+      ],
     };
   }
 
@@ -248,6 +307,12 @@ export async function regenerateAwsConfigTypes(
   return {
     typesPath: props.typesPath,
     changed: true,
+    files: [
+      {
+        path: props.typesPath,
+        status: "written",
+      },
+    ],
   };
 }
 

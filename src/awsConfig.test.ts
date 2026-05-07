@@ -33,6 +33,10 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
 
     assert.equal(result.configPath, configPath);
     assert.equal(result.typesPath, typesPath);
+    assert.deepEqual(result.files, [
+      { path: configPath, status: "written" },
+      { path: typesPath, status: "written" },
+    ]);
     assert.equal(confirmationCalls, 1);
 
     const configRaw = await readFile(configPath, "utf8");
@@ -65,7 +69,7 @@ test("writeAwsConfigFromState no-op does not call confirmation", async () => {
     });
 
     let confirmationCalls = 0;
-    await writeAwsConfigFromState({
+    const result = await writeAwsConfigFromState({
       statePath: statePath,
       contextPath: contextPath,
       configPath: configPath,
@@ -75,6 +79,10 @@ test("writeAwsConfigFromState no-op does not call confirmation", async () => {
         return true;
       },
     });
+    assert.deepEqual(result.files, [
+      { path: configPath, status: "unchanged" },
+      { path: typesPath, status: "unchanged" },
+    ]);
     assert.equal(confirmationCalls, 0);
   } finally {
     await workspace.cleanup();
@@ -148,6 +156,7 @@ test("regenerateAwsConfigTypes reports no changes when types are up to date", as
       },
     });
     assert.equal(result.changed, false);
+    assert.deepEqual(result.files, [{ path: typesPath, status: "unchanged" }]);
     assert.equal(confirmationCalls, 0);
   } finally {
     await workspace.cleanup();
@@ -181,8 +190,68 @@ test("regenerateAwsConfigTypes writes when types are stale", async () => {
       overwriteConfirmation: async () => true,
     });
     assert.equal(result.changed, true);
+    assert.deepEqual(result.files, [{ path: typesPath, status: "written" }]);
     const nextTypes = await readFile(typesPath, "utf8");
     assert.match(nextTypes, /Generated file\. Do not edit by hand\./);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("writeAwsConfigFromState reports would-write when confirmation is rejected", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath: statePath,
+      contextPath: contextPath,
+    });
+    const result = await writeAwsConfigFromState({
+      statePath: statePath,
+      contextPath: contextPath,
+      configPath: configPath,
+      typesPath: typesPath,
+      overwriteConfirmation: async () => false,
+    });
+    assert.deepEqual(result.files, [
+      { path: configPath, status: "would-write" },
+      { path: typesPath, status: "would-write" },
+    ]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("regenerateAwsConfigTypes reports would-write when confirmation is rejected", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath: statePath,
+      contextPath: contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: statePath,
+      contextPath: contextPath,
+      configPath: configPath,
+      typesPath: typesPath,
+      overwriteConfirmation: async () => true,
+    });
+    const previousTypes = await readFile(typesPath, "utf8");
+    await writeFile(typesPath, `// stale\n${previousTypes}`, "utf8");
+    const result = await regenerateAwsConfigTypes({
+      configPath: configPath,
+      typesPath: typesPath,
+      overwriteConfirmation: async () => false,
+    });
+    assert.equal(result.changed, false);
+    assert.deepEqual(result.files, [{ path: typesPath, status: "would-write" }]);
   } finally {
     await workspace.cleanup();
   }
