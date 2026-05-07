@@ -48,8 +48,8 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
 
 ## Phase 5.3: Diff engine
 
-- [ ] Add `src/diff.ts` exporting `diffStates(props: { current: LocalState; next: LocalState }): Plan`.
-- [ ] Compare current vs next at entity level:
+- [x] Add `src/diff.ts` exporting `diffStates(props: { current: StateFile; next: StateFile }): Plan`.
+- [x] Compare current vs next at entity level:
   - Account `parentId` differs and both ids are real → emit `moveAccount` op.
   - Account in next has sentinel id → `unsupportedMutation` (account creation goes through Phase 4).
   - OU added in config → `unsupportedMutation`.
@@ -57,22 +57,50 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
   - OU removed in config → `destructive`.
   - IdC entity diffs (users, groups, permission sets, assignments) → `unsupportedMutation`.
   - Account removed from config (not present in next) → `destructive`.
-- [ ] Determinism: `operations` sorted by `accountName`; `unsupported` sorted by `kind` then `description`.
-- [ ] Returns `Plan`; never throws on unsupported diffs (let the command layer decide policy).
+- [x] Determinism: `operations` sorted by `accountName`; `unsupported` sorted by `kind` then `description`.
+- [x] Returns `Plan`; never throws on unsupported diffs (let the command layer decide policy).
+
+### Phase 5.3 compact test matrix (`src/diff.test.ts`)
+
+1. **No diff baseline**
+   - current equals next
+   - expect `operations: []`, `unsupported: []`
+2. **Single move**
+   - one account has different `parentId` with real ids on both sides
+   - expect one `moveAccount` operation with correct from/to ids and names
+3. **Multiple moves deterministic order**
+   - two+ account moves in unsorted input order
+   - expect `operations` sorted by `accountName`
+4. **New account sentinel**
+   - next contains account absent from current with id `__pending_creation__`
+   - expect one unsupported entry: `kind: "newAccount"`, `category: "unsupportedMutation"`
+5. **Destructive removals**
+   - account exists in current but not in next
+   - OU exists in current but not in next
+   - expect `removedAccount` + `removedOu`, both `category: "destructive"`
+6. **OU add + rename classification**
+   - added OU only -> `newOu`
+   - added OU + removed OU under same parent -> `renamedOu` (unsupported)
+7. **IdC additions**
+   - add user/group/permission set in next
+   - expect `idcUserAdded`, `idcGroupAdded`, `idcPermissionSetAdded`
+8. **IdC assignment change**
+   - account assignments differ between current and next
+   - expect `idcAssignmentChanged`
 
 ## Phase 5.4: `plan` command
 
-- [ ] Add `src/commands/plan.ts` exporting `runPlanCommand(props: { configPath?, statePath?, contextPath?, output: 'human' | 'json' }): Promise<PlanCommandResult>`.
-- [ ] Steps:
+- [x] Add `src/commands/plan.ts` exporting `runPlanCommand(props: { configPath?, typesPath?, statePath?, contextPath?, output: 'human' | 'json' }): Promise<PlanCommandResult>`.
+- [x] Steps:
   1. Load `aws.config.ts` via existing `loadAwsConfigFromTsFile` (`src/awsConfig.ts:809`).
   2. Read `state.json` via existing `readStateFile` (`src/state.ts`).
   3. Read `aws.context.json`.
   4. Call `mapAwsConfigToState` → `nextState`.
   5. Call `diffStates({ current, next })` → `plan`.
-  6. Format and print (human-readable by default; `--json` for machine consumption).
-- [ ] No AWS calls — `plan` is read-only locally. Don't construct AWS clients.
-- [ ] CLI registration in `src/cli.ts` next to existing commands. No `planConfirmation` callback needed.
-- [ ] Exit code: 0 always (a diff is informational, not a gate); 1 only on errors.
+  6. Format and print (human-readable by default; `--json` for machine consumption). Human format includes unsupported `category` for apply-gate visibility.
+- [x] No AWS calls — `plan` is read-only locally. Don't construct AWS clients.
+- [x] CLI registration in `src/cli.ts` next to existing commands. No `planConfirmation` callback needed.
+- [x] Exit code: 0 always (a diff is informational, not a gate); 1 only on errors.
 
 ## Phase 5.5: `apply` command
 
@@ -100,18 +128,19 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
   - Sentinel ids emitted for entities not in current state.
   - Synthetic `root` OU resolves to `context.rootId`.
 - [ ] `src/diff.test.ts`:
-  - No-diff case (current == next).
-  - Single account move detected.
-  - Multiple moves: deterministic order.
-  - OU added → `unsupportedMutation`.
-  - OU renamed → `unsupportedMutation`.
-  - OU removed → `destructive`.
-  - Account removed from config → `destructive`.
-  - IdC change → `unsupportedMutation`.
-  - Sentinel id (new account) → `unsupportedMutation`.
+  - [x] No-diff case (current == next).
+  - [x] Single account move detected.
+  - [x] Multiple moves: deterministic order.
+  - [x] OU added → `unsupportedMutation`.
+  - [x] OU renamed → `unsupportedMutation`.
+  - [x] OU removed → `destructive`.
+  - [x] Account removed from config → `destructive`.
+  - [x] IdC change → `unsupportedMutation`.
+  - [x] Sentinel id (new account) → `unsupportedMutation`.
 - [ ] `src/commands/plan.test.ts`:
-  - Fixture workspace with `state.json` + `aws.config.ts` → expected plan output (snapshot-style assertions).
-  - `--json` output shape.
+  - [x] Fixture workspace with `state.json` + `aws.config.ts` → expected plan output.
+  - [x] `--json` output shape.
+  - [x] Unsupported diffs include category labels in human output.
 - [ ] `src/commands/apply.test.ts`:
   - Mock `OrganizationsClient`; assert `MoveAccountCommand` called with correct ids.
   - Confirmation rejected → no SDK calls, exit cleanly.

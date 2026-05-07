@@ -35,7 +35,7 @@ const awsContextSchema = v.strictObject({
   }),
 });
 
-type AwsContextFile = v.InferOutput<typeof awsContextSchema>;
+export type AwsContextFile = v.InferOutput<typeof awsContextSchema>;
 
 const awsConfigModelSchema = v.strictObject({
   organizationalUnits: v.array(
@@ -78,7 +78,7 @@ const awsConfigModelSchema = v.strictObject({
   ),
 });
 
-type AwsConfigModel = v.InferOutput<typeof awsConfigModelSchema>;
+export type AwsConfigModel = v.InferOutput<typeof awsConfigModelSchema>;
 
 type WriteAwsConfigFromStateInput = {
   statePath: string;
@@ -493,7 +493,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
   return v.parse(awsConfigModelSchema, mapped);
 }
 
-function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile {
+export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile {
   const organizationalUnitByName = new Map(
     props.currentState.organization.organizationalUnits.map((ou) => [ou.name, ou]),
   );
@@ -1032,6 +1032,23 @@ async function readAwsContextFile(path: string): Promise<AwsContextFile> {
   const rawContent = await readFile(path, "utf8");
   const parsed = JSON.parse(rawContent) as unknown;
   return v.parse(awsContextSchema, parsed);
+}
+
+export async function loadAwsConfigModelFromTsFile(props: {
+  configPath: string;
+  typesPath: string;
+}): Promise<AwsConfigModel> {
+  const typesModule = await loadAwsConfigTypesModule({
+    typesPath: props.typesPath,
+  });
+  return await loadAwsConfigFromTsFile({
+    configPath: props.configPath,
+    schema: typesModule.awsConfigSchema,
+  });
+}
+
+export async function readAwsContextFromFile(path: string): Promise<AwsContextFile> {
+  return await readAwsContextFile(path);
 }
 
 async function loadAwsConfigTypesModule(props: {

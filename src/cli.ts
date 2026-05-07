@@ -10,6 +10,7 @@ import {
 } from "./awsClientConfig.js";
 import { runBootstrapCommand } from "./commands/bootstrap.js";
 import { runInitCommand } from "./commands/init.js";
+import { runPlanCommand } from "./commands/plan.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
 import { runScanCommand } from "./commands/scan.js";
 
@@ -29,6 +30,7 @@ async function main(): Promise<void> {
       region: { type: "string" },
       "instance-arn": { type: "string" },
       yes: { type: "boolean", default: false },
+      json: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -163,11 +165,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (
-    command === "create-account" ||
-    command === "plan" ||
-    command === "apply"
-  ) {
+  if (command === "plan") {
+    await runPlanCommand({
+      output: args.values.json ? "json" : "human",
+    });
+    return;
+  }
+
+  if (command === "create-account" || command === "apply") {
     console.log(`Command '${command}' is not implemented yet.`);
     return;
   }
@@ -190,7 +195,8 @@ function printHelp(): void {
     "  npm run cli -- init [--profile <name>] [--region <region>] [--instance-arn <arn>] [--yes]",
   );
   console.log("  npm run cli -- regenerate [--yes]");
-  console.log("  npm run cli -- <create-account|plan|apply>");
+  console.log("  npm run cli -- plan [--json]");
+  console.log("  npm run cli -- <create-account|apply>");
   console.log("");
   console.log("Environment fallback:");
   console.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
