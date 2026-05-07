@@ -9,6 +9,7 @@ import {
   resolveAwsRegion,
 } from "./awsClientConfig.js";
 import { runBootstrapCommand } from "./commands/bootstrap.js";
+import { runApplyCommand } from "./commands/apply.js";
 import { runInitCommand } from "./commands/init.js";
 import { runPlanCommand } from "./commands/plan.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
       "instance-arn": { type: "string" },
       yes: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
+      "ignore-unsupported": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -167,12 +169,37 @@ async function main(): Promise<void> {
 
   if (command === "plan") {
     await runPlanCommand({
+      configPath: "aws.config.ts",
+      typesPath: "aws.config.types.ts",
+      statePath: "state.json",
+      contextPath: "aws.context.json",
       output: args.values.json ? "json" : "human",
     });
     return;
   }
 
-  if (command === "create-account" || command === "apply") {
+  if (command === "apply") {
+    const organizationsClient = new OrganizationsClient(clientConfig);
+    const planConfirmation = buildBootstrapPlanConfirmation({
+      yes: args.values.yes,
+      isTty: process.stdin.isTTY,
+    });
+    const result = await runApplyCommand({
+      organizationsClient: organizationsClient,
+      configPath: "aws.config.ts",
+      typesPath: "aws.config.types.ts",
+      statePath: "state.json",
+      contextPath: "aws.context.json",
+      ignoreUnsupported: args.values["ignore-unsupported"] ?? false,
+      planConfirmation: planConfirmation,
+    });
+    console.log("");
+    console.log(`Apply status: ${result.status}`);
+    console.log(`State: ${result.statePath}`);
+    return;
+  }
+
+  if (command === "create-account") {
     console.log(`Command '${command}' is not implemented yet.`);
     return;
   }
@@ -196,7 +223,8 @@ function printHelp(): void {
   );
   console.log("  npm run cli -- regenerate [--yes]");
   console.log("  npm run cli -- plan [--json]");
-  console.log("  npm run cli -- <create-account|apply>");
+  console.log("  npm run cli -- apply [--yes] [--ignore-unsupported]");
+  console.log("  npm run cli -- <create-account>");
   console.log("");
   console.log("Environment fallback:");
   console.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");

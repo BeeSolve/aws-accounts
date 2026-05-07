@@ -33,22 +33,22 @@ test("normalizeState sorts by ids/arns before names", () => {
         { permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-1/ps-1", name: "PS1", description: "" }
       ],
       accountAssignments: [
-        { accountId: "222222222222", permissionSetArn: "arn2", principalId: "p2", principalType: "USER" },
-        { accountId: "111111111111", permissionSetArn: "arn1", principalId: "p1", principalType: "USER" }
+        { accountId: "222222222222", permissionSetArn: "arn2", principalId: "p2", principalType: "USER" as const },
+        { accountId: "111111111111", permissionSetArn: "arn1", principalId: "p1", principalType: "USER" as const }
       ],
       accessRoles: [
         {
           accountId: "222222222222",
           permissionSetArn: "arn2",
           principalId: "p2",
-          principalType: "USER",
+          principalType: "USER" as const,
           roleName: "role2"
         },
         {
           accountId: "111111111111",
           permissionSetArn: "arn1",
           principalId: "p1",
-          principalType: "USER",
+          principalType: "USER" as const,
           roleName: "role1"
         }
       ]
@@ -82,6 +82,36 @@ test("validateState rejects unknown fields", () => {
       accessRoles: []
     },
     extra: true
+  };
+
+  assert.throws(() => validateState(invalid));
+});
+
+test("validateState rejects invalid principalType", () => {
+  const invalid = {
+    version: "1",
+    generatedAt: "2026-05-06T00:00:00.000Z",
+    organization: {
+      rootId: "r-root",
+      organizationalUnits: [],
+      accounts: []
+    },
+    identityCenter: {
+      instanceArn: "arn:aws:sso:::instance/ssoins-123",
+      identityStoreId: "d-123",
+      users: [],
+      groups: [],
+      permissionSets: [],
+      accountAssignments: [
+        {
+          accountId: "111111111111",
+          permissionSetArn: "arn:ps-1",
+          principalId: "p-1",
+          principalType: "ROLE"
+        }
+      ],
+      accessRoles: []
+    }
   };
 
   assert.throws(() => validateState(invalid));

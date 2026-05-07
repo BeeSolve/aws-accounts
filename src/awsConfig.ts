@@ -10,6 +10,7 @@ import {
   type StateFile,
   validateState,
 } from "./state.js";
+import { assertUnreachable } from "./helpers.js";
 
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
 const pendingCreationId = "__pending_creation__" as const;
@@ -970,7 +971,8 @@ function mapAssignmentPrincipal(props: {
   groupDisplayNameById: Map<string, string>;
   userNameById: Map<string, string>;
 }): MapAssignmentPrincipalResult {
-  if (props.assignment.principalType === "GROUP") {
+  const principalType = props.assignment.principalType;
+  if (principalType === "GROUP") {
     const groupDisplayName = props.groupDisplayNameById.get(
       props.assignment.principalId,
     );
@@ -984,7 +986,7 @@ function mapAssignmentPrincipal(props: {
       value: groupDisplayName,
     };
   }
-  if (props.assignment.principalType === "USER") {
+  if (principalType === "USER") {
     const userName = props.userNameById.get(props.assignment.principalId);
     if (userName == null) {
       throw new Error(
@@ -996,8 +998,9 @@ function mapAssignmentPrincipal(props: {
       value: userName,
     };
   }
-  throw new Error(
-    `Unsupported principal type "${props.assignment.principalType}" in account assignment.`,
+  assertUnreachable(
+    principalType,
+    `Unsupported principal type "${principalType}" in account assignment.`,
   );
 }
 

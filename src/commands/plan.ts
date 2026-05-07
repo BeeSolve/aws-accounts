@@ -8,10 +8,10 @@ import { readStateFile } from "../state.js";
 import type { Plan } from "../operations.js";
 
 type PlanCommandInput = {
-  configPath?: string;
-  typesPath?: string;
-  statePath?: string;
-  contextPath?: string;
+  configPath: string;
+  typesPath: string;
+  statePath: string;
+  contextPath: string;
   output: "human" | "json";
 };
 
@@ -22,17 +22,13 @@ type PlanCommandResult = {
 export async function runPlanCommand(
   props: PlanCommandInput,
 ): Promise<PlanCommandResult> {
-  const configPath = props.configPath ?? "aws.config.ts";
-  const typesPath = props.typesPath ?? "aws.config.types.ts";
-  const statePath = props.statePath ?? "state.json";
-  const contextPath = props.contextPath ?? "aws.context.json";
   const [config, currentState, context] = await Promise.all([
     loadAwsConfigModelFromTsFile({
-      configPath: configPath,
-      typesPath: typesPath,
+      configPath: props.configPath,
+      typesPath: props.typesPath,
     }),
-    readStateFile(statePath),
-    readAwsContextFromFile(contextPath),
+    readStateFile(props.statePath),
+    readAwsContextFromFile(props.contextPath),
   ]);
 
   const nextState = mapAwsConfigToState({

@@ -90,7 +90,7 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
 
 ## Phase 5.4: `plan` command
 
-- [x] Add `src/commands/plan.ts` exporting `runPlanCommand(props: { configPath?, typesPath?, statePath?, contextPath?, output: 'human' | 'json' }): Promise<PlanCommandResult>`.
+- [x] Add `src/commands/plan.ts` exporting `runPlanCommand(props: { configPath, typesPath, statePath, contextPath, output: 'human' | 'json' }): Promise<PlanCommandResult>`.
 - [x] Steps:
   1. Load `aws.config.ts` via existing `loadAwsConfigFromTsFile` (`src/awsConfig.ts:809`).
   2. Read `state.json` via existing `readStateFile` (`src/state.ts`).
@@ -104,8 +104,8 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
 
 ## Phase 5.5: `apply` command
 
-- [ ] Add `src/commands/apply.ts` exporting `runApplyCommand(props: { organizationsClient: OrganizationsClient; configPath?; statePath?; contextPath?; ignoreUnsupported?: boolean; planConfirmation }): Promise<ApplyCommandResult>`.
-- [ ] Steps:
+- [x] Add `src/commands/apply.ts` exporting `runApplyCommand(props: { organizationsClient: OrganizationsClient; configPath; typesPath; statePath; contextPath; ignoreUnsupported; planConfirmation }): Promise<ApplyCommandResult>`.
+- [x] Steps:
   1. Recompute plan (calls into Phase 5.4's pure parts — extract a `computePlan()` helper from `runPlanCommand` to share).
   2. If `unsupported` contains any `category: 'destructive'` items → refuse with non-zero exit (no flag override). Else, if `unsupported` contains `category: 'unsupportedMutation'` items and `!ignoreUnsupported` → refuse with non-zero exit listing the items. Else → proceed.
   3. If `operations.length === 0`, log "no changes" and exit 0.
@@ -115,11 +115,11 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
   6. After each successful op, mutate an in-memory copy of `nextState` so partial failures know what succeeded.
   7. On any failure: log error, write the partially-updated state to `state.json`, exit non-zero with actionable message ("run `scan` to verify, then re-run `apply`").
   8. On full success: write `nextState` to `state.json`. Do NOT regenerate `aws.config.ts`. Do NOT auto-rescan.
-- [ ] CLI registration with `--yes`, `--ignore-unsupported` flags. Reuse `buildBootstrapPlanConfirmation` (or rename to `buildPlanConfirmation` if shared between bootstrap and apply).
+- [x] CLI registration with `--yes`, `--ignore-unsupported` flags. Reuse `buildBootstrapPlanConfirmation` (or rename to `buildPlanConfirmation` if shared between bootstrap and apply).
 
 ## Phase 5.6: State persistence helper
 
-- [ ] Add (or reuse) a `writeStateFile` helper in `src/state.ts` that writes `state.json` with the existing deterministic ordering used by scan. Likely already present — verify and reuse rather than duplicate.
+- [x] Add (or reuse) a `writeStateFile` helper in `src/state.ts` that writes `state.json` with the existing deterministic ordering used by scan. Likely already present — verify and reuse rather than duplicate.
 
 ## Phase 5.7: Tests (Node `--test`, mirror existing patterns from `src/commands/bootstrap.test.ts`)
 
@@ -127,7 +127,7 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
   - Round-trip: `mapStateToAwsConfig(mapAwsConfigToState({ config, currentState })) ≈ config` for unchanged inputs.
   - Sentinel ids emitted for entities not in current state.
   - Synthetic `root` OU resolves to `context.rootId`.
-- [ ] `src/diff.test.ts`:
+- [x] `src/diff.test.ts`:
   - [x] No-diff case (current == next).
   - [x] Single account move detected.
   - [x] Multiple moves: deterministic order.
@@ -137,23 +137,23 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
   - [x] Account removed from config → `destructive`.
   - [x] IdC change → `unsupportedMutation`.
   - [x] Sentinel id (new account) → `unsupportedMutation`.
-- [ ] `src/commands/plan.test.ts`:
+- [x] `src/commands/plan.test.ts`:
   - [x] Fixture workspace with `state.json` + `aws.config.ts` → expected plan output.
   - [x] `--json` output shape.
   - [x] Unsupported diffs include category labels in human output.
-- [ ] `src/commands/apply.test.ts`:
-  - Mock `OrganizationsClient`; assert `MoveAccountCommand` called with correct ids.
-  - Confirmation rejected → no SDK calls, exit cleanly.
-  - Destructive unsupported diff → refuses regardless of `--ignore-unsupported`.
-  - Non-destructive unsupported diff with `--ignore-unsupported` → proceeds with supported ops only.
-  - Partial failure: 2 ops, 2nd fails → `state.json` reflects only 1st op; non-zero exit.
-  - Successful apply rewrites `state.json`; does not touch `aws.config.ts`.
+- [x] `src/commands/apply.test.ts`:
+  - [x] Mock `OrganizationsClient`; assert `MoveAccountCommand` called with correct ids.
+  - [x] Confirmation rejected → no SDK calls, exit cleanly.
+  - [x] Destructive unsupported diff → refuses regardless of `--ignore-unsupported`.
+  - [x] Non-destructive unsupported diff with `--ignore-unsupported` → proceeds with supported ops only.
+  - [x] Partial failure: 2 ops, 2nd fails → `state.json` reflects only 1st op; non-zero exit.
+  - [x] Successful apply rewrites `state.json`; does not touch `aws.config.ts`.
 
 ## Phase 5.8: CLI wiring & output
 
-- [ ] Register `plan` and `apply` in `src/cli.ts` alongside existing commands; reuse arg parsing + client construction patterns from `bootstrap` / `init`.
+- [x] Register `plan` and `apply` in `src/cli.ts` alongside existing commands; reuse arg parsing + client construction patterns from `bootstrap` / `init`.
 - [ ] Match existing `console.log` style (no logger abstraction yet — that's the open cross-cutting item in `plan.md`).
-- [ ] Plan output format (human):
+- [x] Plan output format (human):
 
   ```
   Plan: 2 operations, 1 unsupported diff
@@ -163,7 +163,7 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
     new OU "Marketing" (creation not supported in increment 1)
   ```
 
-- [ ] Apply output: per-op start/done lines, final summary.
+- [x] Apply output: per-op start/done lines, final summary.
 
 ## File-touch summary
 

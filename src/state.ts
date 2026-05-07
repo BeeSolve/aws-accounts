@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import * as v from "valibot";
 
 const nonEmptyString = v.pipe(v.string(), v.minLength(1));
+const principalTypeSchema = v.picklist(["GROUP", "USER"]);
 
 const organizationalUnitSchema = v.strictObject({
   id: nonEmptyString,
@@ -41,14 +42,14 @@ const accountAssignmentSchema = v.strictObject({
   accountId: nonEmptyString,
   permissionSetArn: nonEmptyString,
   principalId: nonEmptyString,
-  principalType: nonEmptyString
+  principalType: principalTypeSchema
 });
 
 const accessRoleSchema = v.strictObject({
   accountId: nonEmptyString,
   permissionSetArn: nonEmptyString,
   principalId: nonEmptyString,
-  principalType: nonEmptyString,
+  principalType: principalTypeSchema,
   roleName: nonEmptyString
 });
 

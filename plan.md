@@ -93,29 +93,30 @@ Scope for this increment:
 
 > Design decisions: [`docs/phase-5-decisions.md`](docs/phase-5-decisions.md). Working plan with file paths and ordering: [`docs/phase-5-plan.md`](docs/phase-5-plan.md).
 
-- [ ] Define reconciliation command pair for local mode:
+- [x] Define reconciliation command pair for local mode:
   - [x] `plan` (load `aws.config.ts` → transform to next `state.json` shape → diff current `state.json` vs next; emit operations list).
-  - [ ] `apply` (execute approved operations directly via AWS SDK in CLI for increment 1).
+  - [x] `apply` (execute approved operations directly via AWS SDK in CLI for increment 1).
 - [ ] Implement `mapAwsConfigToState` transform:
-  - [ ] load `aws.config.ts` via the phase 3 loader.
+  - [x] load `aws.config.ts` via the phase 3 loader.
   - [x] resolve names to AWS-issued ids using current `state.json` (entities present in both keep their existing ids; entities only in config get placeholder ids interpreted by the diff as "to be created").
 - [x] Implement state-vs-state diff engine producing human-readable and machine-readable plan.
-- [ ] Define operation model for supported mutations in increment 1:
+- [x] Define operation model for supported mutations in increment 1:
   - [x] move account between OUs
-- [ ] Exclude IAM Identity Center assignment mutations from increment 1 apply scope.
+- [x] Exclude IAM Identity Center assignment mutations from increment 1 apply scope.
 - [ ] Exclude account metadata reconciliation (tags, alternate contacts, account-name drift) from increment 1 apply scope; deferred to a later increment.
 - [ ] Implement safety policy:
-  - [ ] default no destructive actions
-  - [ ] strict default: refuse apply when any unsupported diff is present
-  - [ ] `--ignore-unsupported` flag proceeds past non-destructive unsupported diffs only
-  - [ ] destructive unsupported diffs (account removal from config, OU deletion) always refuse, no flag override
-  - [ ] require confirmation before apply (interactive prompt)
-  - [ ] support non-interactive approval via `--yes`
-- [ ] Implement apply executor with per-operation progress + final outcome summary.
-- [ ] After apply succeeds, write the post-apply state to `state.json` from the planned-next-state. Do not regenerate `aws.config.ts`. Do not auto re-scan in the normal apply loop.
-- [ ] On per-operation failure during apply: abort, persist `state.json` reflecting only successful ops, exit non-zero with guidance to run `scan` then re-`apply`.
+  - [x] default no destructive actions
+  - [x] strict default: refuse apply when any unsupported diff is present
+  - [x] `--ignore-unsupported` flag proceeds past non-destructive unsupported diffs only
+  - [x] destructive unsupported diffs (account removal from config, OU deletion) always refuse, no flag override
+  - [x] require confirmation before apply (interactive prompt)
+  - [x] support non-interactive approval via `--yes`
+- [x] Implement apply executor with per-operation progress + final outcome summary.
+- [x] After apply succeeds, write the post-apply state to `state.json` from the planned-next-state. Do not regenerate `aws.config.ts`. Do not auto re-scan in the normal apply loop.
+- [x] On per-operation failure during apply: abort, persist `state.json` reflecting only successful ops, exit non-zero with guidance to run `scan` then re-`apply`.
 - [ ] Add tests for `mapAwsConfigToState`, plan generation (state-vs-state), and apply sequencing.
   - [x] plan generation (state-vs-state diff engine + `plan` command output modes)
+  - [x] apply sequencing and failure persistence
 
 ## Out of scope for increment 1
 
