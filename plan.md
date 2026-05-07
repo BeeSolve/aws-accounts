@@ -18,10 +18,11 @@ Scope for this increment:
   - [x] accounts and OU placement
   - [x] identity center users/groups
   - [x] permission sets and account assignments
-- [x] Implement pagination/retry/error handling for scanner calls.
+- [ ] Implement pagination/retry/error handling for scanner calls.
 - [x] Persist scan output locally to `state.json` (workspace path), with deterministic ordering for stable diffs.
 - [x] Add validation of produced state with valibot schemas.
 - [x] Add node test runner coverage for scanner normalization and schema validation.
+- [x] Add node test runner coverage for `runScanCommand` via mocked AWS SDK clients.
 - [x] Add CLI output summarizing discovered resources and output file path.
 
 ## Phase 2: Bootstrap OUs (Pending, Graveyard) locally-first flow
@@ -36,7 +37,7 @@ Scope for this increment:
   - [x] clear prompt/log before any create operation
 - [x] Persist discovered/created OU IDs into local context file (`aws.context.json`).
 - [x] Ensure generated/updated context structure is future-compatible with later Lambda/S3 fields.
-- [x] Add tests for bootstrap decision logic (exists vs create).
+- [ ] Add tests for bootstrap decision logic (exists vs create).
 - [x] Add CLI summary showing OU actions planned/executed.
 
 ## Phase 3: Implement `state.json` -> `aws.config.ts` + `aws.context.json`

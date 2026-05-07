@@ -1,130 +1,153 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
-  analyzeRootChildrenForBootstrap,
-  assertAwsContextCompatibleWithExisting,
-  pendingOuName,
-  validateAwsContextFile,
-  type AwsContextFile,
-  type RootChildOu,
-} from "./bootstrap.js";
+  CreateOrganizationalUnitCommand,
+  DescribeOrganizationCommand,
+  ListOrganizationalUnitsForParentCommand,
+  ListRootsCommand,
+  type OrganizationsClient,
+} from "@aws-sdk/client-organizations";
+import { ListInstancesCommand, type SSOAdminClient } from "@aws-sdk/client-sso-admin";
+import { runBootstrapCommand } from "./bootstrap.js";
 
-function ctx(partial: Partial<AwsContextFile> & Pick<AwsContextFile, "organization">): AwsContextFile {
-  return validateAwsContextFile({ value: {
-    version: "1",
-    generatedAt: "2026-05-06T00:00:00.000Z",
-    identityCenter: {
-      instanceArn: "arn:aws:sso:::instance/ssoins-1",
-      identityStoreId: "d-1",
+test(
+  "runBootstrapCommand creates missing root OUs and writes context file",
+  { concurrency: false },
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "bootstrap-test-"));
+    const previousDirectory = process.cwd();
+    process.chdir(directory);
+    try {
+      const planLinesSeen: string[][] = [];
+      const result = await runBootstrapCommand({
+        organizationsClient: createOrganizationsClientMock({
+          rootId: "r-root",
+          initialRootChildren: [],
+        }),
+        ssoAdminClient: createSsoAdminClientMock(),
+        profile: "default",
+        region: "eu-central-1",
+        planConfirmation: async (props: { planLines: string[] }) => {
+          planLinesSeen.push([...props.planLines]);
+          return true;
+        },
+      });
+
+      assert.equal(result.pendingCreated, true);
+      assert.equal(result.graveyardCreated, true);
+      assert.equal(result.identityCenterCaptured, true);
+      assert.equal(result.pendingOuId, "ou-pending");
+      assert.equal(result.graveyardOuId, "ou-graveyard");
+      assert.equal(planLinesSeen.length, 1);
+      assert.equal(planLinesSeen[0].length, 3);
+
+      const raw = await readFile("aws.context.json", "utf8");
+      const parsed = JSON.parse(raw) as {
+        organization: { pendingOuId: string; graveyardOuId: string };
+      };
+      assert.equal(parsed.organization.pendingOuId, "ou-pending");
+      assert.equal(parsed.organization.graveyardOuId, "ou-graveyard");
+    } finally {
+      process.chdir(previousDirectory);
+    }
+  },
+);
+
+test(
+  "runBootstrapCommand aborts when plan confirmation is rejected",
+  { concurrency: false },
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "bootstrap-test-"));
+    const previousDirectory = process.cwd();
+    process.chdir(directory);
+    try {
+      await assert.rejects(
+        () =>
+          runBootstrapCommand({
+            organizationsClient: createOrganizationsClientMock({
+              rootId: "r-root",
+              initialRootChildren: [],
+            }),
+            ssoAdminClient: createSsoAdminClientMock(),
+            profile: "default",
+            region: "eu-central-1",
+            planConfirmation: async () => false,
+          }),
+        /Bootstrap aborted/,
+      );
+    } finally {
+      process.chdir(previousDirectory);
+    }
+  },
+);
+
+function createOrganizationsClientMock(props: {
+  rootId: string;
+  initialRootChildren: Array<{ id: string; name: string; arn: string }>;
+}): OrganizationsClient {
+  const rootChildren = [...props.initialRootChildren];
+  const mock = {
+    async send(command: unknown): Promise<unknown> {
+      if (command instanceof DescribeOrganizationCommand) {
+        return {
+          Organization: {
+            MasterAccountId: "111111111111",
+          },
+        };
+      }
+      if (command instanceof ListRootsCommand) {
+        return {
+          Roots: [{ Id: props.rootId }],
+        };
+      }
+      if (command instanceof ListOrganizationalUnitsForParentCommand) {
+        if (command.input.ParentId !== props.rootId) {
+          return { OrganizationalUnits: [] };
+        }
+        return {
+          OrganizationalUnits: rootChildren.map((child) => ({
+            Id: child.id,
+            Name: child.name,
+            Arn: child.arn,
+          })),
+        };
+      }
+      if (command instanceof CreateOrganizationalUnitCommand) {
+        const name = command.input.Name;
+        if (name == null) {
+          throw new Error("Missing OU name.");
+        }
+        rootChildren.push({
+          id: `ou-${name.toLowerCase()}`,
+          name: name,
+          arn: `arn:aws:organizations:::ou/${name.toLowerCase()}`,
+        });
+        return {};
+      }
+      throw new Error("Unexpected Organizations command in test.");
     },
-    deployment: {
-      profile: "",
-      region: "",
-      lambdaArn: "",
-      stateBucketName: "",
-    },
-    ...partial,
-    organization: partial.organization,
-  }});
+  };
+  return mock as OrganizationsClient;
 }
 
-test("analyzeRootChildrenForBootstrap detects missing and existing OUs", () => {
-  const children: RootChildOu[] = [
-    { id: "ou-p", name: pendingOuName, arn: "arn:pending" },
-  ];
-  const analysis = analyzeRootChildrenForBootstrap({ children });
-  if (analysis.ok === false) {
-    assert.fail("Expected successful OU analysis.");
-    return;
-  }
-  assert.equal(analysis.pendingOuId, "ou-p");
-  assert.equal(analysis.graveyardOuId, undefined);
-  assert.equal(analysis.needsPendingCreate, false);
-  assert.equal(analysis.needsGraveyardCreate, true);
-});
-
-test("analyzeRootChildrenForBootstrap fails on duplicate Pending", () => {
-  const children: RootChildOu[] = [
-    { id: "ou-1", name: pendingOuName, arn: "arn:1" },
-    { id: "ou-2", name: pendingOuName, arn: "arn:2" },
-  ];
-  const analysis = analyzeRootChildrenForBootstrap({ children });
-  assert.equal(analysis.ok, false);
-});
-
-test("assertAwsContextCompatibleWithExisting passes when organization matches", () => {
-  const organization = {
-    managementAccountId: "111111111111",
-    rootId: "r-1",
-    pendingOuId: "ou-p",
-    graveyardOuId: "ou-g",
+function createSsoAdminClientMock(): SSOAdminClient {
+  const mock = {
+    async send(command: unknown): Promise<unknown> {
+      if (command instanceof ListInstancesCommand) {
+        return {
+          Instances: [
+            {
+              InstanceArn: "arn:aws:sso:::instance/ssoins-123",
+              IdentityStoreId: "d-1234567890",
+            },
+          ],
+        };
+      }
+      throw new Error("Unexpected SSO Admin command in test.");
+    },
   };
-  const existing = ctx({ organization });
-  const next = ctx({
-    organization,
-    generatedAt: "2026-05-06T00:00:01.000Z",
-  });
-  assertAwsContextCompatibleWithExisting({ existing, next });
-});
-
-test("assertAwsContextCompatibleWithExisting throws when pendingOuId differs", () => {
-  const existing = ctx({
-    organization: {
-      managementAccountId: "111111111111",
-      rootId: "r-1",
-      pendingOuId: "ou-old",
-      graveyardOuId: "ou-g",
-    },
-  });
-  const next = ctx({
-    organization: {
-      managementAccountId: "111111111111",
-      rootId: "r-1",
-      pendingOuId: "ou-new",
-      graveyardOuId: "ou-g",
-    },
-    generatedAt: "2026-05-06T00:00:01.000Z",
-  });
-  assert.throws(() => assertAwsContextCompatibleWithExisting({ existing, next }));
-});
-
-test("assertAwsContextCompatibleWithExisting throws when identityCenter differs", () => {
-  const organization = {
-    managementAccountId: "111111111111",
-    rootId: "r-1",
-    pendingOuId: "ou-p",
-    graveyardOuId: "ou-g",
-  };
-  const existing = ctx({ organization });
-  const next = validateAwsContextFile({ value: {
-    ...existing,
-    identityCenter: {
-      instanceArn: "arn:aws:sso:::instance/ssoins-2",
-      identityStoreId: "d-2",
-    },
-    generatedAt: "2026-05-06T00:00:01.000Z",
-  }});
-  assert.throws(() => assertAwsContextCompatibleWithExisting({ existing, next }));
-});
-
-test("validateAwsContextFile rejects unknown top-level keys", () => {
-  assert.throws(() =>
-    validateAwsContextFile({ value: {
-      version: "1",
-      generatedAt: "2026-05-06T00:00:00.000Z",
-      organization: {
-        managementAccountId: "111111111111",
-        rootId: "r-1",
-        pendingOuId: "ou-p",
-        graveyardOuId: "ou-g",
-      },
-      deployment: {
-        profile: "",
-        region: "",
-        lambdaArn: "",
-        stateBucketName: "",
-      },
-      extra: true,
-    }}),
-  );
-});
+  return mock as SSOAdminClient;
+}

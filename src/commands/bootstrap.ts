@@ -5,82 +5,28 @@ import {
   ListRootsCommand,
   OrganizationsClient,
 } from "@aws-sdk/client-organizations";
-import { ListInstancesCommand, SSOAdminClient } from "@aws-sdk/client-sso-admin";
+import {
+  ListInstancesCommand,
+  SSOAdminClient,
+} from "@aws-sdk/client-sso-admin";
 import { readFile, writeFile } from "node:fs/promises";
 import * as v from "valibot";
-import { type AwsClientConfig } from "../awsClientConfig.js";
 
-export const pendingOuName = "Pending";
-export const graveyardOuName = "Graveyard";
+const pendingOuName = "Pending";
+const graveyardOuName = "Graveyard";
 
 const contextFilePath = "aws.context.json";
-const nonEmptyString = v.pipe(v.string(), v.minLength(1));
 
-const organizationContextSchema = v.strictObject({
-  managementAccountId: nonEmptyString,
-  rootId: nonEmptyString,
-  pendingOuId: nonEmptyString,
-  graveyardOuId: nonEmptyString,
-});
-
-const identityCenterContextSchema = v.strictObject({
-  instanceArn: nonEmptyString,
-  identityStoreId: nonEmptyString,
-});
-
-const deploymentContextSchema = v.strictObject({
-  profile: v.string(),
-  region: v.string(),
-  lambdaArn: v.string(),
-  stateBucketName: v.string(),
-});
-
-const awsContextSchema = v.strictObject({
-  version: nonEmptyString,
-  generatedAt: nonEmptyString,
-  organization: organizationContextSchema,
-  identityCenter: identityCenterContextSchema,
-  deployment: deploymentContextSchema,
-});
-
-export type AwsContextFile = v.InferOutput<typeof awsContextSchema>;
-
-export type RootChildOu = {
-  id: string;
-  name: string;
-  arn: string;
-};
-
-export type BootstrapOuAnalysis =
-  | {
-      ok: true;
-      pendingOuId: string | undefined;
-      graveyardOuId: string | undefined;
-      needsPendingCreate: boolean;
-      needsGraveyardCreate: boolean;
-    }
-  | {
-      ok: false;
-      reason: string;
-    };
-
-export type BootstrapPlanConfirmationProps = {
-  planLines: string[];
-};
-
-export type BootstrapPlanConfirmation = (
-  props: BootstrapPlanConfirmationProps,
-) => Promise<boolean>;
-
-export type BootstrapCommandInput = {
-  clientConfig: AwsClientConfig;
+type BootstrapCommandInput = {
+  organizationsClient: OrganizationsClient;
+  ssoAdminClient: SSOAdminClient;
   profile: string;
   region: string;
   instanceArn?: string;
-  planConfirmation: BootstrapPlanConfirmation;
+  planConfirmation: (props: { planLines: string[] }) => Promise<boolean>;
 };
 
-export type BootstrapCommandResult = {
+type BootstrapCommandResult = {
   outputPath: string;
   pendingOuId: string;
   graveyardOuId: string;
@@ -89,39 +35,27 @@ export type BootstrapCommandResult = {
   identityCenterCaptured: boolean;
 };
 
-type IdentityCenterInstance = {
-  InstanceArn?: string;
-  IdentityStoreId?: string;
-};
-
-type DiscoverBootstrapStateResult = {
-  children: RootChildOu[];
-  analysis: BootstrapOuAnalysis;
-};
-
 export async function runBootstrapCommand(
   props: BootstrapCommandInput,
 ): Promise<BootstrapCommandResult> {
-  const organizationsClient = new OrganizationsClient(props.clientConfig);
-  const ssoAdminClient = new SSOAdminClient(props.clientConfig);
-
   console.log("Reading organization...");
-  const organizationDescription = await organizationsClient.send(
-    new DescribeOrganizationCommand({}),
-  );
-  const masterAccountId = organizationDescription.Organization?.MasterAccountId?.trim();
+  const [organizationDescription, rootsResponse] = await Promise.all([
+    props.organizationsClient.send(new DescribeOrganizationCommand({})),
+    props.organizationsClient.send(new ListRootsCommand({})),
+  ]);
+  const masterAccountId =
+    organizationDescription.Organization?.MasterAccountId?.trim();
   if (masterAccountId == null) {
     throw new Error("Could not resolve organization management account id.");
   }
 
-  const rootsResponse = await organizationsClient.send(new ListRootsCommand({}));
   const rootId = rootsResponse.Roots?.[0]?.Id?.trim();
   if (rootId == null) {
     throw new Error("Could not resolve organization root id.");
   }
 
   const initialDiscovery = await discoverBootstrapState({
-    organizationsClient: organizationsClient,
+    organizationsClient: props.organizationsClient,
     rootId: rootId,
   });
   if (initialDiscovery.analysis.ok === false) {
@@ -143,30 +77,37 @@ export async function runBootstrapCommand(
   }
 
   await createMissingRequiredOus({
-    organizationsClient: organizationsClient,
+    organizationsClient: props.organizationsClient,
     rootId: rootId,
     analysis: initialDiscovery.analysis,
   });
 
   const finalDiscovery = await discoverBootstrapState({
-    organizationsClient: organizationsClient,
+    organizationsClient: props.organizationsClient,
     rootId: rootId,
   });
   if (finalDiscovery.analysis.ok === false) {
     throw new Error(finalDiscovery.analysis.reason);
   }
-  if (finalDiscovery.analysis.pendingOuId == null || finalDiscovery.analysis.graveyardOuId == null) {
+  if (
+    finalDiscovery.analysis.pendingOuId == null ||
+    finalDiscovery.analysis.graveyardOuId == null
+  ) {
     throw new Error(
       "Bootstrap failed: Pending and Graveyard organizational units must exist under root after bootstrap.",
     );
   }
 
-  const instancesResponse = await ssoAdminClient.send(new ListInstancesCommand({}));
+  const [instancesResponse, existingContext] = await Promise.all([
+    props.ssoAdminClient.send(new ListInstancesCommand({})),
+    readExistingAwsContext({
+      path: contextFilePath,
+    }),
+  ]);
   const identityCenter = resolveIdentityCenterForBootstrap({
     instances: instancesResponse.Instances ?? [],
     requestedInstanceArn: props.instanceArn,
   });
-  const existingContext = await readExistingAwsContext({ path: contextFilePath });
 
   const nextContext = buildAwsContextFile({
     managementAccountId: masterAccountId,
@@ -202,21 +143,69 @@ export async function runBootstrapCommand(
   };
 }
 
-type ValidateAwsContextFileProps = {
-  value: unknown;
-};
+const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
 
-export function validateAwsContextFile(props: ValidateAwsContextFileProps): AwsContextFile {
+const organizationContextSchema = v.strictObject({
+  managementAccountId: nonEmptyString,
+  rootId: nonEmptyString,
+  pendingOuId: nonEmptyString,
+  graveyardOuId: nonEmptyString,
+});
+
+const identityCenterContextSchema = v.strictObject({
+  instanceArn: nonEmptyString,
+  identityStoreId: nonEmptyString,
+});
+
+const deploymentContextSchema = v.strictObject({
+  profile: v.string(),
+  region: v.string(),
+  lambdaArn: v.string(),
+  stateBucketName: v.string(),
+});
+
+const awsContextSchema = v.strictObject({
+  version: nonEmptyString,
+  generatedAt: nonEmptyString,
+  organization: organizationContextSchema,
+  identityCenter: identityCenterContextSchema,
+  deployment: deploymentContextSchema,
+});
+
+type AwsContextFile = v.InferOutput<typeof awsContextSchema>;
+
+function validateAwsContextFile(props: { value: unknown }): AwsContextFile {
   return v.parse(awsContextSchema, props.value);
 }
 
-type AnalyzeRootChildrenForBootstrapProps = {
-  children: RootChildOu[];
+type RootChildOu = {
+  id: string;
+  name: string;
+  arn: string;
 };
 
-export function analyzeRootChildrenForBootstrap(props: AnalyzeRootChildrenForBootstrapProps): BootstrapOuAnalysis {
-  const pending = props.children.filter((child) => child.name === pendingOuName);
-  const graveyard = props.children.filter((child) => child.name === graveyardOuName);
+type BootstrapOuAnalysis =
+  | {
+      ok: true;
+      pendingOuId: string | undefined;
+      graveyardOuId: string | undefined;
+      needsPendingCreate: boolean;
+      needsGraveyardCreate: boolean;
+    }
+  | {
+      ok: false;
+      reason: string;
+    };
+
+function analyzeRootChildrenForBootstrap(props: {
+  children: RootChildOu[];
+}): BootstrapOuAnalysis {
+  const pending = props.children.filter(
+    (child) => child.name === pendingOuName,
+  );
+  const graveyard = props.children.filter(
+    (child) => child.name === graveyardOuName,
+  );
   if (pending.length > 1) {
     return {
       ok: false,
@@ -238,15 +227,16 @@ export function analyzeRootChildrenForBootstrap(props: AnalyzeRootChildrenForBoo
   };
 }
 
-type AssertAwsContextCompatibleWithExistingProps = {
+function assertAwsContextCompatibleWithExisting(props: {
   existing: AwsContextFile;
   next: AwsContextFile;
-};
-
-export function assertAwsContextCompatibleWithExisting(
-  props: AssertAwsContextCompatibleWithExistingProps,
-): void {
-  const keys = ["managementAccountId", "rootId", "pendingOuId", "graveyardOuId"] as const;
+}): void {
+  const keys = [
+    "managementAccountId",
+    "rootId",
+    "pendingOuId",
+    "graveyardOuId",
+  ] as const;
   for (const key of keys) {
     if (props.existing.organization[key] !== props.next.organization[key]) {
       throw new Error(
@@ -255,8 +245,10 @@ export function assertAwsContextCompatibleWithExisting(
     }
   }
   if (
-    props.existing.identityCenter.instanceArn !== props.next.identityCenter.instanceArn ||
-    props.existing.identityCenter.identityStoreId !== props.next.identityCenter.identityStoreId
+    props.existing.identityCenter.instanceArn !==
+      props.next.identityCenter.instanceArn ||
+    props.existing.identityCenter.identityStoreId !==
+      props.next.identityCenter.identityStoreId
   ) {
     throw new Error(
       "aws.context.json conflicts with bootstrap Identity Center resolution: identityCenter values differ.",
@@ -264,12 +256,13 @@ export function assertAwsContextCompatibleWithExisting(
   }
 }
 
-type DiscoverBootstrapStateProps = {
+async function discoverBootstrapState(props: {
   organizationsClient: OrganizationsClient;
   rootId: string;
-};
-
-async function discoverBootstrapState(props: DiscoverBootstrapStateProps): Promise<DiscoverBootstrapStateResult> {
+}): Promise<{
+  children: RootChildOu[];
+  analysis: BootstrapOuAnalysis;
+}> {
   const children = await listDirectChildOrganizationalUnits({
     organizationsClient: props.organizationsClient,
     rootId: props.rootId,
@@ -280,12 +273,10 @@ async function discoverBootstrapState(props: DiscoverBootstrapStateProps): Promi
   return { children, analysis };
 }
 
-type ListDirectChildOrganizationalUnitsProps = {
+async function listDirectChildOrganizationalUnits(props: {
   organizationsClient: OrganizationsClient;
   rootId: string;
-};
-
-async function listDirectChildOrganizationalUnits(props: ListDirectChildOrganizationalUnitsProps): Promise<RootChildOu[]> {
+}): Promise<RootChildOu[]> {
   const children: RootChildOu[] = [];
   let nextToken: string | undefined;
   do {
@@ -310,12 +301,10 @@ async function listDirectChildOrganizationalUnits(props: ListDirectChildOrganiza
   return children;
 }
 
-type BuildBootstrapPlanLinesProps = {
+function buildBootstrapPlanLines(props: {
   rootId: string;
   analysis: Exclude<BootstrapOuAnalysis, { ok: false }>;
-};
-
-function buildBootstrapPlanLines(props: BuildBootstrapPlanLinesProps): string[] {
+}): string[] {
   const lines: string[] = [];
   if (props.analysis.needsPendingCreate) {
     lines.push(`Root organizational unit id: ${props.rootId}`);
@@ -330,13 +319,11 @@ function buildBootstrapPlanLines(props: BuildBootstrapPlanLinesProps): string[] 
   return lines;
 }
 
-type CreateMissingRequiredOusProps = {
+async function createMissingRequiredOus(props: {
   organizationsClient: OrganizationsClient;
   rootId: string;
   analysis: Exclude<BootstrapOuAnalysis, { ok: false }>;
-};
-
-async function createMissingRequiredOus(props: CreateMissingRequiredOusProps): Promise<void> {
+}): Promise<void> {
   if (props.analysis.needsPendingCreate) {
     console.log(`Creating organizational unit "${pendingOuName}"...`);
     await props.organizationsClient.send(
@@ -357,19 +344,22 @@ async function createMissingRequiredOus(props: CreateMissingRequiredOusProps): P
   }
 }
 
-type ResolveIdentityCenterForBootstrapProps = {
-  instances: IdentityCenterInstance[];
-  requestedInstanceArn?: string;
+type IdentityCenterInstance = {
+  InstanceArn?: string;
+  IdentityStoreId?: string;
 };
 
-function resolveIdentityCenterForBootstrap(
-  props: ResolveIdentityCenterForBootstrapProps,
-): { instanceArn: string; identityStoreId: string } {
+function resolveIdentityCenterForBootstrap(props: {
+  instances: IdentityCenterInstance[];
+  requestedInstanceArn?: string;
+}): { instanceArn: string; identityStoreId: string } {
   if (props.instances.length === 0) {
     throw new Error("No IAM Identity Center instance found.");
   }
   if (props.requestedInstanceArn != null) {
-    const selected = props.instances.find((instance) => instance.InstanceArn === props.requestedInstanceArn);
+    const selected = props.instances.find(
+      (instance) => instance.InstanceArn === props.requestedInstanceArn,
+    );
     if (selected?.InstanceArn == null || selected.IdentityStoreId == null) {
       throw new Error(
         `Identity Center instance not found for --instance-arn: ${props.requestedInstanceArn}`,
@@ -399,11 +389,9 @@ function resolveIdentityCenterForBootstrap(
   };
 }
 
-type ReadExistingAwsContextProps = {
+async function readExistingAwsContext(props: {
   path: string;
-};
-
-async function readExistingAwsContext(props: ReadExistingAwsContextProps): Promise<AwsContextFile | undefined> {
+}): Promise<AwsContextFile | undefined> {
   try {
     const raw = await readFile(props.path, "utf8");
     return validateAwsContextFile({
@@ -449,12 +437,10 @@ function buildAwsContextFile(props: BuildAwsContextFileProps): AwsContextFile {
   };
 }
 
-type WriteAwsContextFileProps = {
+async function writeAwsContextFile(props: {
   path: string;
   context: AwsContextFile;
-};
-
-async function writeAwsContextFile(props: WriteAwsContextFileProps): Promise<void> {
+}): Promise<void> {
   const validated = validateAwsContextFile({ value: props.context });
   const ordered: Record<string, unknown> = {
     version: validated.version,

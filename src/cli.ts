@@ -1,5 +1,8 @@
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline/promises";
+import { IdentitystoreClient } from "@aws-sdk/client-identitystore";
+import { OrganizationsClient } from "@aws-sdk/client-organizations";
+import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import {
   buildAwsClientConfig,
   resolveAwsProfile,
@@ -36,8 +39,13 @@ async function main(): Promise<void> {
   });
 
   if (command === "scan") {
+    const organizationsClient = new OrganizationsClient(clientConfig);
+    const ssoAdminClient = new SSOAdminClient(clientConfig);
+    const identityStoreClient = new IdentitystoreClient(clientConfig);
     const result = await runScanCommand({
-      clientConfig,
+      organizationsClient: organizationsClient,
+      ssoAdminClient: ssoAdminClient,
+      identityStoreClient: identityStoreClient,
       instanceArn: args.values["instance-arn"],
     });
 
@@ -66,12 +74,15 @@ async function main(): Promise<void> {
   }
 
   if (command === "bootstrap") {
+    const organizationsClient = new OrganizationsClient(clientConfig);
+    const ssoAdminClient = new SSOAdminClient(clientConfig);
     const planConfirmation = buildBootstrapPlanConfirmation({
       yes: args.values.yes,
       isTty: process.stdin.isTTY,
     });
     const result = await runBootstrapCommand({
-      clientConfig,
+      organizationsClient: organizationsClient,
+      ssoAdminClient: ssoAdminClient,
       profile: profile ?? "",
       region: region ?? "",
       instanceArn: args.values["instance-arn"],

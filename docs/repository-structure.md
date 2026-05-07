@@ -37,6 +37,12 @@ Agreed structure for implementation, with phase 1 emphasis.
 - Functions take a single `props` object argument. Do not use positional argument lists.
 - Do not destructure `props` inside functions; access fields via `props.fieldName`.
 - Define helper types (`FooProps`, `FooResult`) immediately above the function they belong to.
+- Do not export types or functions that are only used inside the same module.
+- Group related types together. Do not create a separate type for every small shape when an inline type keeps code clearer (for example, prefer an inline `{ planLines: string[] }` for one-off callback props instead of introducing a dedicated standalone type).
+- Command entrypoints must receive required AWS SDK clients via `props`; do not instantiate command clients internally.
+- Keep command dependencies explicit for production and tests; do not make client injection optional.
+- Test module behavior through exported/public APIs; do not export internals only to make testing easier.
+- Parallelize independent async operations with `Promise.all` where there is no data dependency, and keep dependent operations sequential.
 - Keep user interaction concerns (TTY checks, prompts, `--yes` semantics) in `cli.ts`; command modules receive callback/flags via props.
 - Prefer `value != null` checks over generic falsy checks when testing presence; avoid `Boolean(value)` for nullish checks.
 - Colocate tests as `*.test.ts` next to the module under test (for example `src/state.test.ts`).

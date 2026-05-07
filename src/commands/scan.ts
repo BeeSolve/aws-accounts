@@ -18,7 +18,6 @@ import {
   ListPermissionSetsCommand,
   SSOAdminClient,
 } from "@aws-sdk/client-sso-admin";
-import { type AwsClientConfig } from "../awsClientConfig.js";
 import {
   createAccessRoleName,
   writeStateFile,
@@ -26,39 +25,34 @@ import {
   type StateFile,
 } from "../state.js";
 
-export type ScanCommandInput = {
-  clientConfig: AwsClientConfig;
+const outputPath = "state.json";
+
+type ScanCommandInput = {
+  organizationsClient: OrganizationsClient;
+  ssoAdminClient: SSOAdminClient;
+  identityStoreClient: IdentitystoreClient;
   instanceArn?: string;
 };
 
-export type ScanCommandResult = {
+type ScanCommandResult = {
   outputPath: string;
   state: StateFile;
-};
-
-type IdentityCenterInstance = {
-  InstanceArn?: string;
-  IdentityStoreId?: string;
 };
 
 export async function runScanCommand(
   props: ScanCommandInput,
 ): Promise<ScanCommandResult> {
-  const outputPath = "state.json";
-  const organizationsClient = new OrganizationsClient(props.clientConfig);
-  const ssoAdminClient = new SSOAdminClient(props.clientConfig);
-
-  console.log("Scanning organization...");
-  const organization = await scanOrganization({
-    organizationsClient: organizationsClient,
-  });
-
-  console.log("Scanning identity center...");
-  const identityCenter = await scanIdentityCenter({
-    ssoAdminClient: ssoAdminClient,
-    clientConfig: props.clientConfig,
-    requestedInstanceArn: props.instanceArn,
-  });
+  console.log("Scanning organization and identity center...");
+  const [organization, identityCenter] = await Promise.all([
+    scanOrganization({
+      organizationsClient: props.organizationsClient,
+    }),
+    scanIdentityCenter({
+      ssoAdminClient: props.ssoAdminClient,
+      identityStoreClient: props.identityStoreClient,
+      requestedInstanceArn: props.instanceArn,
+    }),
+  ]);
 
   const state: StateFile = {
     version: "1",
@@ -72,22 +66,18 @@ export async function runScanCommand(
   return { outputPath, state };
 }
 
-type ScanOrganizationProps = {
+async function scanOrganization(props: {
   organizationsClient: OrganizationsClient;
-};
-
-async function scanOrganization(props: ScanOrganizationProps): Promise<StateFile["organization"]> {
+}): Promise<StateFile["organization"]> {
   const roots = await props.organizationsClient.send(new ListRootsCommand({}));
   const root = roots.Roots?.[0];
   if (root?.Id == null) {
     throw new Error("No organization root found.");
   }
 
-  const organizationalUnits: StateFile["organization"]["organizationalUnits"] = [];
-  await collectOrganizationalUnits({
+  const organizationalUnits = await collectOrganizationalUnits({
     organizationsClient: props.organizationsClient,
     parentId: root.Id,
-    sink: organizationalUnits,
   });
 
   const accounts: StateFile["organization"]["accounts"] = [];
@@ -129,13 +119,11 @@ async function scanOrganization(props: ScanOrganizationProps): Promise<StateFile
   };
 }
 
-type CollectOrganizationalUnitsProps = {
+async function collectOrganizationalUnits(props: {
   organizationsClient: OrganizationsClient;
   parentId: string;
-  sink: StateFile["organization"]["organizationalUnits"];
-};
-
-async function collectOrganizationalUnits(props: CollectOrganizationalUnitsProps): Promise<void> {
+}): Promise<StateFile["organization"]["organizationalUnits"]> {
+  const children: StateFile["organization"]["organizationalUnits"] = [];
   let nextToken: string | undefined;
   do {
     const response = await props.organizationsClient.send(
@@ -149,30 +137,31 @@ async function collectOrganizationalUnits(props: CollectOrganizationalUnitsProps
       if (ou.Id == null || ou.Arn == null || ou.Name == null) {
         continue;
       }
-      props.sink.push({
+      children.push({
         id: ou.Id,
         parentId: props.parentId,
         arn: ou.Arn,
         name: ou.Name,
       });
-      await collectOrganizationalUnits({
+      const descendants = await collectOrganizationalUnits({
         organizationsClient: props.organizationsClient,
         parentId: ou.Id,
-        sink: props.sink,
       });
+      children.push(...descendants);
     }
     nextToken = response.NextToken;
   } while (nextToken != null);
+  return children;
 }
 
-type ScanIdentityCenterProps = {
+async function scanIdentityCenter(props: {
   ssoAdminClient: SSOAdminClient;
-  clientConfig: AwsClientConfig;
+  identityStoreClient: IdentitystoreClient;
   requestedInstanceArn?: string;
-};
-
-async function scanIdentityCenter(props: ScanIdentityCenterProps): Promise<StateFile["identityCenter"]> {
-  const instancesResponse = await props.ssoAdminClient.send(new ListInstancesCommand({}));
+}): Promise<StateFile["identityCenter"]> {
+  const instancesResponse = await props.ssoAdminClient.send(
+    new ListInstancesCommand({}),
+  );
   const instances = instancesResponse.Instances ?? [];
   if (instances.length === 0) {
     throw new Error("No IAM Identity Center instance found.");
@@ -186,19 +175,20 @@ async function scanIdentityCenter(props: ScanIdentityCenterProps): Promise<State
     throw new Error("IAM Identity Center instance is missing required fields.");
   }
 
-  const identityStoreClient = new IdentitystoreClient(props.clientConfig);
-  const users = await listIdentityStoreUsers({
-    identityStoreClient: identityStoreClient,
-    identityStoreId: instance.IdentityStoreId,
-  });
-  const groups = await listIdentityStoreGroups({
-    identityStoreClient: identityStoreClient,
-    identityStoreId: instance.IdentityStoreId,
-  });
-  const permissionSets = await listPermissionSets({
-    ssoAdminClient: props.ssoAdminClient,
-    instanceArn: instance.InstanceArn,
-  });
+  const [users, groups, permissionSets] = await Promise.all([
+    listIdentityStoreUsers({
+      identityStoreClient: props.identityStoreClient,
+      identityStoreId: instance.IdentityStoreId,
+    }),
+    listIdentityStoreGroups({
+      identityStoreClient: props.identityStoreClient,
+      identityStoreId: instance.IdentityStoreId,
+    }),
+    listPermissionSets({
+      ssoAdminClient: props.ssoAdminClient,
+      instanceArn: instance.InstanceArn,
+    }),
+  ]);
   const accountAssignments = await listAccountAssignments({
     ssoAdminClient: props.ssoAdminClient,
     instanceArn: instance.InstanceArn,
@@ -220,12 +210,15 @@ async function scanIdentityCenter(props: ScanIdentityCenterProps): Promise<State
   };
 }
 
-type SelectIdentityCenterInstanceProps = {
-  instances: IdentityCenterInstance[];
-  requestedInstanceArn?: string;
+type IdentityCenterInstance = {
+  InstanceArn?: string;
+  IdentityStoreId?: string;
 };
 
-function selectIdentityCenterInstance(props: SelectIdentityCenterInstanceProps): IdentityCenterInstance {
+function selectIdentityCenterInstance(props: {
+  instances: IdentityCenterInstance[];
+  requestedInstanceArn?: string;
+}): IdentityCenterInstance {
   if (props.requestedInstanceArn != null) {
     const selected = props.instances.find(
       (instance) => instance.InstanceArn === props.requestedInstanceArn,
@@ -251,12 +244,10 @@ function selectIdentityCenterInstance(props: SelectIdentityCenterInstanceProps):
   return props.instances[0];
 }
 
-type ListIdentityStoreUsersProps = {
+async function listIdentityStoreUsers(props: {
   identityStoreClient: IdentitystoreClient;
   identityStoreId: string;
-};
-
-async function listIdentityStoreUsers(props: ListIdentityStoreUsersProps): Promise<StateFile["identityCenter"]["users"]> {
+}): Promise<StateFile["identityCenter"]["users"]> {
   const users: StateFile["identityCenter"]["users"] = [];
   let nextToken: string | undefined;
   do {
@@ -284,12 +275,10 @@ async function listIdentityStoreUsers(props: ListIdentityStoreUsersProps): Promi
   return users;
 }
 
-type ListIdentityStoreGroupsProps = {
+async function listIdentityStoreGroups(props: {
   identityStoreClient: IdentitystoreClient;
   identityStoreId: string;
-};
-
-async function listIdentityStoreGroups(props: ListIdentityStoreGroupsProps): Promise<StateFile["identityCenter"]["groups"]> {
+}): Promise<StateFile["identityCenter"]["groups"]> {
   const groups: StateFile["identityCenter"]["groups"] = [];
   let nextToken: string | undefined;
   do {
@@ -313,12 +302,10 @@ async function listIdentityStoreGroups(props: ListIdentityStoreGroupsProps): Pro
   return groups;
 }
 
-type ListPermissionSetsProps = {
+async function listPermissionSets(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
-};
-
-async function listPermissionSets(props: ListPermissionSetsProps): Promise<StateFile["identityCenter"]["permissionSets"]> {
+}): Promise<StateFile["identityCenter"]["permissionSets"]> {
   const permissionSetArns: string[] = [];
   let nextToken: string | undefined;
   do {
@@ -333,13 +320,17 @@ async function listPermissionSets(props: ListPermissionSetsProps): Promise<State
   } while (nextToken != null);
 
   const permissionSets: StateFile["identityCenter"]["permissionSets"] = [];
-  for (const permissionSetArn of permissionSetArns) {
-    const response = await props.ssoAdminClient.send(
-      new DescribePermissionSetCommand({
-        InstanceArn: props.instanceArn,
-        PermissionSetArn: permissionSetArn,
-      }),
-    );
+  const describeResponses = await Promise.all(
+    permissionSetArns.map((permissionSetArn) =>
+      props.ssoAdminClient.send(
+        new DescribePermissionSetCommand({
+          InstanceArn: props.instanceArn,
+          PermissionSetArn: permissionSetArn,
+        }),
+      ),
+    ),
+  );
+  for (const response of describeResponses) {
     const permissionSet = response.PermissionSet;
     if (permissionSet?.PermissionSetArn == null || permissionSet.Name == null) {
       continue;
@@ -353,13 +344,11 @@ async function listPermissionSets(props: ListPermissionSetsProps): Promise<State
   return permissionSets;
 }
 
-type ListAccountAssignmentsProps = {
+async function listAccountAssignments(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
   permissionSets: StateFile["identityCenter"]["permissionSets"];
-};
-
-async function listAccountAssignments(props: ListAccountAssignmentsProps): Promise<AccountAssignmentState[]> {
+}): Promise<AccountAssignmentState[]> {
   const assignments: AccountAssignmentState[] = [];
   for (const permissionSet of props.permissionSets) {
     const accountIds = await listAccountsForPermissionSet({
@@ -401,13 +390,11 @@ async function listAccountAssignments(props: ListAccountAssignmentsProps): Promi
   return assignments;
 }
 
-type ListAccountsForPermissionSetProps = {
+async function listAccountsForPermissionSet(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
   permissionSetArn: string;
-};
-
-async function listAccountsForPermissionSet(props: ListAccountsForPermissionSetProps): Promise<string[]> {
+}): Promise<string[]> {
   const accountIds: string[] = [];
   let nextToken: string | undefined;
   do {
