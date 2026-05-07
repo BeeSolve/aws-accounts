@@ -37,43 +37,43 @@ Scope for this increment:
   - [x] clear prompt/log before any create operation
 - [x] Persist discovered/created OU IDs into local context file (`aws.context.json`).
 - [x] Ensure generated/updated context structure is future-compatible with later Lambda/S3 fields.
-- [ ] Add tests for bootstrap decision logic (exists vs create).
+- [x] Add tests for bootstrap decision logic (exists vs create).
 - [x] Add CLI summary showing OU actions planned/executed.
 
 ## Phase 3: First-time `init` and config-driven type regeneration
 
-- [ ] Define `init` CLI command contract that orchestrates `bootstrap` + `scan` + state→config write. Supports `--profile`, `--region`, `--instance-arn`, `--yes`.
-- [ ] Define `regenerate` CLI command contract that refreshes `aws.config.types.ts` from the current `aws.config.ts`. Supports `--yes`.
-- [ ] Define internal domain model that maps raw scanned state to config representation:
-  - [ ] single `organizationalUnits` list with synthetic `{ name: "root", parentName: null }` entry holding accounts that live directly under the organization root.
-  - [ ] account references as `{ name, email }`; cross-references by name throughout (no AWS-issued ids/arns in `aws.config.ts`).
-  - [ ] assignments grouped by `(principal, permissionSet)` with `accounts: string[]`.
-  - [ ] exclude `accessRoles` (derivable from `permissionSet` + `accountId`).
-- [ ] Define generated `aws.config.types.ts` exporting both the valibot schema (`awsConfigSchema`) and the inferred `AwsConfig` type:
-  - [ ] picklists for cross-references: OU names (used in `parentName`), account names, permission set names, group display names, user user names.
-  - [ ] entity `name` fields (where the name is *defined*, not referenced) stay plain `v.string()`.
-  - [ ] `parentName` typed as `v.union([organizationalUnitNameSchema, v.null_()])`.
-- [ ] Define deterministic codegen format for `aws.config.ts` (stable key ordering, readable structure).
-- [ ] Implement state → config transform (`mapStateToAwsConfig`):
-  - [ ] load and validate `state.json`.
-  - [ ] cross-validate against `aws.context.json` (rootId, Pending/Graveyard OU ids, Identity Center ids); fail-fast on disagreement (no auto-repair — bootstrap's job).
-  - [ ] map to domain model with name-uniqueness assertions (accounts globally, OU names globally for picklist validity, groups, users, permission sets).
-- [ ] Implement codegen for `aws.config.ts` and `aws.config.types.ts` with deterministic ordering (OUs depth-first then alphabetical; everything else alphabetical).
-- [ ] Implement `aws.config.ts` loader (esbuild compile to temporary `.mjs` → dynamic `import()` → validate against `awsConfigSchema` → cleanup).
-- [ ] Implement `init` command (orchestration only — calls existing command functions):
-  - [ ] call `runBootstrapCommand` (writes `aws.context.json`).
-  - [ ] call `runScanCommand` (writes `state.json`).
-  - [ ] call state → config transform and codegen to write `aws.config.ts` + `aws.config.types.ts`.
-- [ ] Implement `regenerate` command:
-  - [ ] load `aws.config.ts` via loader.
-  - [ ] re-emit `aws.config.types.ts` only (does not modify `aws.config.ts`) so picklists pick up manual edits.
-- [ ] Add non-destructive file write behavior:
-  - [ ] compute target file content, compare to existing.
-  - [ ] no changes → log "no changes" and exit cleanly.
-  - [ ] changes → print per-file byte summary plus `git diff` hint, then call confirmation callback (CLI handles `--yes` and TTY checks like `bootstrap`).
-- [ ] Add tests for transform correctness, name-uniqueness rejection, assignment grouping, sort stability under shuffled input.
-- [ ] Add tests for `init` command (sequences bootstrap → scan → config write with mocked clients).
-- [ ] Add tests for `regenerate` command (loads fixture config, re-emits types, no-op when unchanged, confirmation rejected paths).
+- [x] Define `init` CLI command contract that orchestrates `bootstrap` + `scan` + state→config write. Supports `--profile`, `--region`, `--instance-arn`, `--yes`.
+- [x] Define `regenerate` CLI command contract that refreshes `aws.config.types.ts` from the current `aws.config.ts`. Supports `--yes`.
+- [x] Define internal domain model that maps raw scanned state to config representation:
+  - [x] single `organizationalUnits` list with synthetic `{ name: "root", parentName: null }` entry holding accounts that live directly under the organization root.
+  - [x] account references as `{ name, email }`; cross-references by name throughout (no AWS-issued ids/arns in `aws.config.ts`).
+  - [x] assignments grouped by `(principal, permissionSet)` with `accounts: string[]`.
+  - [x] exclude `accessRoles` (derivable from `permissionSet` + `accountId`).
+- [x] Define generated `aws.config.types.ts` exporting both the valibot schema (`awsConfigSchema`) and the inferred `AwsConfig` type:
+  - [x] picklists for cross-references: OU names (used in `parentName`), account names, permission set names, group display names, user user names.
+  - [x] entity `name` fields (where the name is *defined*, not referenced) stay plain `v.string()`.
+  - [x] `parentName` typed as `v.union([organizationalUnitNameSchema, v.null_()])`.
+- [x] Define deterministic codegen format for `aws.config.ts` (stable key ordering, readable structure).
+- [x] Implement state → config transform (`mapStateToAwsConfig`):
+  - [x] load and validate `state.json`.
+  - [x] cross-validate against `aws.context.json` (rootId, Pending/Graveyard OU ids, Identity Center ids); fail-fast on disagreement (no auto-repair — bootstrap's job).
+  - [x] map to domain model with name-uniqueness assertions (accounts globally, OU names globally for picklist validity, groups, users, permission sets).
+- [x] Implement codegen for `aws.config.ts` and `aws.config.types.ts` with deterministic ordering (OUs depth-first then alphabetical; everything else alphabetical).
+- [x] Implement `aws.config.ts` loader (esbuild compile to temporary `.mjs` → dynamic `import()` → validate against `awsConfigSchema` → cleanup).
+- [x] Implement `init` command (orchestration only — calls existing command functions):
+  - [x] call `runBootstrapCommand` (writes `aws.context.json`).
+  - [x] call `runScanCommand` (writes `state.json`).
+  - [x] call state → config transform and codegen to write `aws.config.ts` + `aws.config.types.ts`.
+- [x] Implement `regenerate` command:
+  - [x] load `aws.config.ts` via loader.
+  - [x] re-emit `aws.config.types.ts` only (does not modify `aws.config.ts`) so picklists pick up manual edits.
+- [x] Add non-destructive file write behavior:
+  - [x] compute target file content, compare to existing.
+  - [x] no changes → log "no changes" and exit cleanly.
+  - [x] changes → print per-file byte summary plus `git diff` hint, then call confirmation callback (CLI handles `--yes` and TTY checks like `bootstrap`).
+- [x] Add tests for transform correctness, name-uniqueness rejection, assignment grouping, sort stability under shuffled input.
+- [x] Add tests for `init` command (sequences bootstrap → scan → config write with mocked clients).
+- [x] Add tests for `regenerate` command (loads fixture config, re-emits types, no-op when unchanged, confirmation rejected paths).
 - [ ] Add CLI summary showing per-file change status (written / unchanged / would-write).
 
 ## Phase 4: Implement account creation (local CLI direct AWS calls)
