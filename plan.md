@@ -18,7 +18,7 @@ Scope for this increment:
   - [x] accounts and OU placement
   - [x] identity center users/groups
   - [x] permission sets and account assignments
-- [ ] Implement pagination/retry/error handling for scanner calls.
+- [x] Implement pagination/retry/error handling for scanner calls. (Pagination inline; retries delegated to AWS SDK v3 default `StandardRetryStrategy` — see `docs/phase-1-decisions.md`.)
 - [x] Persist scan output locally to `state.json` (workspace path), with deterministic ordering for stable diffs.
 - [x] Add validation of produced state with valibot schemas.
 - [x] Add node test runner coverage for scanner normalization and schema validation.

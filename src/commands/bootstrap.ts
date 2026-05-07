@@ -23,6 +23,7 @@ type BootstrapCommandInput = {
   profile: string;
   region: string;
   instanceArn?: string;
+  outputPath?: string;
   planConfirmation: (props: { planLines: string[] }) => Promise<boolean>;
 };
 
@@ -38,6 +39,7 @@ type BootstrapCommandResult = {
 export async function runBootstrapCommand(
   props: BootstrapCommandInput,
 ): Promise<BootstrapCommandResult> {
+  const resolvedOutputPath = props.outputPath ?? contextFilePath;
   console.log("Reading organization...");
   const [organizationDescription, rootsResponse] = await Promise.all([
     props.organizationsClient.send(new DescribeOrganizationCommand({})),
@@ -101,7 +103,7 @@ export async function runBootstrapCommand(
   const [instancesResponse, existingContext] = await Promise.all([
     props.ssoAdminClient.send(new ListInstancesCommand({})),
     readExistingAwsContext({
-      path: contextFilePath,
+      path: resolvedOutputPath,
     }),
   ]);
   const identityCenter = resolveIdentityCenterForBootstrap({
@@ -127,14 +129,14 @@ export async function runBootstrapCommand(
     });
   }
 
-  console.log(`Writing ${contextFilePath}...`);
+  console.log(`Writing ${resolvedOutputPath}...`);
   await writeAwsContextFile({
-    path: contextFilePath,
+    path: resolvedOutputPath,
     context: nextContext,
   });
 
   return {
-    outputPath: contextFilePath,
+    outputPath: resolvedOutputPath,
     pendingOuId: finalDiscovery.analysis.pendingOuId,
     graveyardOuId: finalDiscovery.analysis.graveyardOuId,
     pendingCreated: initialDiscovery.analysis.needsPendingCreate,

@@ -116,7 +116,7 @@ Entity *definition* fields (e.g. `organizationalUnits[].name`, `users[].userName
 
 ### Load-time (`aws.config.ts` → `AwsConfig`, used by `regenerate` and phase 5)
 
-- `awsConfigSchema.parse(loadedDefaultExport)` runs valibot validation, including picklist checks.
+- `v.parse(awsConfigSchema, loadedDefaultExport)` runs valibot validation, including picklist checks.
 - Picklist mismatch (a referenced name is not in the picklist) is the most likely error after manual edits; the error message names the field and tells the user to re-run `regenerate` if the missing name was just added in `aws.config.ts`.
 
 ## Non-destructive write behaviour
@@ -208,3 +208,33 @@ The same `overwriteConfirmation` callback is shared across the three steps so `-
 - Watcher mode for `regenerate` (future feature; tracked in `plan.md` out-of-scope section).
 - Comment preservation across regenerations of `aws.config.ts` (no parser round-trip on the user-edited file beyond schema validation; comments outside the object literal survive only via the file-level header that the codegen always re-emits).
 - Drift detection from AWS-side manual changes back into `aws.config.ts` (future feature).
+
+## Implementation status (May 2026)
+
+Phase 3 implementation is complete for the planned scope (`init`, `regenerate`, state->config transform/codegen, loader, and tests).
+
+Completed execution checkpoints:
+
+1. CLI contracts added for `init` and `regenerate` in `src/cli.ts`.
+2. `init` orchestration implemented in `src/commands/init.ts`.
+3. State/context validation, transform, deterministic sorting, and codegen implemented in `src/awsConfig.ts`.
+4. `regenerate` command wiring implemented in `src/commands/regenerate.ts`.
+5. TS loader implementation landed in `src/awsConfig.ts` (esbuild temp-module compile/import/cleanup path).
+6. Tests added and stabilized:
+   - `src/awsConfig.test.ts`
+   - `src/commands/init.test.ts`
+   - `src/commands/regenerate.test.ts`
+7. Final verification completed:
+   - `npm run test`
+   - `npm run typecheck`
+   - `npm run cli -- --help`
+
+Notable implementation adjustments:
+
+- `aws.config.ts` generation validates with `v.parse(awsConfigSchema, ...)`.
+- Command path overrides were added (`runBootstrapCommand`, `runScanCommand`, `runInitCommand`, `runRegenerateCommand`) to support concurrency-safe tests using isolated temp workspaces and absolute paths.
+- Build remains unbundled ESM; runtime build uses `find src -name '*.ts' ! -name '*.test.ts'` and tests are compiled separately by `build:tests`.
+
+Pending follow-up decision:
+
+- Re-evaluate the placeholder `__EMPTY_PICKLIST__` behavior after real-world usage of generated types.

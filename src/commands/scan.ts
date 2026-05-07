@@ -32,6 +32,7 @@ type ScanCommandInput = {
   ssoAdminClient: SSOAdminClient;
   identityStoreClient: IdentitystoreClient;
   instanceArn?: string;
+  outputPath?: string;
 };
 
 type ScanCommandResult = {
@@ -61,9 +62,10 @@ export async function runScanCommand(
     identityCenter: identityCenter,
   };
 
-  console.log("Writing state.json...");
-  await writeStateFile(outputPath, state);
-  return { outputPath, state };
+  const resolvedOutputPath = props.outputPath ?? outputPath;
+  console.log(`Writing ${resolvedOutputPath}...`);
+  await writeStateFile(resolvedOutputPath, state);
+  return { outputPath: resolvedOutputPath, state };
 }
 
 async function scanOrganization(props: {

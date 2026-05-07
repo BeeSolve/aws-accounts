@@ -47,4 +47,9 @@ This file records decisions made before and during implementation of phase 1 (sc
 
 - Strict mode for scanning: if any required scan section fails, entire scan fails.
 - Read-only AWS access in phase 1 scan.
-- Pagination and retry logic included for transient AWS failures.
+- Pagination is implemented inline with `do { ... } while (NextToken != null)` per listing call.
+
+## Retry strategy
+
+- No custom retry helper. The AWS SDK v3 clients (`@aws-sdk/client-organizations`, `@aws-sdk/client-sso-admin`, `@aws-sdk/client-identitystore`) ship with `StandardRetryStrategy` enabled by default — exponential backoff on throttling and transient transport errors. Wrapping `.send()` calls in a custom retry helper would double-retry without adding value.
+- If a future failure mode requires a different retry policy (longer backoff, jitter tuning), configure it via the SDK's `retryStrategy` client option rather than a separate helper module.

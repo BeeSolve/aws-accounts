@@ -46,8 +46,9 @@ This file records agreed behaviour before implementing phase 2 (`bootstrap`): en
 
 ### Pagination / retries
 
-- Reuse the same **pagination + limited retry** approach as phase 1 for throttling/transient errors on **read** paths.
-- Retries on failed **create** are **not** used to mask conflicts (still fail fast on hard errors).
+- Reuse the same inline pagination approach as phase 1 (`do { ... } while (NextToken != null)`).
+- Retries are handled by the AWS SDK v3 default `StandardRetryStrategy` on read paths — no custom retry helper.
+- Retries on failed **create** are **not** used to mask conflicts (still fail fast on hard errors). The SDK's default retry policy already excludes non-retryable client errors like duplicate-name conflicts.
 
 ## Identity Center metadata (required)
 

@@ -9,9 +9,18 @@ import {
   resolveAwsRegion,
 } from "./awsClientConfig.js";
 import { runBootstrapCommand } from "./commands/bootstrap.js";
+import { runInitCommand } from "./commands/init.js";
+import { runRegenerateCommand } from "./commands/regenerate.js";
 import { runScanCommand } from "./commands/scan.js";
 
-type CommandName = "scan" | "bootstrap" | "create-account" | "plan" | "apply";
+type CommandName =
+  | "scan"
+  | "bootstrap"
+  | "init"
+  | "regenerate"
+  | "create-account"
+  | "plan"
+  | "apply";
 
 async function main(): Promise<void> {
   const args = parseArgs({
@@ -104,6 +113,54 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "init") {
+    const organizationsClient = new OrganizationsClient(clientConfig);
+    const ssoAdminClient = new SSOAdminClient(clientConfig);
+    const identityStoreClient = new IdentitystoreClient(clientConfig);
+    const planConfirmation = buildBootstrapPlanConfirmation({
+      yes: args.values.yes,
+      isTty: process.stdin.isTTY,
+    });
+    const overwriteConfirmation = buildOverwriteConfirmation({
+      yes: args.values.yes,
+      isTty: process.stdin.isTTY,
+    });
+    const result = await runInitCommand({
+      organizationsClient: organizationsClient,
+      ssoAdminClient: ssoAdminClient,
+      identityStoreClient: identityStoreClient,
+      profile: profile ?? "",
+      region: region ?? "",
+      instanceArn: args.values["instance-arn"],
+      planConfirmation: planConfirmation,
+      overwriteConfirmation: overwriteConfirmation,
+    });
+
+    console.log("");
+    console.log("Init complete.");
+    console.log(`Context: ${result.contextPath}`);
+    console.log(`State: ${result.statePath}`);
+    console.log(`Config: ${result.configPath}`);
+    console.log(`Types: ${result.typesPath}`);
+    return;
+  }
+
+  if (command === "regenerate") {
+    const overwriteConfirmation = buildOverwriteConfirmation({
+      yes: args.values.yes,
+      isTty: process.stdin.isTTY,
+    });
+    const result = await runRegenerateCommand({
+      overwriteConfirmation: overwriteConfirmation,
+    });
+
+    console.log("");
+    console.log("Regenerate complete.");
+    console.log(`Types: ${result.typesPath}`);
+    console.log(`Changed: ${result.changed ? "yes" : "no"}`);
+    return;
+  }
+
   if (
     command === "create-account" ||
     command === "plan" ||
@@ -127,6 +184,10 @@ function printHelp(): void {
   console.log(
     "  npm run cli -- bootstrap [--profile <name>] [--region <region>] [--instance-arn <arn>] [--yes]",
   );
+  console.log(
+    "  npm run cli -- init [--profile <name>] [--region <region>] [--instance-arn <arn>] [--yes]",
+  );
+  console.log("  npm run cli -- regenerate [--yes]");
   console.log("  npm run cli -- <create-account|plan|apply>");
   console.log("");
   console.log("Environment fallback:");
@@ -160,6 +221,44 @@ function buildBootstrapPlanConfirmation(
     try {
       const answer = await readlineInterface.question(
         "Proceed with creating organizational units? [y/N] ",
+      );
+      const normalized = answer.trim().toLowerCase();
+      return normalized === "y" || normalized === "yes";
+    } finally {
+      readlineInterface.close();
+    }
+  };
+}
+
+type BuildOverwriteConfirmationProps = {
+  yes: boolean;
+  isTty: boolean | undefined;
+};
+
+function buildOverwriteConfirmation(
+  props: BuildOverwriteConfirmationProps,
+): (props: { fileSummaries: string[] }) => Promise<boolean> {
+  return async (
+    overwriteProps: { fileSummaries: string[] },
+  ): Promise<boolean> => {
+    if (overwriteProps.fileSummaries.length === 0) {
+      return true;
+    }
+    if (props.yes) {
+      return true;
+    }
+    if (props.isTty !== true) {
+      throw new Error(
+        "Refusing to overwrite config files in non-interactive mode without --yes.",
+      );
+    }
+    const readlineInterface = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    try {
+      const answer = await readlineInterface.question(
+        "Proceed with writing config files? [y/N] ",
       );
       const normalized = answer.trim().toLowerCase();
       return normalized === "y" || normalized === "yes";

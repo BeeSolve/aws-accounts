@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ListGroupsCommand,
@@ -24,15 +23,14 @@ import {
   type SSOAdminClient,
 } from "@aws-sdk/client-sso-admin";
 import { runScanCommand } from "./scan.js";
+import { createTestWorkspace } from "../helpers.test.js";
 
 test(
   "runScanCommand writes state with organization and identity center data",
-  { concurrency: false },
   async () => {
-    const directory = await mkdtemp(join(tmpdir(), "scan-test-"));
-    const previousDirectory = process.cwd();
-    process.chdir(directory);
+    const workspace = await createTestWorkspace({ prefix: "scan-test-" });
     try {
+      const outputPath = join(workspace.workspacePath, "state.json");
       const result = await runScanCommand({
         organizationsClient: createOrganizationsClientMock({
           rootId: "r-root",
@@ -46,9 +44,10 @@ test(
           ],
         }),
         identityStoreClient: createIdentityStoreClientMock(),
+        outputPath: outputPath,
       });
 
-      assert.equal(result.outputPath, "state.json");
+      assert.equal(result.outputPath, outputPath);
       assert.equal(result.state.organization.rootId, "r-root");
       assert.equal(result.state.organization.organizationalUnits.length, 1);
       assert.equal(result.state.organization.accounts.length, 1);
@@ -62,11 +61,11 @@ test(
         /^AWSReservedSSO_/,
       );
 
-      const raw = await readFile("state.json", "utf8");
+      const raw = await readFile(outputPath, "utf8");
       const parsed = JSON.parse(raw) as { organization: { rootId: string } };
       assert.equal(parsed.organization.rootId, "r-root");
     } finally {
-      process.chdir(previousDirectory);
+      await workspace.cleanup();
     }
   },
 );
