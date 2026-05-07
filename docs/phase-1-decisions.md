@@ -2,6 +2,10 @@
 
 This file records decisions made before and during implementation of phase 1 (scan).
 
+## Lifecycle position
+
+`scan` is an init-time command. It is invoked by `init` (phase 3) for first-time setup and may be re-run independently for debugging or drift inspection. It is **not** part of the routine `plan` / `apply` loop in increment 1 — state updates after `apply` come from the planned-next-state, not a fresh scan.
+
 ## CLI contract
 
 - Command: `scan`

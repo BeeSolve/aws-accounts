@@ -12,17 +12,25 @@ Agreed structure for implementation, with phase 1 emphasis.
 ├── docs/
 │   ├── phase-1-decisions.md
 │   ├── phase-2-decisions.md
+│   ├── phase-3-decisions.md
 │   └── repository-structure.md
 ├── src/
 │   ├── cli.ts
 │   ├── state.ts
 │   ├── state.test.ts
 │   ├── awsClientConfig.ts
+│   ├── awsConfig.ts
+│   ├── awsConfig.test.ts
 │   ├── retry.ts
 │   └── commands/
 │       ├── scan.ts
+│       ├── scan.test.ts
 │       ├── bootstrap.ts
 │       ├── bootstrap.test.ts
+│       ├── init.ts
+│       ├── init.test.ts
+│       ├── regenerate.ts
+│       ├── regenerate.test.ts
 │       ├── createAccount.ts
 │       ├── plan.ts
 │       └── apply.ts
@@ -48,6 +56,8 @@ Agreed structure for implementation, with phase 1 emphasis.
 - Colocate tests as `*.test.ts` next to the module under test (for example `src/state.test.ts`).
 - Keep scan logic in one file: `src/commands/scan.ts`.
 - Keep state model + validation + normalization + read/write in one file: `src/state.ts`.
+- Keep `aws.config.ts` schema, picklist generation, state→config transform, codegen, and the loader in one file: `src/awsConfig.ts`. Phase 5's `aws.config.ts` → `state.json` transform also lives here when added.
+- Keep `init` orchestration in `src/commands/init.ts` — it calls existing `runBootstrapCommand` / `runScanCommand` rather than reimplementing them.
 - Keep shared reusable helpers in `src/` root (not under `shared/`).
 - Keep command files under `src/commands/`.
 - Keep implementation explicit and simple.

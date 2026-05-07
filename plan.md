@@ -40,19 +40,41 @@ Scope for this increment:
 - [ ] Add tests for bootstrap decision logic (exists vs create).
 - [x] Add CLI summary showing OU actions planned/executed.
 
-## Phase 3: Implement `state.json` -> `aws.config.ts` + `aws.context.json`
+## Phase 3: First-time `init` and config-driven type regeneration
 
-- [ ] Define internal domain model that maps raw scanned state to config representation.
+- [ ] Define `init` CLI command contract that orchestrates `bootstrap` + `scan` + state→config write. Supports `--profile`, `--region`, `--instance-arn`, `--yes`.
+- [ ] Define `regenerate` CLI command contract that refreshes `aws.config.types.ts` from the current `aws.config.ts`. Supports `--yes`.
+- [ ] Define internal domain model that maps raw scanned state to config representation:
+  - [ ] single `organizationalUnits` list with synthetic `{ name: "root", parentName: null }` entry holding accounts that live directly under the organization root.
+  - [ ] account references as `{ name, email }`; cross-references by name throughout (no AWS-issued ids/arns in `aws.config.ts`).
+  - [ ] assignments grouped by `(principal, permissionSet)` with `accounts: string[]`.
+  - [ ] exclude `accessRoles` (derivable from `permissionSet` + `accountId`).
+- [ ] Define generated `aws.config.types.ts` exporting both the valibot schema (`awsConfigSchema`) and the inferred `AwsConfig` type:
+  - [ ] picklists for cross-references: OU names (used in `parentName`), account names, permission set names, group display names, user user names.
+  - [ ] entity `name` fields (where the name is *defined*, not referenced) stay plain `v.string()`.
+  - [ ] `parentName` typed as `v.union([organizationalUnitNameSchema, v.null_()])`.
 - [ ] Define deterministic codegen format for `aws.config.ts` (stable key ordering, readable structure).
-- [ ] Implement transform pipeline:
-  - [ ] load `state.json`
-  - [ ] validate with valibot
-  - [ ] map to domain model
-  - [ ] emit `aws.config.ts`
-- [ ] Implement context synchronization rules for `aws.context.json` (org root, required OU ids, metadata).
-- [ ] Add non-destructive file write behavior (preview/diff mode before overwrite).
-- [ ] Add tests for transform correctness and stable code generation snapshots.
-- [ ] Add CLI command/output for regeneration and status.
+- [ ] Implement state → config transform (`mapStateToAwsConfig`):
+  - [ ] load and validate `state.json`.
+  - [ ] cross-validate against `aws.context.json` (rootId, Pending/Graveyard OU ids, Identity Center ids); fail-fast on disagreement (no auto-repair — bootstrap's job).
+  - [ ] map to domain model with name-uniqueness assertions (accounts globally, OU names globally for picklist validity, groups, users, permission sets).
+- [ ] Implement codegen for `aws.config.ts` and `aws.config.types.ts` with deterministic ordering (OUs depth-first then alphabetical; everything else alphabetical).
+- [ ] Implement `aws.config.ts` loader (esbuild compile to temporary `.mjs` → dynamic `import()` → validate against `awsConfigSchema` → cleanup).
+- [ ] Implement `init` command (orchestration only — calls existing command functions):
+  - [ ] call `runBootstrapCommand` (writes `aws.context.json`).
+  - [ ] call `runScanCommand` (writes `state.json`).
+  - [ ] call state → config transform and codegen to write `aws.config.ts` + `aws.config.types.ts`.
+- [ ] Implement `regenerate` command:
+  - [ ] load `aws.config.ts` via loader.
+  - [ ] re-emit `aws.config.types.ts` only (does not modify `aws.config.ts`) so picklists pick up manual edits.
+- [ ] Add non-destructive file write behavior:
+  - [ ] compute target file content, compare to existing.
+  - [ ] no changes → log "no changes" and exit cleanly.
+  - [ ] changes → print per-file byte summary plus `git diff` hint, then call confirmation callback (CLI handles `--yes` and TTY checks like `bootstrap`).
+- [ ] Add tests for transform correctness, name-uniqueness rejection, assignment grouping, sort stability under shuffled input.
+- [ ] Add tests for `init` command (sequences bootstrap → scan → config write with mocked clients).
+- [ ] Add tests for `regenerate` command (loads fixture config, re-emits types, no-op when unchanged, confirmation rejected paths).
+- [ ] Add CLI summary showing per-file change status (written / unchanged / would-write).
 
 ## Phase 4: Implement account creation (local CLI direct AWS calls)
 
@@ -70,21 +92,32 @@ Scope for this increment:
 ## Phase 5: Implement add/modify flow (config-driven reconciliation)
 
 - [ ] Define reconciliation command pair for local mode:
-  - [ ] `plan` (diff local desired `aws.config.ts` vs local current `state.json`)
-  - [ ] `apply` (execute approved operations directly via AWS SDK in CLI for increment 1)
+  - [ ] `plan` (load `aws.config.ts` → transform to next `state.json` shape → diff current `state.json` vs next; emit operations list).
+  - [ ] `apply` (execute approved operations directly via AWS SDK in CLI for increment 1).
+- [ ] Implement `mapAwsConfigToState` transform:
+  - [ ] load `aws.config.ts` via the phase 3 loader.
+  - [ ] resolve names to AWS-issued ids using current `state.json` (entities present in both keep their existing ids; entities only in config get placeholder ids interpreted by the diff as "to be created").
+- [ ] Implement state-vs-state diff engine producing human-readable and machine-readable plan.
 - [ ] Define operation model for supported mutations in increment 1:
   - [ ] move account between OUs
   - [ ] add account metadata entries
 - [ ] Exclude IAM Identity Center assignment mutations from increment 1 apply scope.
-- [ ] Implement diff engine producing human-readable and machine-readable plan.
 - [ ] Implement safety policy:
   - [ ] default no destructive actions
   - [ ] explicit guardrails for unsupported/destructive diffs
   - [ ] require confirmation before apply (interactive prompt)
   - [ ] support non-interactive approval via `--yes`
 - [ ] Implement apply executor with per-operation progress + final outcome summary.
-- [ ] After apply, refresh local `state.json` (re-scan) and regenerate `aws.config.ts` if needed.
-- [ ] Add tests for plan generation and apply sequencing.
+- [ ] After apply succeeds, write the post-apply state to `state.json` from the planned-next-state. Do not regenerate `aws.config.ts`. Do not auto re-scan in the normal apply loop.
+- [ ] Add tests for `mapAwsConfigToState`, plan generation (state-vs-state), and apply sequencing.
+
+## Out of scope for increment 1
+
+- Drift detection / sync from AWS into `aws.config.ts` after init. Manual changes made in the AWS Console outside this tool are not detected or merged. A future "sync" feature may address this.
+- Automatic re-scan in the normal `apply` loop. State updates after apply come from the planned-next-state, not a fresh scan.
+- Watcher mode for `regenerate`. A future `watch` command will run `regenerate` on `aws.config.ts` change; for increment 1 the user runs it manually.
+- IAM Identity Center mutation operations in `apply` (creating users / groups / assignments).
+- Cloud-backed flow: Lambda deployment, S3 state storage, signed-URL state download. Increment 1 is local-only.
 
 ## Cross-cutting implementation checklist
 

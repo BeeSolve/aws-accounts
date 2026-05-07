@@ -2,10 +2,21 @@
 
 Local-first AWS Organizations and IAM Identity Center management CLI.
 
+## Workflow
+
+The tool's lifecycle has three phases:
+
+1. **Init (one-time).** `init` runs `bootstrap` + `scan` and writes `aws.config.ts` + `aws.config.types.ts` from the resulting `state.json`. After this, AWS state is mirrored locally and `aws.config.ts` is your editable source of truth.
+2. **Edit (steady state).** Edit `aws.config.ts` to model the desired state. Run `regenerate` to refresh `aws.config.types.ts` (picklists / IDE autocomplete) after manual edits. A future `watch` command will run `regenerate` automatically.
+3. **Sync (phase 5).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles AWS to match. Out of scope for the current increment.
+
+`bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged in increment 1; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
+
 ## Project docs
 
 - Decision log for phase 1 scan: `docs/phase-1-decisions.md`
 - Decision log for phase 2 bootstrap: `docs/phase-2-decisions.md`
+- Decision log for phase 3 init / regenerate: `docs/phase-3-decisions.md`
 - Agreed repository structure: `docs/repository-structure.md`
 
 Tests compile with esbuild to `dist/*.test.js` and run with `node --test` (`npm test`).

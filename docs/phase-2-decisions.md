@@ -2,6 +2,10 @@
 
 This file records agreed behaviour before implementing phase 2 (`bootstrap`): ensure **`Pending`** and **`Graveyard`** organizational units exist and persist context locally.
 
+## Lifecycle position
+
+`bootstrap` is an init-time command. It is invoked by `init` (phase 3) for first-time setup and may be re-run independently to verify or repair OUs. It is idempotent — re-running it on an already-bootstrapped organization is safe. It is **not** part of the routine `plan` / `apply` loop in increment 1.
+
 ## Scope
 
 - **OU-only**: `bootstrap` creates or discovers OUs only. It does **not** create or edit `aws.config.ts`, `state.json`, or deploy Lambda/S3.
