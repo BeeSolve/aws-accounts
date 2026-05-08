@@ -58,14 +58,14 @@ test("diffStates sorts multiple account moves by accountName", () => {
     current: current,
     next: next,
   });
-  assert.deepEqual(plan.operations.map((operation) => operation.accountName), [
-    "app-a",
-    "app-b",
-  ]);
+  const movedAccountNames = plan.operations
+    .filter((operation) => operation.kind === "moveAccount")
+    .map((operation) => operation.accountName);
+  assert.deepEqual(movedAccountNames, ["app-a", "app-b"]);
   assert.deepEqual(plan.unsupported, []);
 });
 
-test("diffStates classifies sentinel new account as unsupported mutation", () => {
+test("diffStates emits createAccount operation for sentinel new account", () => {
   const current = createBaseState();
   const next = cloneState(current);
   next.organization.accounts.push({
@@ -80,14 +80,16 @@ test("diffStates classifies sentinel new account as unsupported mutation", () =>
     current: current,
     next: next,
   });
-  assert.deepEqual(plan.operations, []);
-  assert.deepEqual(plan.unsupported, [
+  assert.deepEqual(plan.operations, [
     {
-      kind: "newAccount",
-      category: "unsupportedMutation",
-      description: 'new account "app-c"',
+      kind: "createAccount",
+      accountName: "app-c",
+      accountEmail: "app-c@example.com",
+      targetOuId: "ou-eng",
+      targetOuName: "Engineering",
     },
   ]);
+  assert.deepEqual(plan.unsupported, []);
 });
 
 test("diffStates classifies removed account and removed OU as destructive", () => {
@@ -120,7 +122,7 @@ test("diffStates classifies removed account and removed OU as destructive", () =
   ]);
 });
 
-test("diffStates classifies OU add and OU rename as unsupported mutations", () => {
+test("diffStates emits createOu and renameOu operations", () => {
   const current = createBaseState();
 
   const nextWithAddedOu = cloneState(current);
@@ -137,13 +139,15 @@ test("diffStates classifies OU add and OU rename as unsupported mutations", () =
     current: current,
     next: nextWithAddedOu,
   });
-  assert.deepEqual(addPlan.unsupported, [
+  assert.deepEqual(addPlan.operations, [
     {
-      kind: "newOu",
-      category: "unsupportedMutation",
-      description: 'new OU "Security"',
+      kind: "createOu",
+      ouName: "Security",
+      parentOuId: "r-root",
+      parentOuName: "root",
     },
   ]);
+  assert.deepEqual(addPlan.unsupported, []);
 
   const nextWithRenamedOu = cloneState(current);
   renameOrganizationalUnit({
@@ -156,11 +160,112 @@ test("diffStates classifies OU add and OU rename as unsupported mutations", () =
     current: current,
     next: nextWithRenamedOu,
   });
-  assert.deepEqual(renamePlan.unsupported, [
+  assert.deepEqual(renamePlan.operations, [
     {
-      kind: "renamedOu",
+      kind: "renameOu",
+      ouId: "ou-data-platform",
+      fromOuName: "Data",
+      toOuName: "DataPlatform",
+      parentOuId: "r-root",
+      parentOuName: "root",
+    },
+  ]);
+  assert.deepEqual(renamePlan.unsupported, []);
+});
+
+test("diffStates reports ambiguous OU rename aggregated per parent", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  removeOrganizationalUnit({
+    state: next,
+    organizationalUnitName: "Engineering",
+  });
+  removeOrganizationalUnit({
+    state: next,
+    organizationalUnitName: "Data",
+  });
+  addOrganizationalUnit({
+    state: next,
+    organizationalUnit: {
+      id: "ou-platform",
+      parentId: "r-root",
+      arn: "arn:ou-platform",
+      name: "Platform",
+    },
+  });
+  addOrganizationalUnit({
+    state: next,
+    organizationalUnit: {
+      id: "ou-security",
+      parentId: "r-root",
+      arn: "arn:ou-security",
+      name: "Security",
+    },
+  });
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, [
+    {
+      kind: "ambiguousOuRename",
       category: "unsupportedMutation",
-      description: 'renamed OU "Data" to "DataPlatform"',
+      description:
+        'ambiguous OU rename under "root" (added: Platform, Security; removed: Data, Engineering)',
+    },
+  ]);
+});
+
+test("diffStates reports new OU with unresolved parent", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  addOrganizationalUnit({
+    state: next,
+    organizationalUnit: {
+      id: "__pending_creation__",
+      parentId: "__pending_creation__",
+      arn: "__pending_creation__",
+      name: "ChildOfUnknownParent",
+    },
+  });
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, [
+    {
+      kind: "newOuWithUnknownParent",
+      category: "unsupportedMutation",
+      description:
+        'new OU "ChildOfUnknownParent" has unresolved parent "ChildOfUnknownParent" (__pending_creation__)',
+    },
+  ]);
+});
+
+test("diffStates reports new account with unresolved target OU", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  next.organization.accounts.push({
+    id: "__pending_creation__",
+    arn: "__pending_creation__",
+    name: "app-d",
+    email: "app-d@example.com",
+    status: "ACTIVE",
+    parentId: "__pending_creation__",
+  });
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, [
+    {
+      kind: "newAccountWithUnknownOu",
+      category: "unsupportedMutation",
+      description:
+        'new account "app-d" has unresolved target OU "unknown" (__pending_creation__)',
     },
   ]);
 });

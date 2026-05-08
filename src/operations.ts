@@ -10,17 +10,46 @@ const moveAccountOperationSchema = v.strictObject({
   toOuName: v.string(),
 });
 
-export const operationSchema = v.variant("kind", [moveAccountOperationSchema]);
+const createOuOperationSchema = v.strictObject({
+  kind: v.literal("createOu"),
+  ouName: v.string(),
+  parentOuId: v.string(),
+  parentOuName: v.string(),
+});
+
+const renameOuOperationSchema = v.strictObject({
+  kind: v.literal("renameOu"),
+  ouId: v.string(),
+  fromOuName: v.string(),
+  toOuName: v.string(),
+  parentOuId: v.string(),
+  parentOuName: v.string(),
+});
+
+const createAccountOperationSchema = v.strictObject({
+  kind: v.literal("createAccount"),
+  accountName: v.string(),
+  accountEmail: v.string(),
+  targetOuId: v.string(),
+  targetOuName: v.string(),
+});
+
+export const operationSchema = v.variant("kind", [
+  moveAccountOperationSchema,
+  createOuOperationSchema,
+  renameOuOperationSchema,
+  createAccountOperationSchema,
+]);
 
 const unsupportedDiffKindSchema = v.picklist([
-  "newOu",
-  "renamedOu",
+  "ambiguousOuRename",
+  "newOuWithUnknownParent",
+  "newAccountWithUnknownOu",
   "removedOu",
   "idcUserAdded",
   "idcGroupAdded",
   "idcPermissionSetAdded",
   "idcAssignmentChanged",
-  "newAccount",
   "removedAccount",
 ]);
 
@@ -41,6 +70,11 @@ export const planSchema = v.strictObject({
 });
 
 export type MoveAccountOperation = v.InferOutput<typeof moveAccountOperationSchema>;
+export type CreateOuOperation = v.InferOutput<typeof createOuOperationSchema>;
+export type RenameOuOperation = v.InferOutput<typeof renameOuOperationSchema>;
+export type CreateAccountOperation = v.InferOutput<
+  typeof createAccountOperationSchema
+>;
 export type Operation = v.InferOutput<typeof operationSchema>;
 export type UnsupportedDiffKind = v.InferOutput<typeof unsupportedDiffKindSchema>;
 export type UnsupportedDiff = v.InferOutput<typeof unsupportedDiffSchema>;

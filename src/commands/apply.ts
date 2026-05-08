@@ -166,7 +166,22 @@ async function applyOperation(props: {
     props.logger.log(`Done: "${operation.accountName}"`);
     return;
   }
-  assertUnreachable(operation.kind, "Unsupported operation kind in apply.");
+  if (operation.kind === "createOu") {
+    throw new Error(
+      `Operation kind "${operation.kind}" is not executable yet in apply.`,
+    );
+  }
+  if (operation.kind === "renameOu") {
+    throw new Error(
+      `Operation kind "${operation.kind}" is not executable yet in apply.`,
+    );
+  }
+  if (operation.kind === "createAccount") {
+    throw new Error(
+      `Operation kind "${operation.kind}" is not executable yet in apply.`,
+    );
+  }
+  assertUnreachable(operation, "Unsupported operation kind in apply.");
 }
 
 function applyOperationToState(props: {
@@ -183,7 +198,22 @@ function applyOperationToState(props: {
     }
     return;
   }
-  assertUnreachable(operation.kind, "Unsupported operation kind in apply.");
+  if (operation.kind === "createOu") {
+    throw new Error(
+      `Operation kind "${operation.kind}" is not supported for state mutation yet.`,
+    );
+  }
+  if (operation.kind === "renameOu") {
+    throw new Error(
+      `Operation kind "${operation.kind}" is not supported for state mutation yet.`,
+    );
+  }
+  if (operation.kind === "createAccount") {
+    throw new Error(
+      `Operation kind "${operation.kind}" is not supported for state mutation yet.`,
+    );
+  }
+  assertUnreachable(operation, "Unsupported operation kind in state mutation.");
 }
 
 function buildApplyPlanLines(props: { plan: Plan }): string[] {
@@ -197,10 +227,25 @@ function buildApplyPlanLines(props: { plan: Plan }): string[] {
       );
       continue;
     }
-    assertUnreachable(
-      operation.kind,
-      "Unsupported operation kind in apply plan lines.",
-    );
+    if (operation.kind === "createOu") {
+      lines.push(
+        `  create OU "${operation.ouName}" under ${operation.parentOuName}`,
+      );
+      continue;
+    }
+    if (operation.kind === "renameOu") {
+      lines.push(
+        `  rename OU "${operation.fromOuName}" -> "${operation.toOuName}"`,
+      );
+      continue;
+    }
+    if (operation.kind === "createAccount") {
+      lines.push(
+        `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`,
+      );
+      continue;
+    }
+    assertUnreachable(operation, "Unsupported operation kind in apply plan lines.");
   }
   if (props.plan.unsupported.length > 0) {
     lines.push("Unsupported diffs:");
