@@ -7,12 +7,10 @@ import {
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import type { Logger } from "./logger.js";
-import { readStateFile, writeStateFile } from "./state.js";
 
 type CreateAccountAndMoveToOuProps = {
   organizationsClient: OrganizationsClient;
   logger: Logger;
-  statePath: string;
   accountName: string;
   accountEmail: string;
   sourceParentId: string;
@@ -21,9 +19,18 @@ type CreateAccountAndMoveToOuProps = {
   pollIntervalInMs: number;
 };
 
+export type CreatedAccountRecord = {
+  id: string;
+  arn: string;
+  name: string;
+  email: string;
+  status: NonNullable<Account["Status"]>;
+  parentId: string;
+};
+
 type CreateAccountAndMoveToOuResult = {
   accountId: string;
-  stateUpdated: boolean;
+  account: CreatedAccountRecord;
 };
 
 export async function createAccountAndMoveToOu(
@@ -60,15 +67,14 @@ export async function createAccountAndMoveToOu(
       DestinationParentId: props.destinationParentId,
     }),
   );
-  const stateWriteResult = await upsertCreatedAccountInState({
+  const account = await resolveCreatedAccountRecord({
     organizationsClient: props.organizationsClient,
-    statePath: props.statePath,
     accountId: accountId,
     destinationParentId: props.destinationParentId,
   });
   return {
     accountId: accountId,
-    stateUpdated: stateWriteResult.changed,
+    account: account,
   };
 }
 
@@ -113,12 +119,11 @@ async function pollCreateAccountStatusUntilTerminal(props: {
   );
 }
 
-async function upsertCreatedAccountInState(props: {
+async function resolveCreatedAccountRecord(props: {
   organizationsClient: OrganizationsClient;
-  statePath: string;
   accountId: string;
   destinationParentId: string;
-}): Promise<{ changed: boolean }> {
+}): Promise<CreatedAccountRecord> {
   const account = await findAccountById({
     organizationsClient: props.organizationsClient,
     accountId: props.accountId,
@@ -128,11 +133,7 @@ async function upsertCreatedAccountInState(props: {
       `Created account "${props.accountId}" could not be resolved from AWS Organizations list.`,
     );
   }
-  const currentState = await readStateFile(props.statePath);
-  const existingIndex = currentState.organization.accounts.findIndex(
-    (item) => item.id === props.accountId,
-  );
-  const nextAccount = {
+  return {
     id: account.id,
     arn: account.arn,
     name: account.name,
@@ -140,24 +141,6 @@ async function upsertCreatedAccountInState(props: {
     status: account.status,
     parentId: props.destinationParentId,
   };
-  if (existingIndex >= 0) {
-    const existing = currentState.organization.accounts[existingIndex];
-    if (
-      existing.id === nextAccount.id &&
-      existing.arn === nextAccount.arn &&
-      existing.name === nextAccount.name &&
-      existing.email === nextAccount.email &&
-      existing.status === nextAccount.status &&
-      existing.parentId === nextAccount.parentId
-    ) {
-      return { changed: false };
-    }
-    currentState.organization.accounts[existingIndex] = nextAccount;
-  } else {
-    currentState.organization.accounts.push(nextAccount);
-  }
-  await writeStateFile(props.statePath, currentState);
-  return { changed: true };
 }
 
 async function findAccountById(props: {

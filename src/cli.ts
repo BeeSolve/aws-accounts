@@ -266,6 +266,12 @@ async function main(): Promise<void> {
       typesPath,
       statePath,
       contextPath,
+      runtime: {
+        createAccount: {
+          timeoutInMs: createAccountTimeoutInMs,
+          pollIntervalInMs: createAccountPollIntervalInMs,
+        },
+      },
       ignoreUnsupported: args.values["ignore-unsupported"] ?? false,
       planConfirmation,
     });

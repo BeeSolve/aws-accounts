@@ -218,7 +218,7 @@ If Wave 3 is attempted:
 
 - [ ] Add `createOu` execution via Organizations API.
 - [ ] Add `renameOu` execution via Organizations API.
-- [ ] Add `createAccount` execution path (shared helper approach).
+- [x] Add `createAccount` execution path (shared helper approach).
 - [ ] Update in-memory state mutation logic for each new operation.
 - [ ] Ensure partial-failure persistence works with mixed old/new operations.
 - [ ] Keep unsupported/destructive gates unchanged for remaining unsupported diffs.
@@ -228,7 +228,7 @@ If Wave 3 is attempted:
 
 - [x] Extract reusable account-create orchestration helper from `create-account` command.
 - [x] Reuse helper from `create-account` CLI command without behavior regression.
-- [ ] Reuse helper from apply `createAccount` operation.
+- [x] Reuse helper from apply `createAccount` operation.
 - [ ] Preserve logging clarity in both command and apply contexts.
 - [ ] Add regression tests for `create-account` command behavior.
 

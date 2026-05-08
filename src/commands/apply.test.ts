@@ -3,6 +3,9 @@ import test from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  CreateAccountCommand,
+  DescribeCreateAccountStatusCommand,
+  ListAccountsCommand,
   MoveAccountCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
@@ -49,6 +52,12 @@ test("runApplyCommand refuses destructive unsupported diffs regardless of flag",
           typesPath: paths.typesPath,
           statePath: paths.statePath,
           contextPath: paths.contextPath,
+          runtime: {
+            createAccount: {
+              timeoutInMs: 5000,
+              pollIntervalInMs: 1,
+            },
+          },
           ignoreUnsupported: true,
           planConfirmation: async () => true,
         }),
@@ -95,6 +104,12 @@ test("runApplyCommand refuses non-destructive unsupported diffs without flag", a
           typesPath: paths.typesPath,
           statePath: paths.statePath,
           contextPath: paths.contextPath,
+          runtime: {
+            createAccount: {
+              timeoutInMs: 5000,
+              pollIntervalInMs: 1,
+            },
+          },
           ignoreUnsupported: false,
           planConfirmation: async () => true,
         }),
@@ -159,6 +174,12 @@ test("runApplyCommand proceeds with ignoreUnsupported for supported operations",
       typesPath: paths.typesPath,
       statePath: paths.statePath,
       contextPath: paths.contextPath,
+      runtime: {
+        createAccount: {
+          timeoutInMs: 5000,
+          pollIntervalInMs: 1,
+        },
+      },
       ignoreUnsupported: true,
       planConfirmation: async () => true,
     });
@@ -216,6 +237,12 @@ test("runApplyCommand returns cancelled when confirmation is rejected", async ()
       typesPath: paths.typesPath,
       statePath: paths.statePath,
       contextPath: paths.contextPath,
+      runtime: {
+        createAccount: {
+          timeoutInMs: 5000,
+          pollIntervalInMs: 1,
+        },
+      },
       ignoreUnsupported: false,
       planConfirmation: async () => false,
     });
@@ -268,6 +295,12 @@ test("runApplyCommand applies one move and writes next state", async () => {
       typesPath: paths.typesPath,
       statePath: paths.statePath,
       contextPath: paths.contextPath,
+      runtime: {
+        createAccount: {
+          timeoutInMs: 5000,
+          pollIntervalInMs: 1,
+        },
+      },
       ignoreUnsupported: false,
       planConfirmation: async () => true,
     });
@@ -280,6 +313,111 @@ test("runApplyCommand applies one move and writes next state", async () => {
       (account) => account.name === "AppAccount",
     );
     assert.equal(appAccount?.parentId, "ou-engineering");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand applies createAccount using shared helper and persists real account id", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (engineering == null) {
+          throw new Error("Expected Engineering OU.");
+        }
+        engineering.accounts = [
+          ...engineering.accounts,
+          { name: "BrandNew", email: "brandnew@example.com" },
+        ];
+      },
+    });
+
+    let movedToTargetOu = false;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        createAccountResponse: {
+          CreateAccountStatus: {
+            Id: "car-123",
+          },
+        },
+        describeStatuses: [
+          {
+            CreateAccountStatus: {
+              Id: "car-123",
+              State: "SUCCEEDED",
+              AccountId: "555555555555",
+            },
+          },
+        ],
+        listAccountsPages: [
+          {
+            Accounts: [
+              {
+                Id: "555555555555",
+                Arn: "arn:aws:organizations:::account/555555555555",
+                Name: "BrandNew",
+                Email: "brandnew@example.com",
+                Status: "ACTIVE",
+              },
+            ],
+          },
+        ],
+        onMoveAccount: async (input) => {
+          assert.equal(input.AccountId, "555555555555");
+          assert.equal(input.SourceParentId, "r-root");
+          assert.equal(input.DestinationParentId, "ou-engineering");
+          movedToTargetOu = true;
+        },
+      }),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: {
+        createAccount: {
+          timeoutInMs: 5000,
+          pollIntervalInMs: 1,
+        },
+      },
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 1);
+    assert.equal(movedToTargetOu, true);
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        accounts: Array<{
+          id: string;
+          name: string;
+          parentId: string;
+        }>;
+      };
+    };
+    const brandNew = persisted.organization.accounts.find(
+      (account) => account.name === "BrandNew",
+    );
+    assert.equal(brandNew?.id, "555555555555");
+    assert.equal(brandNew?.parentId, "ou-engineering");
   } finally {
     await workspace.cleanup();
   }
@@ -354,6 +492,12 @@ test("runApplyCommand persists partial state on operation failure", async () => 
           typesPath: paths.typesPath,
           statePath: paths.statePath,
           contextPath: paths.contextPath,
+          runtime: {
+            createAccount: {
+              timeoutInMs: 5000,
+              pollIntervalInMs: 1,
+            },
+          },
           ignoreUnsupported: false,
           planConfirmation: async () => true,
         }),
@@ -396,9 +540,60 @@ function createOrganizationsClientMock(props: {
     SourceParentId?: string;
     DestinationParentId?: string;
   }) => Promise<void>;
+  onCreateAccount?: (input: { AccountName?: string; Email?: string }) => Promise<void>;
+  createAccountResponse?: { CreateAccountStatus?: { Id?: string } };
+  describeStatuses?: Array<{
+    CreateAccountStatus?: {
+      Id?: string;
+      State?: string;
+      AccountId?: string;
+      FailureReason?: string;
+    };
+  }>;
+  listAccountsPages?: Array<{
+    Accounts?: Array<{
+      Id?: string;
+      Arn?: string;
+      Name?: string;
+      Email?: string;
+      Status?: string;
+    }>;
+    NextToken?: string;
+  }>;
 }): OrganizationsClient {
+  const describeStatuses = props.describeStatuses ?? [];
+  const listAccountsPages = props.listAccountsPages ?? [{ Accounts: [] }];
+  let describeIndex = 0;
+  let listIndex = 0;
   const mock = {
     async send(command: unknown): Promise<unknown> {
+      if (command instanceof ListAccountsCommand) {
+        const page =
+          listAccountsPages[Math.min(listIndex, listAccountsPages.length - 1)];
+        listIndex += 1;
+        return page;
+      }
+      if (command instanceof CreateAccountCommand) {
+        if (props.onCreateAccount != null) {
+          await props.onCreateAccount({
+            AccountName: command.input.AccountName,
+            Email: command.input.Email,
+          });
+        }
+        return props.createAccountResponse ?? { CreateAccountStatus: { Id: "car-1" } };
+      }
+      if (command instanceof DescribeCreateAccountStatusCommand) {
+        const response =
+          describeStatuses[Math.min(describeIndex, describeStatuses.length - 1)] ??
+          {
+            CreateAccountStatus: {
+              Id: command.input.CreateAccountRequestId,
+              State: "IN_PROGRESS",
+            },
+          };
+        describeIndex += 1;
+        return response;
+      }
       if (command instanceof MoveAccountCommand) {
         if (props.onMoveAccount != null) {
           await props.onMoveAccount(command.input);

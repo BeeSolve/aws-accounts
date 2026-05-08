@@ -2,7 +2,10 @@ import {
   ListAccountsCommand,
   OrganizationsClient,
 } from "@aws-sdk/client-organizations";
-import { createAccountAndMoveToOu } from "../accountCreation.js";
+import {
+  createAccountAndMoveToOu,
+  type CreatedAccountRecord,
+} from "../accountCreation.js";
 import {
   loadAwsConfigModelFromTsFile,
   readAwsContextFromFile,
@@ -10,6 +13,7 @@ import {
   writeAwsConfigModelToFile,
 } from "../awsConfig.js";
 import type { Logger } from "../logger.js";
+import { readStateFile, writeStateFile } from "../state.js";
 
 type CreateAccountCommandInput = {
   organizationsClient: OrganizationsClient;
@@ -26,7 +30,7 @@ type CreateAccountCommandInput = {
 
 type CreateAccountCommandResult = {
   status: "created" | "alreadyExists";
-  accountId?: string;
+  accountId: string;
   stateUpdated: boolean;
   configUpdated: boolean;
   typesUpdated: boolean;
@@ -57,13 +61,15 @@ export async function runCreateAccountCommand(
       typesPath: props.typesPath,
     }),
   ]);
-  const pendingOu = config.organizationalUnits.find((ou) => ou.name === "Pending");
+  const pendingOu = config.organizationalUnits.find(
+    (ou) => ou.name === "Pending",
+  );
   if (pendingOu == null) {
     throw new Error('Could not find "Pending" OU in aws.config.ts.');
   }
   if (context.organization.pendingOuId.trim().length === 0) {
     throw new Error(
-      'Could not resolve Pending OU id from aws.context.json. Re-run bootstrap.',
+      "Could not resolve Pending OU id from aws.context.json. Re-run bootstrap.",
     );
   }
 
@@ -79,7 +85,8 @@ export async function runCreateAccountCommand(
     const localMatch = config.organizationalUnits
       .flatMap((ou) => ou.accounts)
       .find(
-        (account) => account.name === accountName || account.email === accountEmail,
+        (account) =>
+          account.name === accountName || account.email === accountEmail,
       );
     props.logger.log(
       `Account already exists in AWS: "${existingAccount.name}" (${existingAccount.id})`,
@@ -102,13 +109,16 @@ export async function runCreateAccountCommand(
   const creationResult = await createAccountAndMoveToOu({
     organizationsClient: props.organizationsClient,
     logger: props.logger,
-    statePath: props.statePath,
     accountName: accountName,
     accountEmail: accountEmail,
     sourceParentId: context.organization.rootId,
     destinationParentId: context.organization.pendingOuId,
     timeoutInMs: props.timeoutInMs,
     pollIntervalInMs: props.pollIntervalInMs,
+  });
+  const stateWriteResult = await upsertCreatedAccountInState({
+    statePath: props.statePath,
+    account: creationResult.account,
   });
   pendingOu.accounts.push({
     name: accountName,
@@ -127,7 +137,7 @@ export async function runCreateAccountCommand(
   return {
     status: "created",
     accountId: creationResult.accountId,
-    stateUpdated: creationResult.stateUpdated,
+    stateUpdated: stateWriteResult.changed,
     configUpdated: configWriteResult.changed,
     typesUpdated: typesWriteResult.changed,
   };
@@ -168,3 +178,45 @@ async function findExistingAccountByNameOrEmail(props: {
   return undefined;
 }
 
+async function upsertCreatedAccountInState(props: {
+  statePath: string;
+  account: CreatedAccountRecord;
+}): Promise<{ changed: boolean }> {
+  const currentState = await readStateFile(props.statePath);
+  const existingIndex = currentState.organization.accounts.findIndex(
+    (item) => item.id === props.account.id,
+  );
+  const nextAccount = {
+    id: props.account.id,
+    arn: props.account.arn,
+    name: props.account.name,
+    email: props.account.email,
+    status: props.account.status,
+    parentId: props.account.parentId,
+  };
+  const nextAccounts = [...currentState.organization.accounts];
+  if (existingIndex >= 0) {
+    const existing = nextAccounts[existingIndex];
+    if (
+      existing.id === nextAccount.id &&
+      existing.arn === nextAccount.arn &&
+      existing.name === nextAccount.name &&
+      existing.email === nextAccount.email &&
+      existing.status === nextAccount.status &&
+      existing.parentId === nextAccount.parentId
+    ) {
+      return { changed: false };
+    }
+    nextAccounts[existingIndex] = nextAccount;
+  } else {
+    nextAccounts.push(nextAccount);
+  }
+  await writeStateFile(props.statePath, {
+    ...currentState,
+    organization: {
+      ...currentState.organization,
+      accounts: nextAccounts,
+    },
+  });
+  return { changed: true };
+}
