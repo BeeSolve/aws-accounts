@@ -236,7 +236,7 @@ Notes:
 - [x] Existing-account preflight tests (no create call, no file mutation, guidance output).
 - [x] Move-to-Pending tests (correct source/destination IDs and failure behavior).
 - [x] `state.json` update tests (happy path and no-mutation on failure/timeout).
-- [ ] CLI interaction tests (prompt order, re-prompt behavior, replay command output).
+- [x] CLI interaction behavior covered in command/CLI flow tests (prompt order, re-prompt behavior, replay command output).
 
 ### Finalization
 

@@ -137,4 +137,4 @@ Scope for this increment:
 - [x] Use TypeScript 6+ conventions and camelCase naming.
 - [x] Avoid barrel files.
 - [ ] Add consistent error model and exit codes for CLI commands.
-- [ ] Add README usage notes for local increment commands and safety constraints.
+- [x] Add README usage notes for local increment commands and safety constraints.
