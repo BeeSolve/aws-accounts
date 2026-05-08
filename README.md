@@ -21,6 +21,29 @@ The tool's lifecycle has three phases:
 - Destructive unsupported diffs always block `apply` (no override).
 - If `apply` fails mid-run, the CLI persists partial `state.json`; recovery flow is: run `scan`, verify state, then re-run `apply`.
 
+## FAQ
+
+### I moved an account manually in AWS Console. How do I fix `aws.config.ts`?
+
+Run:
+
+```bash
+npm run cli -- init
+```
+
+(`npm run cli -- init --yes` for non-interactive runs.)
+
+Reason: `scan` updates only `state.json`, while `aws.config.ts` is rewritten from live AWS state only during `init`.
+
+### Why not `scan` only?
+
+`scan` refreshes actual state in `state.json`, but does not modify `aws.config.ts`.
+
+### Why not `scan` + `regenerate`?
+
+`regenerate` refreshes only `aws.config.types.ts` from the current `aws.config.ts`.  
+It does not rewrite `aws.config.ts`, so stale config remains stale.
+
 ## Project docs
 
 - Decision log for phase 1 scan: `docs/phase-1-decisions.md`
