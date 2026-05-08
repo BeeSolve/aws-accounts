@@ -10,3 +10,5 @@ coverage/
 
 state.json
 aws.context.json
+aws.config.ts
+aws.config.types.ts

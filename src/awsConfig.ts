@@ -1028,7 +1028,8 @@ function renderPicklistSchema(props: { values: string[] }): string {
   if (props.values.length === 0) {
     return 'v.picklist(["__EMPTY_PICKLIST__"])';
   }
-  const literals = props.values
+  const literals = [...props.values]
+    .sort((left, right) => left.localeCompare(right))
     .map((value) => JSON.stringify(value))
     .join(", ");
   return `v.picklist([${literals}])`;
