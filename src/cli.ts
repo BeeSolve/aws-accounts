@@ -17,6 +17,12 @@ import { runInitCommand } from "./commands/init.js";
 import { runPlanCommand } from "./commands/plan.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
 import { runScanCommand } from "./commands/scan.js";
+import {
+  classifyCliError,
+  exitCodeForCliErrorKind,
+  toUsageError,
+  toValidationError,
+} from "./cliError.js";
 
 const commands = [
   "scan",
@@ -65,8 +71,7 @@ async function main(): Promise<void> {
   }
   if (!isCommandName(commandArg)) {
     printHelp(logger);
-    process.exitCode = 1;
-    return;
+    throw toUsageError(`Unknown command: "${commandArg}".`);
   }
   const command = commandArg;
 
@@ -388,10 +393,10 @@ async function resolveCreateAccountEmail(props: {
     if (isValidEmailWithSchema(candidate)) {
       return candidate;
     }
-    throw new Error(`Invalid --email value: "${candidate}".`);
+    throw toValidationError(`Invalid --email value: "${candidate}".`);
   }
   if (props.isTty !== true) {
-    throw new Error(
+    throw toUsageError(
       "Missing required --email for create-account in non-interactive mode.",
     );
   }
@@ -416,7 +421,7 @@ async function resolveCreateAccountName(props: {
     return candidate;
   }
   if (props.isTty !== true) {
-    throw new Error(
+    throw toUsageError(
       "Missing required --name for create-account in non-interactive mode.",
     );
   }
@@ -582,7 +587,7 @@ function buildOverwriteConfirmation(
 }
 
 main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  consoleLogger.error(`CLI failed: ${message}`);
-  process.exitCode = 1;
+  const classified = classifyCliError(error);
+  consoleLogger.error(`CLI ${classified.kind} error: ${classified.message}`);
+  process.exitCode = exitCodeForCliErrorKind(classified.kind);
 });

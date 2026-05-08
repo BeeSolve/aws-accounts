@@ -136,5 +136,5 @@ Scope for this increment:
 - [x] Use esbuild for build outputs and local run wiring.
 - [x] Use TypeScript 6+ conventions and camelCase naming.
 - [x] Avoid barrel files.
-- [ ] Add consistent error model and exit codes for CLI commands.
+- [x] Add consistent error model and exit codes for CLI commands.
 - [x] Add README usage notes for local increment commands and safety constraints.
