@@ -22,7 +22,7 @@ import {
   exitCodeForCliErrorKind,
   toUsageError,
   toValidationError,
-} from "./cliError.js";
+} from "./error.js";
 
 const commands = [
   "scan",

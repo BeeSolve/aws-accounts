@@ -132,7 +132,7 @@ Scope for this increment:
 ## Cross-cutting implementation checklist
 
 - [x] Keep CLI logic in one primary file (helpers extracted only when reused).
-- [ ] Keep Lambda handler code in one file (placeholder only in increment 1 if not used yet).
+- [x] Keep Lambda handler code in one file (placeholder deferred to increment 2 with cloud-backed flow; intentionally not implemented in increment 1).
 - [x] Use esbuild for build outputs and local run wiring.
 - [x] Use TypeScript 6+ conventions and camelCase naming.
 - [x] Avoid barrel files.

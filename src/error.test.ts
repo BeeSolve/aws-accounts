@@ -7,7 +7,7 @@ import {
   toPreconditionError,
   toUsageError,
   toValidationError,
-} from "./cliError.js";
+} from "./error.js";
 
 test("classifyCliError returns typed kind for CliError", () => {
   const usage = classifyCliError(toUsageError("bad usage"));
