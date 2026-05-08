@@ -78,16 +78,16 @@ Scope for this increment:
 
 ## Phase 4: Implement account creation (local CLI direct AWS calls)
 
-- [ ] Define create-account command contract (`create-account --email --name`).
-- [ ] Implement input validation via valibot (email format, account name constraints).
-- [ ] Resolve `Pending` OU ID from `aws.context.json` (or fail with actionable error).
-- [ ] Implement direct AWS Organizations create account flow (local CLI call in increment 1).
-- [ ] Implement polling until account status is terminal; surface progress to user.
-- [ ] Enforce create-account polling timeout at 15 minutes with clear timeout error.
-- [ ] On success, update local `aws.config.ts` with newly created account in `Pending`.
-- [ ] Ensure operation is idempotent-safe for retries (detect already-created account by email/name where possible).
-- [ ] Add tests for command validation and config update logic.
-- [ ] Add clear terminal feedback: started, waiting, created, config updated.
+- [x] Define create-account command contract (`create-account --email --name`).
+- [x] Implement input validation via valibot (email format in CLI) plus command-level non-empty checks.
+- [x] Resolve `Pending` OU ID from `aws.context.json` (or fail with actionable error).
+- [x] Implement direct AWS Organizations create account flow (local CLI call in increment 1).
+- [x] Implement polling until account status is terminal; surface progress to user.
+- [x] Enforce create-account polling timeout at 15 minutes with clear timeout error.
+- [x] On success, update local `aws.config.ts` with newly created account in `Pending`.
+- [x] Ensure operation is idempotent-safe for retries (detect already-created account by email/name where possible).
+- [x] Add tests for command validation and config update logic.
+- [x] Add clear terminal feedback: started, waiting, created, config updated.
 
 ## Phase 5: Implement add/modify flow (config-driven reconciliation)
 

@@ -207,18 +207,18 @@ Notes:
 
 ### Tests
 
-- [ ] Add `src/commands/createAccount.test.ts`.
-- [ ] Validation tests (invalid/missing name/email).
-- [ ] Missing `Pending` context/config handling tests.
-- [ ] Happy path tests (create + poll success + config/types updates).
-- [ ] Poll failure tests (`FAILED` status).
-- [ ] Timeout tests (15-minute cutoff behavior).
-- [ ] Existing-account preflight tests (no create call, no file mutation, guidance output).
+- [x] Add `src/commands/createAccount.test.ts`.
+- [x] Validation tests (invalid/missing name/email).
+- [x] Missing `Pending` context/config handling tests.
+- [x] Happy path tests (create + poll success + config/types updates).
+- [x] Poll failure tests (`FAILED` status).
+- [x] Timeout tests (15-minute cutoff behavior).
+- [x] Existing-account preflight tests (no create call, no file mutation, guidance output).
 - [ ] CLI interaction tests (prompt order, re-prompt behavior, replay command output).
 
 ### Finalization
 
 - [x] Run `npm run typecheck`.
-- [ ] Run `npm test`.
-- [ ] Update Phase 4 checkboxes in `plan.md`.
-- [ ] Prepare and create commit.
+- [x] Run `npm test`.
+- [x] Update Phase 4 checkboxes in `plan.md`.
+- [x] Prepare and create commit.
