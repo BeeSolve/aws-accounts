@@ -226,8 +226,8 @@ If Wave 3 is attempted:
 
 ### Phase 6.4: Shared account create flow extraction
 
-- [ ] Extract reusable account-create orchestration helper from `create-account` command.
-- [ ] Reuse helper from `create-account` CLI command without behavior regression.
+- [x] Extract reusable account-create orchestration helper from `create-account` command.
+- [x] Reuse helper from `create-account` CLI command without behavior regression.
 - [ ] Reuse helper from apply `createAccount` operation.
 - [ ] Preserve logging clarity in both command and apply contexts.
 - [ ] Add regression tests for `create-account` command behavior.
