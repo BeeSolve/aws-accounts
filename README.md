@@ -32,122 +32,77 @@ Tests compile with esbuild to `dist/*.test.js` and run with `node --test` (`npm 
 
 ## IAM permissions by command
 
-Use these as inline role policies for the profile/role used by the CLI.
-
-### `scan` permissions (read-only)
+Use this policy as an inline role policy for the profile/role used by the CLI. Each statement corresponds to a CLI command; developers can enable only the statements needed for their workflow.
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "OrganizationsReadOnlyForScan",
+      "Sid": "ScanCommand",
       "Effect": "Allow",
       "Action": [
-        "organizations:DescribeOrganization",
         "organizations:ListRoots",
-        "organizations:ListOrganizationalUnitsForParent",
         "organizations:ListAccounts",
-        "organizations:ListAccountsForParent",
-        "organizations:ListParents"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "IdentityCenterReadOnlyForScan",
-      "Effect": "Allow",
-      "Action": [
+        "organizations:ListParents",
+        "organizations:ListOrganizationalUnitsForParent",
         "sso:ListInstances",
         "sso:ListPermissionSets",
         "sso:DescribePermissionSet",
         "sso:ListAccountsForProvisionedPermissionSet",
-        "sso:ListAccountAssignments"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "IdentityStoreReadOnlyForScan",
-      "Effect": "Allow",
-      "Action": [
+        "sso:ListAccountAssignments",
         "identitystore:ListUsers",
         "identitystore:ListGroups"
       ],
       "Resource": "*"
-    }
-  ]
-}
-```
-
-### `bootstrap` permissions (create missing Pending/Graveyard OUs only)
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
+    },
     {
-      "Sid": "OrganizationsBootstrap",
+      "Sid": "BootstrapCommand",
       "Effect": "Allow",
       "Action": [
         "organizations:DescribeOrganization",
         "organizations:ListRoots",
         "organizations:ListOrganizationalUnitsForParent",
-        "organizations:CreateOrganizationalUnit"
+        "organizations:CreateOrganizationalUnit",
+        "sso:ListInstances"
       ],
       "Resource": "*"
     },
     {
-      "Sid": "IdentityCenterInstancesReadForBootstrap",
-      "Effect": "Allow",
-      "Action": ["sso:ListInstances"],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-### `create-account` permissions
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "OrganizationsCreateAccount",
+      "Sid": "InitCommand",
       "Effect": "Allow",
       "Action": [
         "organizations:DescribeOrganization",
         "organizations:ListRoots",
-        "organizations:CreateAccount",
-        "organizations:DescribeCreateAccountStatus",
         "organizations:ListAccounts",
-        "organizations:ListAccountsForParent"
+        "organizations:ListParents",
+        "organizations:ListOrganizationalUnitsForParent",
+        "organizations:CreateOrganizationalUnit",
+        "sso:ListInstances",
+        "sso:ListPermissionSets",
+        "sso:DescribePermissionSet",
+        "sso:ListAccountsForProvisionedPermissionSet",
+        "sso:ListAccountAssignments",
+        "identitystore:ListUsers",
+        "identitystore:ListGroups"
       ],
       "Resource": "*"
-    }
-  ]
-}
-```
-
-### `plan` permissions (local diff only)
-
-`plan` in increment 1 is local-only (diff `aws.config.ts` vs `state.json`) and requires no AWS IAM permissions.
-
-### `apply` permissions (OU/account placement only)
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
+    },
     {
-      "Sid": "OrganizationsApplyOuPlacement",
+      "Sid": "CreateAccountCommand",
       "Effect": "Allow",
       "Action": [
-        "organizations:DescribeOrganization",
-        "organizations:ListRoots",
-        "organizations:ListOrganizationalUnitsForParent",
         "organizations:ListAccounts",
-        "organizations:ListAccountsForParent",
-        "organizations:ListParents",
+        "organizations:CreateAccount",
+        "organizations:DescribeCreateAccountStatus",
+        "organizations:MoveAccount"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ApplyCommand",
+      "Effect": "Allow",
+      "Action": [
         "organizations:MoveAccount"
       ],
       "Resource": "*"
@@ -155,6 +110,10 @@ Use these as inline role policies for the profile/role used by the CLI.
   ]
 }
 ```
+
+**Notes on commands not in this policy:**
+- `regenerate` performs local code generation only (no AWS API calls); no permissions required.
+- `plan` compares local config against state file (no AWS API calls); no permissions required.
 
 ## Notes
 
