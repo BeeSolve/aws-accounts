@@ -6,6 +6,7 @@ import {
   CreateAccountCommand,
   DescribeCreateAccountStatusCommand,
   ListAccountsCommand,
+  MoveAccountCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import { writeAwsConfigFromState } from "../awsConfig.js";
@@ -37,6 +38,7 @@ test("runCreateAccountCommand rejects invalid required inputs", async () => {
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
+          statePath: paths.statePath,
           contextPath: paths.contextPath,
           accountName: " ",
           accountEmail: "test@example.com",
@@ -52,6 +54,7 @@ test("runCreateAccountCommand rejects invalid required inputs", async () => {
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
+          statePath: paths.statePath,
           contextPath: paths.contextPath,
           accountName: "NewAccount",
           accountEmail: " ",
@@ -67,6 +70,7 @@ test("runCreateAccountCommand rejects invalid required inputs", async () => {
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
+          statePath: paths.statePath,
           contextPath: paths.contextPath,
           accountName: "NewAccount",
           accountEmail: "new@example.com",
@@ -82,6 +86,7 @@ test("runCreateAccountCommand rejects invalid required inputs", async () => {
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
+          statePath: paths.statePath,
           contextPath: paths.contextPath,
           accountName: "NewAccount",
           accountEmail: "new@example.com",
@@ -127,6 +132,7 @@ test("runCreateAccountCommand fails when Pending OU is missing in config", async
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
+          statePath: paths.statePath,
           contextPath: paths.contextPath,
           accountName: "NewAccount",
           accountEmail: "new@example.com",
@@ -171,7 +177,9 @@ test("runCreateAccountCommand does not mutate files when account already exists 
     });
     const beforeConfig = await readFile(paths.configPath, "utf8");
     const beforeTypes = await readFile(paths.typesPath, "utf8");
+    const beforeState = await readFile(paths.statePath, "utf8");
     let createCalls = 0;
+    let moveCalls = 0;
 
     const result = await runCreateAccountCommand({
       organizationsClient: createOrganizationsClientMock({
@@ -189,10 +197,14 @@ test("runCreateAccountCommand does not mutate files when account already exists 
         onCreateAccount: async () => {
           createCalls += 1;
         },
+        onMoveAccount: async () => {
+          moveCalls += 1;
+        },
       }),
       logger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
+      statePath: paths.statePath,
       contextPath: paths.contextPath,
       accountName: "RecoveredAccount",
       accountEmail: "recovered@example.com",
@@ -201,11 +213,14 @@ test("runCreateAccountCommand does not mutate files when account already exists 
     });
 
     assert.equal(result.status, "alreadyExists");
+    assert.equal(result.stateUpdated, false);
     assert.equal(result.configUpdated, false);
     assert.equal(result.typesUpdated, false);
     assert.equal(createCalls, 0);
+    assert.equal(moveCalls, 0);
     assert.equal(await readFile(paths.configPath, "utf8"), beforeConfig);
     assert.equal(await readFile(paths.typesPath, "utf8"), beforeTypes);
+    assert.equal(await readFile(paths.statePath, "utf8"), beforeState);
     assert.equal(
       logger.logs.some((line) => line.includes("Local config was not changed.")),
       true,
@@ -233,9 +248,24 @@ test("runCreateAccountCommand creates account, waits for success, and updates co
       overwriteConfirmation: async () => true,
     });
 
+    const beforeState = await readFile(paths.statePath, "utf8");
+    let movedToPending = false;
     const result = await runCreateAccountCommand({
       organizationsClient: createOrganizationsClientMock({
-        listAccountsPages: [{ Accounts: [] }],
+        listAccountsPages: [
+          { Accounts: [] },
+          {
+            Accounts: [
+              {
+                Id: "555555555555",
+                Arn: "arn:aws:organizations:::account/555555555555",
+                Name: "BrandNew",
+                Email: "brandnew@example.com",
+                Status: "ACTIVE",
+              },
+            ],
+          },
+        ],
         createAccountResponse: {
           CreateAccountStatus: {
             Id: "car-123",
@@ -256,10 +286,17 @@ test("runCreateAccountCommand creates account, waits for success, and updates co
             },
           },
         ],
+        onMoveAccount: async (input) => {
+          assert.equal(input.AccountId, "555555555555");
+          assert.equal(input.SourceParentId, "r-root");
+          assert.equal(input.DestinationParentId, "ou-pending");
+          movedToPending = true;
+        },
       }),
       logger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
+      statePath: paths.statePath,
       contextPath: paths.contextPath,
       accountName: "BrandNew",
       accountEmail: "brandnew@example.com",
@@ -269,12 +306,18 @@ test("runCreateAccountCommand creates account, waits for success, and updates co
 
     assert.equal(result.status, "created");
     assert.equal(result.accountId, "555555555555");
+    assert.equal(result.stateUpdated, true);
     assert.equal(result.configUpdated, true);
     assert.equal(result.typesUpdated, true);
+    assert.equal(movedToPending, true);
     const configRaw = await readFile(paths.configPath, "utf8");
     const typesRaw = await readFile(paths.typesPath, "utf8");
+    const stateRaw = await readFile(paths.statePath, "utf8");
     assert.match(configRaw, /"name": "BrandNew"/);
     assert.match(typesRaw, /BrandNew/);
+    assert.notEqual(stateRaw, beforeState);
+    assert.match(stateRaw, /"id": "555555555555"/);
+    assert.match(stateRaw, /"parentId": "ou-pending"/);
   } finally {
     await workspace.cleanup();
   }
@@ -298,6 +341,8 @@ test("runCreateAccountCommand throws on terminal failed status and does not muta
     });
     const beforeConfig = await readFile(paths.configPath, "utf8");
     const beforeTypes = await readFile(paths.typesPath, "utf8");
+    const beforeState = await readFile(paths.statePath, "utf8");
+    let moveCalls = 0;
 
     await assert.rejects(
       () =>
@@ -318,10 +363,14 @@ test("runCreateAccountCommand throws on terminal failed status and does not muta
                 },
               },
             ],
+            onMoveAccount: async () => {
+              moveCalls += 1;
+            },
           }),
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
+          statePath: paths.statePath,
           contextPath: paths.contextPath,
           accountName: "BrandNew",
           accountEmail: "brandnew@example.com",
@@ -330,8 +379,10 @@ test("runCreateAccountCommand throws on terminal failed status and does not muta
         }),
       /CreateAccount failed: EMAIL_ALREADY_EXISTS/,
     );
+    assert.equal(moveCalls, 0);
     assert.equal(await readFile(paths.configPath, "utf8"), beforeConfig);
     assert.equal(await readFile(paths.typesPath, "utf8"), beforeTypes);
+    assert.equal(await readFile(paths.statePath, "utf8"), beforeState);
   } finally {
     await workspace.cleanup();
   }
@@ -355,6 +406,8 @@ test("runCreateAccountCommand times out when status never becomes terminal", asy
     });
     const beforeConfig = await readFile(paths.configPath, "utf8");
     const beforeTypes = await readFile(paths.typesPath, "utf8");
+    const beforeState = await readFile(paths.statePath, "utf8");
+    let moveCalls = 0;
 
     await assert.rejects(
       () =>
@@ -374,10 +427,14 @@ test("runCreateAccountCommand times out when status never becomes terminal", asy
                 },
               },
             ],
+            onMoveAccount: async () => {
+              moveCalls += 1;
+            },
           }),
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
+          statePath: paths.statePath,
           contextPath: paths.contextPath,
           accountName: "BrandNew",
           accountEmail: "brandnew@example.com",
@@ -386,8 +443,10 @@ test("runCreateAccountCommand times out when status never becomes terminal", asy
         }),
       /timed out/,
     );
+    assert.equal(moveCalls, 0);
     assert.equal(await readFile(paths.configPath, "utf8"), beforeConfig);
     assert.equal(await readFile(paths.typesPath, "utf8"), beforeTypes);
+    assert.equal(await readFile(paths.statePath, "utf8"), beforeState);
   } finally {
     await workspace.cleanup();
   }
@@ -424,7 +483,16 @@ function createCollectingLogger(): Logger & { logs: string[] } {
 }
 
 type OrganizationsMockProps = {
-  listAccountsPages?: Array<{ Accounts?: Array<{ Id?: string; Name?: string; Email?: string }>; NextToken?: string }>;
+  listAccountsPages?: Array<{
+    Accounts?: Array<{
+      Id?: string;
+      Arn?: string;
+      Name?: string;
+      Email?: string;
+      Status?: string;
+    }>;
+    NextToken?: string;
+  }>;
   createAccountResponse?: { CreateAccountStatus?: { Id?: string } };
   describeStatuses?: Array<{
     CreateAccountStatus?: {
@@ -435,6 +503,11 @@ type OrganizationsMockProps = {
     };
   }>;
   onCreateAccount?: (input: { AccountName?: string; Email?: string }) => Promise<void>;
+  onMoveAccount?: (input: {
+    AccountId?: string;
+    SourceParentId?: string;
+    DestinationParentId?: string;
+  }) => Promise<void>;
 };
 
 function createOrganizationsClientMock(props: OrganizationsMockProps): OrganizationsClient {
@@ -470,6 +543,16 @@ function createOrganizationsClientMock(props: OrganizationsMockProps): Organizat
           };
         describeIndex += 1;
         return response;
+      }
+      if (command instanceof MoveAccountCommand) {
+        if (props.onMoveAccount != null) {
+          await props.onMoveAccount({
+            AccountId: command.input.AccountId,
+            SourceParentId: command.input.SourceParentId,
+            DestinationParentId: command.input.DestinationParentId,
+          });
+        }
+        return {};
       }
       throw new Error("Unexpected Organizations command in create-account test.");
     },

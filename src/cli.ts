@@ -38,7 +38,6 @@ const statePath = "state.json";
 const contextPath = "aws.context.json";
 const createAccountTimeoutInMs = 15 * 60 * 1000;
 const createAccountPollIntervalInMs = 5 * 1000;
-
 const nonEmptyString = v.pipe(v.string(), v.trim(), v.nonEmpty());
 const emailSchema = v.pipe(nonEmptyString, v.email());
 
@@ -272,17 +271,26 @@ async function main(): Promise<void> {
   }
 
   if (command === "create-account") {
-    const accountEmail = await resolveCreateAccountEmail({
-      value: args.values.email,
-      isTty: process.stdin.isTTY,
+    const createAccountReadline = createInterface({
+      input: process.stdin,
+      output: process.stdout,
     });
-    const accountName = await resolveCreateAccountName({
-      value: args.values.name,
-      isTty: process.stdin.isTTY,
-    });
+    let accountEmail: string;
+    let accountName: string;
+    try {
+      const resolved = await resolveCreateAccountInputs({
+        email: args.values.email,
+        name: args.values.name,
+        isTty: process.stdin.isTTY,
+        ask: (question) => createAccountReadline.question(question),
+      });
+      accountEmail = resolved.accountEmail;
+      accountName = resolved.accountName;
+    } finally {
+      createAccountReadline.close();
+    }
     logger.log(
-      `Replay command: ${buildReplayCommand({
-        command,
+      `Replay command: ${buildCreateAccountReplayCommand({
         email: accountEmail,
         name: accountName,
         profile,
@@ -294,6 +302,7 @@ async function main(): Promise<void> {
       logger,
       configPath,
       typesPath,
+      statePath,
       contextPath,
       accountName,
       accountEmail,
@@ -305,6 +314,7 @@ async function main(): Promise<void> {
     if (result.accountId != null) {
       logger.log(`Account ID: ${result.accountId}`);
     }
+    logger.log(`State updated: ${result.stateUpdated ? "yes" : "no"}`);
     logger.log(`Config updated: ${result.configUpdated ? "yes" : "no"}`);
     logger.log(`Types updated: ${result.typesUpdated ? "yes" : "no"}`);
     return;
@@ -338,9 +348,40 @@ function printHelp(logger: Logger): void {
   logger.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
 }
 
+type AskFn = (question: string) => Promise<string>;
+
+type ResolveCreateAccountInputsProps = {
+  email: string | undefined;
+  name: string | undefined;
+  isTty: boolean | undefined;
+  ask: AskFn;
+};
+
+type ResolveCreateAccountInputsResult = {
+  accountEmail: string;
+  accountName: string;
+};
+
+async function resolveCreateAccountInputs(
+  props: ResolveCreateAccountInputsProps,
+): Promise<ResolveCreateAccountInputsResult> {
+  const accountEmail = await resolveCreateAccountEmail({
+    value: props.email,
+    isTty: props.isTty,
+    ask: props.ask,
+  });
+  const accountName = await resolveCreateAccountName({
+    value: props.name,
+    isTty: props.isTty,
+    ask: props.ask,
+  });
+  return { accountEmail, accountName };
+}
+
 async function resolveCreateAccountEmail(props: {
   value: string | undefined;
   isTty: boolean | undefined;
+  ask: AskFn;
 }): Promise<string> {
   const candidate = props.value?.trim();
   if (candidate != null && candidate.length > 0) {
@@ -354,30 +395,21 @@ async function resolveCreateAccountEmail(props: {
       "Missing required --email for create-account in non-interactive mode.",
     );
   }
-  const readlineInterface = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  try {
-    while (true) {
-      const answer = (
-        await readlineInterface.question("Account email: ")
-      ).trim();
-      if (answer.length === 0) {
-        continue;
-      }
-      if (isValidEmailWithSchema(answer)) {
-        return answer;
-      }
+  while (true) {
+    const answer = (await props.ask("Account email: ")).trim();
+    if (answer.length === 0) {
+      continue;
     }
-  } finally {
-    readlineInterface.close();
+    if (isValidEmailWithSchema(answer)) {
+      return answer;
+    }
   }
 }
 
 async function resolveCreateAccountName(props: {
   value: string | undefined;
   isTty: boolean | undefined;
+  ask: AskFn;
 }): Promise<string> {
   const candidate = props.value?.trim();
   if (candidate != null && candidate.length > 0) {
@@ -388,21 +420,11 @@ async function resolveCreateAccountName(props: {
       "Missing required --name for create-account in non-interactive mode.",
     );
   }
-  const readlineInterface = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  try {
-    while (true) {
-      const answer = (
-        await readlineInterface.question("Account name: ")
-      ).trim();
-      if (answer.length > 0) {
-        return answer;
-      }
+  while (true) {
+    const answer = (await props.ask("Account name: ")).trim();
+    if (answer.length > 0) {
+      return answer;
     }
-  } finally {
-    readlineInterface.close();
   }
 }
 
@@ -451,6 +473,36 @@ function buildReplayCommand(props: BuildReplayCommandProps): string {
   }
   if (props.ignoreUnsupported) {
     parts.push("--ignore-unsupported");
+  }
+  return parts.join(" ");
+}
+
+type BuildCreateAccountReplayCommandProps = {
+  email: string;
+  name: string;
+  profile?: string;
+  region?: string;
+};
+
+function buildCreateAccountReplayCommand(
+  props: BuildCreateAccountReplayCommandProps,
+): string {
+  const parts = [
+    "npm",
+    "run",
+    "cli",
+    "--",
+    "create-account",
+    "--email",
+    quoteCliValue(props.email),
+    "--name",
+    quoteCliValue(props.name),
+  ];
+  if (props.profile != null) {
+    parts.push("--profile", quoteCliValue(props.profile));
+  }
+  if (props.region != null) {
+    parts.push("--region", quoteCliValue(props.region));
   }
   return parts.join(" ");
 }

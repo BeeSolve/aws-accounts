@@ -175,27 +175,24 @@ async function scanIdentityCenter(props: {
     instances: instances,
     requestedInstanceArn: props.requestedInstanceArn,
   });
-  if (instance.InstanceArn == null || instance.IdentityStoreId == null) {
-    throw new Error("IAM Identity Center instance is missing required fields.");
-  }
 
   const [users, groups, permissionSets] = await Promise.all([
     listIdentityStoreUsers({
       identityStoreClient: props.identityStoreClient,
-      identityStoreId: instance.IdentityStoreId,
+      identityStoreId: instance.identityStoreId,
     }),
     listIdentityStoreGroups({
       identityStoreClient: props.identityStoreClient,
-      identityStoreId: instance.IdentityStoreId,
+      identityStoreId: instance.identityStoreId,
     }),
     listPermissionSets({
       ssoAdminClient: props.ssoAdminClient,
-      instanceArn: instance.InstanceArn,
+      instanceArn: instance.instanceArn,
     }),
   ]);
   const accountAssignments = await listAccountAssignments({
     ssoAdminClient: props.ssoAdminClient,
-    instanceArn: instance.InstanceArn,
+    instanceArn: instance.instanceArn,
     permissionSets: permissionSets,
   });
   const accessRoles = accountAssignments.map((assignment) => ({
@@ -204,8 +201,8 @@ async function scanIdentityCenter(props: {
   }));
 
   return {
-    instanceArn: instance.InstanceArn,
-    identityStoreId: instance.IdentityStoreId,
+    instanceArn: instance.instanceArn,
+    identityStoreId: instance.identityStoreId,
     users: users,
     groups: groups,
     permissionSets: permissionSets,
@@ -214,25 +211,23 @@ async function scanIdentityCenter(props: {
   };
 }
 
-type IdentityCenterInstance = {
-  InstanceArn?: string;
-  IdentityStoreId?: string;
-};
-
 function selectIdentityCenterInstance(props: {
-  instances: IdentityCenterInstance[];
+  instances: Array<{ InstanceArn?: string; IdentityStoreId?: string }>;
   requestedInstanceArn?: string;
-}): IdentityCenterInstance {
+}): { instanceArn: string; identityStoreId: string } {
   if (props.requestedInstanceArn != null) {
     const selected = props.instances.find(
       (instance) => instance.InstanceArn === props.requestedInstanceArn,
     );
-    if (selected == null) {
+    if (selected?.InstanceArn == null || selected.IdentityStoreId == null) {
       throw new Error(
         `Identity Center instance not found for --instance-arn: ${props.requestedInstanceArn}`,
       );
     }
-    return selected;
+    return {
+      instanceArn: selected.InstanceArn,
+      identityStoreId: selected.IdentityStoreId,
+    };
   }
 
   if (props.instances.length > 1) {
@@ -245,7 +240,14 @@ function selectIdentityCenterInstance(props: {
     );
   }
 
-  return props.instances[0];
+  const selected = props.instances[0];
+  if (selected?.InstanceArn == null || selected.IdentityStoreId == null) {
+    throw new Error("IAM Identity Center instance is missing required fields.");
+  }
+  return {
+    instanceArn: selected.InstanceArn,
+    identityStoreId: selected.IdentityStoreId,
+  };
 }
 
 async function listIdentityStoreUsers(props: {

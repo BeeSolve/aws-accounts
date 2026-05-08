@@ -22,6 +22,8 @@ In scope:
 - Resolve `Pending` OU id from `aws.context.json`.
 - Create account via AWS Organizations.
 - Poll account-creation status until terminal.
+- Move newly created account to `Pending` OU in AWS Organizations.
+- Update local `state.json` after successful create/move so `plan` does not report false `newAccount` unsupported diffs.
 - On success, update `aws.config.ts` by adding the account under `Pending`.
 - Refresh `aws.config.types.ts` to keep picklists in sync.
 - Add tests and clear CLI output.
@@ -67,12 +69,19 @@ Out of scope:
      - `FAILED` -> return actionable failure with AWS reason
      - timeout at 15 minutes -> fail with timeout guidance
    - use a local non-exported `delay(ms)` helper in command module (no shared/global helper export)
-7. Update `aws.config.ts` (created outcome only):
+7. Move created account to `Pending` OU in AWS:
+   - issue `MoveAccountCommand` from organization root to `context.organization.pendingOuId`
+   - if move fails, fail command and do not mutate local files
+8. Update local `state.json` (created outcome only):
+   - fetch account metadata for created `accountId` from Organizations (id/arn/name/email/status)
+   - append/update account in `state.json` with `parentId = context.organization.pendingOuId`
+   - write state deterministically via existing `writeStateFile` path
+9. Update `aws.config.ts` (created outcome only):
    - load current config model, append account `{ name, email }` into `organizationalUnits[name="Pending"].accounts`, then re-render deterministically
    - keep deterministic ordering by account name in `Pending.accounts`
    - do not perform text-level/surgical patching
-8. Regenerate `aws.config.types.ts` from updated config.
-9. Print summary lines (started, waiting/polling, created/reused, config updated, types updated).
+10. Regenerate `aws.config.types.ts` from updated config.
+11. Print summary lines (started, waiting/polling, created/moved, state updated, config updated, types updated).
 
 ## Files to add/modify (planned)
 
@@ -85,6 +94,7 @@ Modified:
 
 - `src/cli.ts` (wire command + args + help)
 - `src/awsConfig.ts` (small helper(s) for safe config update by account insertion, if needed)
+- `src/state.ts` (reuse existing deterministic `writeStateFile`; no schema changes expected)
 - `plan.md` (tick Phase 4 checkboxes as completed)
 
 ## Validation model
@@ -129,15 +139,21 @@ Notes:
 3. Happy path:
    - create call issued
    - polling transitions to success
+   - move to `Pending` is called with correct source/destination ids
+   - `state.json` updated with newly created account under `Pending`
    - account added to `Pending` in `aws.config.ts`
    - `aws.config.types.ts` refreshed
 4. Polling failure path:
    - terminal `FAILED` returns reason and does not update config.
+   - does not move account
+   - does not update `state.json`
 5. Timeout path:
    - exceeds 15 minutes -> timeout error and no config write.
    - implemented in tests via short required `timeoutInMs` and deterministic mocked `IN_PROGRESS` statuses.
+   - no move call and no `state.json` mutation
 6. Idempotent retry path:
    - existing account found by preflight -> no duplicate create call; no local config mutation; clear rescan guidance shown.
+   - no move call
 7. Non-interactive behavior with `--yes` equivalent callback paths.
 
 ## Rollout order
@@ -164,6 +180,8 @@ Notes:
 
 - `create-account` command works end-to-end locally with AWS SDK v3.
 - Enforces 15-minute timeout for account creation polling.
+- Moves newly created accounts into `Pending` OU in AWS.
+- Updates local `state.json` to reflect created account placement in `Pending`.
 - Updates `aws.config.ts` under `Pending` and refreshes `aws.config.types.ts`.
 - Uses deterministic config mutation path (model load + render), not text patching.
 - Retry-safe behavior for already-created account cases.
@@ -187,10 +205,12 @@ Notes:
 - [x] Implement local (non-exported) `delay(ms)` helper in `createAccount` command module.
 - [x] Handle terminal outcomes (`SUCCEEDED`, `FAILED`) with actionable messaging.
 - [x] Enforce 15-minute timeout with explicit timeout error guidance.
+- [x] Move successfully created account into `Pending` OU using `MoveAccountCommand`.
 
 ### Local file update policy
 
 - [x] Existing account found and missing locally: do not modify files; print rescan/init guidance.
+- [x] Created account path: update local `state.json` to include account under `Pending`.
 - [x] Created account path: insert account into `Pending` in config model.
 - [x] Re-render `aws.config.ts` deterministically (no text patching).
 - [x] Regenerate `aws.config.types.ts` after successful config update.
@@ -214,6 +234,8 @@ Notes:
 - [x] Poll failure tests (`FAILED` status).
 - [x] Timeout tests (15-minute cutoff behavior).
 - [x] Existing-account preflight tests (no create call, no file mutation, guidance output).
+- [x] Move-to-Pending tests (correct source/destination IDs and failure behavior).
+- [x] `state.json` update tests (happy path and no-mutation on failure/timeout).
 - [ ] CLI interaction tests (prompt order, re-prompt behavior, replay command output).
 
 ### Finalization
