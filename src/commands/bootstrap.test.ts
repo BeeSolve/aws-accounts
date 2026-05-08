@@ -469,7 +469,7 @@ function createOrganizationsClientMock(props: {
         }
         rootChildren.push({
           id: `ou-${name.toLowerCase()}`,
-          name: name,
+          name,
           arn: `arn:aws:organizations:::ou/${name.toLowerCase()}`,
         });
         return {};

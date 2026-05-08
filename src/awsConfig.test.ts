@@ -21,15 +21,15 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     let confirmationCalls = 0;
     const result = await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => {
         confirmationCalls += 1;
@@ -63,24 +63,24 @@ test("writeAwsConfigFromState no-op does not call confirmation", async () => {
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
     let confirmationCalls = 0;
     const result = await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => {
         confirmationCalls += 1;
@@ -105,8 +105,8 @@ test("writeAwsConfigFromState fails on context mismatch", async () => {
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     const contextRaw = await readFile(contextPath, "utf8");
     const context = JSON.parse(contextRaw) as {
@@ -122,10 +122,10 @@ test("writeAwsConfigFromState fails on context mismatch", async () => {
     await assert.rejects(
       () =>
         writeAwsConfigFromState({
-          statePath: statePath,
-          contextPath: contextPath,
-          configPath: configPath,
-          typesPath: typesPath,
+          statePath,
+          contextPath,
+          configPath,
+          typesPath,
           logger: noopLogger,
           overwriteConfirmation: async () => true,
         }),
@@ -144,22 +144,22 @@ test("regenerateAwsConfigTypes reports no changes when types are up to date", as
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
     let confirmationCalls = 0;
     const result = await regenerateAwsConfigTypes({
-      configPath: configPath,
-      typesPath: typesPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => {
         confirmationCalls += 1;
@@ -182,14 +182,14 @@ test("regenerateAwsConfigTypes writes when types are stale", async () => {
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
@@ -197,8 +197,8 @@ test("regenerateAwsConfigTypes writes when types are stale", async () => {
     const previousTypes = await readFile(typesPath, "utf8");
     await writeFile(typesPath, `// stale\n${previousTypes}`, "utf8");
     const result = await regenerateAwsConfigTypes({
-      configPath: configPath,
-      typesPath: typesPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
@@ -219,14 +219,14 @@ test("writeAwsConfigFromState reports would-write when confirmation is rejected"
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     const result = await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => false,
     });
@@ -247,22 +247,22 @@ test("regenerateAwsConfigTypes reports would-write when confirmation is rejected
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     const previousTypes = await readFile(typesPath, "utf8");
     await writeFile(typesPath, `// stale\n${previousTypes}`, "utf8");
     const result = await regenerateAwsConfigTypes({
-      configPath: configPath,
-      typesPath: typesPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => false,
     });
@@ -281,22 +281,22 @@ test("mapAwsConfigToState emits sentinel ids for entities missing in current sta
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
     const [config, currentState, context] = await Promise.all([
       loadAwsConfigModelFromTsFile({
-        configPath: configPath,
-        typesPath: typesPath,
+        configPath,
+        typesPath,
       }),
       readStateFile(statePath),
       readAwsContextFromFile(contextPath),
@@ -325,9 +325,9 @@ test("mapAwsConfigToState emits sentinel ids for entities missing in current sta
     });
 
     const mapped = mapAwsConfigToState({
-      config: config,
-      currentState: currentState,
-      context: context,
+      config,
+      currentState,
+      context,
     });
 
     assert.equal(
@@ -373,22 +373,22 @@ test("mapAwsConfigToState resolves synthetic root parent from context rootId", a
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
     const [config, currentState, context] = await Promise.all([
       loadAwsConfigModelFromTsFile({
-        configPath: configPath,
-        typesPath: typesPath,
+        configPath,
+        typesPath,
       }),
       readStateFile(statePath),
       readAwsContextFromFile(contextPath),
@@ -396,9 +396,9 @@ test("mapAwsConfigToState resolves synthetic root parent from context rootId", a
     context.organization.rootId = "r-alt-root";
 
     const mapped = mapAwsConfigToState({
-      config: config,
-      currentState: currentState,
-      context: context,
+      config,
+      currentState,
+      context,
     });
 
     assert.equal(mapped.organization.rootId, "r-alt-root");
@@ -419,31 +419,31 @@ test("mapAwsConfigToState keeps existing ids for unchanged config entities", asy
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
     const [config, currentState, context] = await Promise.all([
       loadAwsConfigModelFromTsFile({
-        configPath: configPath,
-        typesPath: typesPath,
+        configPath,
+        typesPath,
       }),
       readStateFile(statePath),
       readAwsContextFromFile(contextPath),
     ]);
 
     const mapped = mapAwsConfigToState({
-      config: config,
-      currentState: currentState,
-      context: context,
+      config,
+      currentState,
+      context,
     });
 
     assert.equal(

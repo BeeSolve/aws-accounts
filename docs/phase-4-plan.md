@@ -173,37 +173,37 @@ Notes:
 
 ### Core command
 
-- [ ] Add `src/commands/createAccount.ts` with explicit input/output contracts.
-- [ ] Require `timeoutInMs` and `pollIntervalInMs` in create-account command input.
-- [ ] Add valibot input validation for account name/email.
-- [ ] Resolve and validate `Pending` OU from `aws.context.json`.
-- [ ] Load and validate current `aws.config.ts` model before create flow.
+- [x] Add `src/commands/createAccount.ts` with explicit input/output contracts.
+- [x] Require `timeoutInMs` and `pollIntervalInMs` in create-account command input.
+- [x] Validate user-provided email in CLI via valibot schema and enforce non-empty name/email in command flow.
+- [x] Resolve and validate `Pending` OU from `aws.context.json`.
+- [x] Load and validate current `aws.config.ts` model before create flow.
 
 ### AWS flow
 
-- [ ] Implement AWS preflight account lookup (name/email best-effort idempotency check).
-- [ ] Implement `CreateAccountCommand` call for non-existing accounts.
-- [ ] Implement polling with `DescribeCreateAccountStatusCommand`.
-- [ ] Implement local (non-exported) `delay(ms)` helper in `createAccount` command module.
-- [ ] Handle terminal outcomes (`SUCCEEDED`, `FAILED`) with actionable messaging.
-- [ ] Enforce 15-minute timeout with explicit timeout error guidance.
+- [x] Implement AWS preflight account lookup (name/email best-effort idempotency check).
+- [x] Implement `CreateAccountCommand` call for non-existing accounts.
+- [x] Implement polling with `DescribeCreateAccountStatusCommand`.
+- [x] Implement local (non-exported) `delay(ms)` helper in `createAccount` command module.
+- [x] Handle terminal outcomes (`SUCCEEDED`, `FAILED`) with actionable messaging.
+- [x] Enforce 15-minute timeout with explicit timeout error guidance.
 
 ### Local file update policy
 
-- [ ] Existing account found and missing locally: do not modify files; print rescan/init guidance.
-- [ ] Created account path: insert account into `Pending` in config model.
-- [ ] Re-render `aws.config.ts` deterministically (no text patching).
-- [ ] Regenerate `aws.config.types.ts` after successful config update.
-- [ ] Ensure deterministic ordering for `Pending.accounts`.
+- [x] Existing account found and missing locally: do not modify files; print rescan/init guidance.
+- [x] Created account path: insert account into `Pending` in config model.
+- [x] Re-render `aws.config.ts` deterministically (no text patching).
+- [x] Regenerate `aws.config.types.ts` after successful config update.
+- [x] Ensure deterministic ordering for `Pending.accounts`.
 
 ### CLI UX and wiring
 
-- [ ] Wire `create-account` in `src/cli.ts` dispatch and help output.
-- [ ] Add `--name` and `--email` CLI flags for `create-account`.
-- [ ] Interactive mode: prompt missing fields in order (email, then name).
-- [ ] Interactive mode: re-prompt on empty/invalid values until valid.
-- [ ] Non-interactive mode: fail if required values are missing.
-- [ ] After interactive input resolution, print replayable full command with explicit flags.
+- [x] Wire `create-account` in `src/cli.ts` dispatch and help output.
+- [x] Add `--name` and `--email` CLI flags for `create-account`.
+- [x] Interactive mode: prompt missing fields in order (email, then name).
+- [x] Interactive mode: re-prompt on empty/invalid values until valid.
+- [x] Non-interactive mode: fail if required values are missing.
+- [x] After interactive input resolution, print replayable full command with explicit flags.
 
 ### Tests
 
@@ -218,7 +218,7 @@ Notes:
 
 ### Finalization
 
-- [ ] Run `npm run typecheck`.
+- [x] Run `npm run typecheck`.
 - [ ] Run `npm test`.
 - [ ] Update Phase 4 checkboxes in `plan.md`.
 - [ ] Prepare and create commit.

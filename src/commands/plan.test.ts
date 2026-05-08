@@ -16,19 +16,19 @@ test("runPlanCommand prints human-readable move operations", async () => {
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
-      configPath: configPath,
+      configPath,
       update: (config) => {
         const pending = config.organizationalUnits.find(
           (organizationalUnit) => organizationalUnit.name === "Pending",
@@ -46,11 +46,11 @@ test("runPlanCommand prints human-readable move operations", async () => {
 
     const logger = createCollectingLogger();
     const result = await runPlanCommand({
-      logger: logger,
-      configPath: configPath,
-      typesPath: typesPath,
-      statePath: statePath,
-      contextPath: contextPath,
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
       output: "human",
     });
     assert.equal(result.plan.operations.length, 1);
@@ -76,25 +76,25 @@ test("runPlanCommand prints machine-readable JSON with --json output", async () 
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
 
     const logger = createCollectingLogger();
     await runPlanCommand({
-      logger: logger,
-      configPath: configPath,
-      typesPath: typesPath,
-      statePath: statePath,
-      contextPath: contextPath,
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
       output: "json",
     });
     assert.equal(logger.logs.length, 1);
@@ -117,19 +117,19 @@ test("runPlanCommand human output includes unsupported categories", async () => 
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
     await writeFixtureFiles({
-      statePath: statePath,
-      contextPath: contextPath,
+      statePath,
+      contextPath,
     });
     await writeAwsConfigFromState({
-      statePath: statePath,
-      contextPath: contextPath,
-      configPath: configPath,
-      typesPath: typesPath,
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
       logger: noopLogger,
       overwriteConfirmation: async () => true,
     });
     await updateConfigModel({
-      configPath: configPath,
+      configPath,
       update: (config) => {
         config.users.push({
           userName: "bob",
@@ -141,11 +141,11 @@ test("runPlanCommand human output includes unsupported categories", async () => 
 
     const logger = createCollectingLogger();
     const result = await runPlanCommand({
-      logger: logger,
-      configPath: configPath,
-      typesPath: typesPath,
-      statePath: statePath,
-      contextPath: contextPath,
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
       output: "human",
     });
     assert.equal(result.plan.operations.length, 0);
@@ -173,7 +173,7 @@ function createCollectingLogger(): Logger & { logs: string[] } {
     error: write,
     debug: write,
     trace: write,
-    logs: logs,
+    logs,
   };
 }
 

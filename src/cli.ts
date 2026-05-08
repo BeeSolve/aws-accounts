@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline/promises";
+import * as v from "valibot";
 import { IdentitystoreClient } from "@aws-sdk/client-identitystore";
 import { OrganizationsClient } from "@aws-sdk/client-organizations";
 import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
@@ -11,19 +12,35 @@ import {
 import { consoleLogger, type Logger } from "./logger.js";
 import { runBootstrapCommand } from "./commands/bootstrap.js";
 import { runApplyCommand } from "./commands/apply.js";
+import { runCreateAccountCommand } from "./commands/createAccount.js";
 import { runInitCommand } from "./commands/init.js";
 import { runPlanCommand } from "./commands/plan.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
 import { runScanCommand } from "./commands/scan.js";
 
-type CommandName =
-  | "scan"
-  | "bootstrap"
-  | "init"
-  | "regenerate"
-  | "create-account"
-  | "plan"
-  | "apply";
+const commands = [
+  "scan",
+  "bootstrap",
+  "init",
+  "regenerate",
+  "create-account",
+  "plan",
+  "apply",
+] as const;
+type CommandName = (typeof commands)[number];
+function isCommandName(value: any): value is CommandName {
+  return commands.includes(value);
+}
+
+const configPath = "aws.config.ts";
+const typesPath = "aws.config.types.ts";
+const statePath = "state.json";
+const contextPath = "aws.context.json";
+const createAccountTimeoutInMs = 15 * 60 * 1000;
+const createAccountPollIntervalInMs = 5 * 1000;
+
+const nonEmptyString = v.pipe(v.string(), v.trim(), v.nonEmpty());
+const emailSchema = v.pipe(nonEmptyString, v.email());
 
 async function main(): Promise<void> {
   const logger = consoleLogger;
@@ -31,6 +48,8 @@ async function main(): Promise<void> {
     options: {
       profile: { type: "string" },
       region: { type: "string" },
+      name: { type: "string" },
+      email: { type: "string" },
       "instance-arn": { type: "string" },
       yes: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
@@ -40,11 +59,17 @@ async function main(): Promise<void> {
     allowPositionals: true,
   });
 
-  const command = args.positionals[0] as CommandName | undefined;
-  if (args.values.help || !command) {
+  const commandArg = args.positionals[0];
+  if (args.values.help || commandArg == null) {
     printHelp(logger);
     return;
   }
+  if (!isCommandName(commandArg)) {
+    printHelp(logger);
+    process.exitCode = 1;
+    return;
+  }
+  const command = commandArg;
 
   const profile = resolveAwsProfile({ profileArg: args.values.profile });
   const region = resolveAwsRegion({ regionArg: args.values.region });
@@ -52,16 +77,24 @@ async function main(): Promise<void> {
     profile,
     region,
   });
+  const organizationsClient = new OrganizationsClient(clientConfig);
+  const ssoAdminClient = new SSOAdminClient(clientConfig);
+  const identityStoreClient = new IdentitystoreClient(clientConfig);
 
   if (command === "scan") {
-    const organizationsClient = new OrganizationsClient(clientConfig);
-    const ssoAdminClient = new SSOAdminClient(clientConfig);
-    const identityStoreClient = new IdentitystoreClient(clientConfig);
+    logger.log(
+      `Replay command: ${buildReplayCommand({
+        command,
+        profile,
+        region,
+        instanceArn: args.values["instance-arn"],
+      })}`,
+    );
     const result = await runScanCommand({
-      organizationsClient: organizationsClient,
-      ssoAdminClient: ssoAdminClient,
-      identityStoreClient: identityStoreClient,
-      logger: logger,
+      organizationsClient,
+      ssoAdminClient,
+      identityStoreClient,
+      logger,
       instanceArn: args.values["instance-arn"],
     });
 
@@ -90,16 +123,23 @@ async function main(): Promise<void> {
   }
 
   if (command === "bootstrap") {
-    const organizationsClient = new OrganizationsClient(clientConfig);
-    const ssoAdminClient = new SSOAdminClient(clientConfig);
+    logger.log(
+      `Replay command: ${buildReplayCommand({
+        command,
+        profile,
+        region,
+        instanceArn: args.values["instance-arn"],
+        yes: args.values.yes,
+      })}`,
+    );
     const planConfirmation = buildBootstrapPlanConfirmation({
       yes: args.values.yes,
       isTty: process.stdin.isTTY,
     });
     const result = await runBootstrapCommand({
-      organizationsClient: organizationsClient,
-      ssoAdminClient: ssoAdminClient,
-      logger: logger,
+      organizationsClient,
+      ssoAdminClient,
+      logger,
       profile: profile ?? "",
       region: region ?? "",
       instanceArn: args.values["instance-arn"],
@@ -122,9 +162,15 @@ async function main(): Promise<void> {
   }
 
   if (command === "init") {
-    const organizationsClient = new OrganizationsClient(clientConfig);
-    const ssoAdminClient = new SSOAdminClient(clientConfig);
-    const identityStoreClient = new IdentitystoreClient(clientConfig);
+    logger.log(
+      `Replay command: ${buildReplayCommand({
+        command,
+        profile,
+        region,
+        instanceArn: args.values["instance-arn"],
+        yes: args.values.yes,
+      })}`,
+    );
     const planConfirmation = buildBootstrapPlanConfirmation({
       yes: args.values.yes,
       isTty: process.stdin.isTTY,
@@ -134,15 +180,15 @@ async function main(): Promise<void> {
       isTty: process.stdin.isTTY,
     });
     const result = await runInitCommand({
-      organizationsClient: organizationsClient,
-      ssoAdminClient: ssoAdminClient,
-      identityStoreClient: identityStoreClient,
-      logger: logger,
+      organizationsClient,
+      ssoAdminClient,
+      identityStoreClient,
+      logger,
       profile: profile ?? "",
       region: region ?? "",
       instanceArn: args.values["instance-arn"],
-      planConfirmation: planConfirmation,
-      overwriteConfirmation: overwriteConfirmation,
+      planConfirmation,
+      overwriteConfirmation,
     });
 
     logger.log("");
@@ -156,13 +202,19 @@ async function main(): Promise<void> {
   }
 
   if (command === "regenerate") {
+    logger.log(
+      `Replay command: ${buildReplayCommand({
+        command,
+        yes: args.values.yes,
+      })}`,
+    );
     const overwriteConfirmation = buildOverwriteConfirmation({
       yes: args.values.yes,
       isTty: process.stdin.isTTY,
     });
     const result = await runRegenerateCommand({
-      logger: logger,
-      overwriteConfirmation: overwriteConfirmation,
+      logger,
+      overwriteConfirmation,
     });
 
     logger.log("");
@@ -174,32 +226,44 @@ async function main(): Promise<void> {
   }
 
   if (command === "plan") {
+    logger.log(
+      `Replay command: ${buildReplayCommand({
+        command,
+        json: args.values.json,
+      })}`,
+    );
     await runPlanCommand({
-      logger: logger,
-      configPath: "aws.config.ts",
-      typesPath: "aws.config.types.ts",
-      statePath: "state.json",
-      contextPath: "aws.context.json",
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
       output: args.values.json ? "json" : "human",
     });
     return;
   }
 
   if (command === "apply") {
-    const organizationsClient = new OrganizationsClient(clientConfig);
+    logger.log(
+      `Replay command: ${buildReplayCommand({
+        command,
+        yes: args.values.yes,
+        ignoreUnsupported: args.values["ignore-unsupported"],
+      })}`,
+    );
     const planConfirmation = buildBootstrapPlanConfirmation({
       yes: args.values.yes,
       isTty: process.stdin.isTTY,
     });
     const result = await runApplyCommand({
-      organizationsClient: organizationsClient,
-      logger: logger,
-      configPath: "aws.config.ts",
-      typesPath: "aws.config.types.ts",
-      statePath: "state.json",
-      contextPath: "aws.context.json",
+      organizationsClient,
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
       ignoreUnsupported: args.values["ignore-unsupported"] ?? false,
-      planConfirmation: planConfirmation,
+      planConfirmation,
     });
     logger.log("");
     logger.log(`Apply status: ${result.status}`);
@@ -208,7 +272,41 @@ async function main(): Promise<void> {
   }
 
   if (command === "create-account") {
-    logger.log(`Command '${command}' is not implemented yet.`);
+    const accountEmail = await resolveCreateAccountEmail({
+      value: args.values.email,
+      isTty: process.stdin.isTTY,
+    });
+    const accountName = await resolveCreateAccountName({
+      value: args.values.name,
+      isTty: process.stdin.isTTY,
+    });
+    logger.log(
+      `Replay command: ${buildReplayCommand({
+        command,
+        email: accountEmail,
+        name: accountName,
+        profile,
+        region,
+      })}`,
+    );
+    const result = await runCreateAccountCommand({
+      organizationsClient,
+      logger,
+      configPath,
+      typesPath,
+      contextPath,
+      accountName,
+      accountEmail,
+      timeoutInMs: createAccountTimeoutInMs,
+      pollIntervalInMs: createAccountPollIntervalInMs,
+    });
+    logger.log("");
+    logger.log(`Create-account status: ${result.status}`);
+    if (result.accountId != null) {
+      logger.log(`Account ID: ${result.accountId}`);
+    }
+    logger.log(`Config updated: ${result.configUpdated ? "yes" : "no"}`);
+    logger.log(`Types updated: ${result.typesUpdated ? "yes" : "no"}`);
     return;
   }
 
@@ -230,12 +328,131 @@ function printHelp(logger: Logger): void {
     "  npm run cli -- init [--profile <name>] [--region <region>] [--instance-arn <arn>] [--yes]",
   );
   logger.log("  npm run cli -- regenerate [--yes]");
+  logger.log(
+    "  npm run cli -- create-account [--email <email>] [--name <account-name>] [--profile <name>] [--region <region>]",
+  );
   logger.log("  npm run cli -- plan [--json]");
   logger.log("  npm run cli -- apply [--yes] [--ignore-unsupported]");
-  logger.log("  npm run cli -- <create-account>");
   logger.log("");
   logger.log("Environment fallback:");
   logger.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
+}
+
+async function resolveCreateAccountEmail(props: {
+  value: string | undefined;
+  isTty: boolean | undefined;
+}): Promise<string> {
+  const candidate = props.value?.trim();
+  if (candidate != null && candidate.length > 0) {
+    if (isValidEmailWithSchema(candidate)) {
+      return candidate;
+    }
+    throw new Error(`Invalid --email value: "${candidate}".`);
+  }
+  if (props.isTty !== true) {
+    throw new Error(
+      "Missing required --email for create-account in non-interactive mode.",
+    );
+  }
+  const readlineInterface = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    while (true) {
+      const answer = (
+        await readlineInterface.question("Account email: ")
+      ).trim();
+      if (answer.length === 0) {
+        continue;
+      }
+      if (isValidEmailWithSchema(answer)) {
+        return answer;
+      }
+    }
+  } finally {
+    readlineInterface.close();
+  }
+}
+
+async function resolveCreateAccountName(props: {
+  value: string | undefined;
+  isTty: boolean | undefined;
+}): Promise<string> {
+  const candidate = props.value?.trim();
+  if (candidate != null && candidate.length > 0) {
+    return candidate;
+  }
+  if (props.isTty !== true) {
+    throw new Error(
+      "Missing required --name for create-account in non-interactive mode.",
+    );
+  }
+  const readlineInterface = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    while (true) {
+      const answer = (
+        await readlineInterface.question("Account name: ")
+      ).trim();
+      if (answer.length > 0) {
+        return answer;
+      }
+    }
+  } finally {
+    readlineInterface.close();
+  }
+}
+
+function isValidEmailWithSchema(value: string): boolean {
+  return v.safeParse(emailSchema, value).success;
+}
+
+function quoteCliValue(value: string): string {
+  return `"${value.replaceAll('"', '\\"')}"`;
+}
+
+type BuildReplayCommandProps = {
+  command: CommandName;
+  profile?: string;
+  region?: string;
+  instanceArn?: string;
+  yes?: boolean;
+  json?: boolean;
+  ignoreUnsupported?: boolean;
+  email?: string;
+  name?: string;
+};
+
+function buildReplayCommand(props: BuildReplayCommandProps): string {
+  const parts = ["npm", "run", "cli", "--", props.command];
+  if (props.email != null) {
+    parts.push("--email", quoteCliValue(props.email));
+  }
+  if (props.name != null) {
+    parts.push("--name", quoteCliValue(props.name));
+  }
+  if (props.profile != null) {
+    parts.push("--profile", quoteCliValue(props.profile));
+  }
+  if (props.region != null) {
+    parts.push("--region", quoteCliValue(props.region));
+  }
+  if (props.instanceArn != null) {
+    parts.push("--instance-arn", quoteCliValue(props.instanceArn));
+  }
+  if (props.yes) {
+    parts.push("--yes");
+  }
+  if (props.json) {
+    parts.push("--json");
+  }
+  if (props.ignoreUnsupported) {
+    parts.push("--ignore-unsupported");
+  }
+  return parts.join(" ");
 }
 
 type BuildBootstrapPlanConfirmationProps = {
@@ -282,9 +499,9 @@ type BuildOverwriteConfirmationProps = {
 function buildOverwriteConfirmation(
   props: BuildOverwriteConfirmationProps,
 ): (props: { fileSummaries: string[] }) => Promise<boolean> {
-  return async (
-    overwriteProps: { fileSummaries: string[] },
-  ): Promise<boolean> => {
+  return async (overwriteProps: {
+    fileSummaries: string[];
+  }): Promise<boolean> => {
     if (overwriteProps.fileSummaries.length === 0) {
       return true;
     }

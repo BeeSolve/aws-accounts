@@ -71,8 +71,8 @@ export async function runCreateAccountCommand(
   );
   const existingAccount = await findExistingAccountByNameOrEmail({
     organizationsClient: props.organizationsClient,
-    accountName: accountName,
-    accountEmail: accountEmail,
+    accountName,
+    accountEmail,
   });
   if (existingAccount != null) {
     const localMatch = config.organizationalUnits
@@ -112,7 +112,7 @@ export async function runCreateAccountCommand(
   const accountId = await pollCreateAccountStatusUntilTerminal({
     organizationsClient: props.organizationsClient,
     logger: props.logger,
-    createRequestId: createRequestId,
+    createRequestId,
     timeoutInMs: props.timeoutInMs,
     pollIntervalInMs: props.pollIntervalInMs,
   });
@@ -121,7 +121,7 @@ export async function runCreateAccountCommand(
     email: accountEmail,
   });
   const configWriteResult = await writeAwsConfigModelToFile({
-    config: config,
+    config,
     configPath: props.configPath,
   });
   const typesWriteResult = await regenerateAwsConfigTypes({
@@ -132,7 +132,7 @@ export async function runCreateAccountCommand(
   });
   return {
     status: "created",
-    accountId: accountId,
+    accountId,
     configUpdated: configWriteResult.changed,
     typesUpdated: typesWriteResult.changed,
   };

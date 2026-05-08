@@ -15,14 +15,14 @@ test("runRegenerateCommand returns unchanged when types are current", async () =
       const configPath = join(workspace.workspacePath, "aws.config.ts");
       const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
       await writeFixtureFiles({
-        statePath: statePath,
-        contextPath: contextPath,
+        statePath,
+        contextPath,
       });
       await writeAwsConfigFromState({
-        statePath: statePath,
-        contextPath: contextPath,
-        configPath: configPath,
-        typesPath: typesPath,
+        statePath,
+        contextPath,
+        configPath,
+        typesPath,
         logger: noopLogger,
         overwriteConfirmation: async () => true,
       });
@@ -30,8 +30,8 @@ test("runRegenerateCommand returns unchanged when types are current", async () =
       let confirmationCalls = 0;
       const result = await runRegenerateCommand({
         logger: noopLogger,
-        configPath: configPath,
-        typesPath: typesPath,
+        configPath,
+        typesPath,
         overwriteConfirmation: async () => {
           confirmationCalls += 1;
           return true;
@@ -54,14 +54,14 @@ test("runRegenerateCommand writes updated types when stale", async () => {
       const configPath = join(workspace.workspacePath, "aws.config.ts");
       const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
       await writeFixtureFiles({
-        statePath: statePath,
-        contextPath: contextPath,
+        statePath,
+        contextPath,
       });
       await writeAwsConfigFromState({
-        statePath: statePath,
-        contextPath: contextPath,
-        configPath: configPath,
-        typesPath: typesPath,
+        statePath,
+        contextPath,
+        configPath,
+        typesPath,
         logger: noopLogger,
         overwriteConfirmation: async () => true,
       });
@@ -70,8 +70,8 @@ test("runRegenerateCommand writes updated types when stale", async () => {
       await writeFile(typesPath, `// stale\n${previousTypes}`, "utf8");
       const result = await runRegenerateCommand({
         logger: noopLogger,
-        configPath: configPath,
-        typesPath: typesPath,
+        configPath,
+        typesPath,
         overwriteConfirmation: async () => true,
       });
       assert.equal(result.changed, true);

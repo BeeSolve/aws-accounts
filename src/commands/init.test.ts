@@ -39,10 +39,10 @@ test("runInitCommand writes context/state/config/types in sequence", async () =>
       logger: noopLogger,
       profile: "default",
       region: "eu-central-1",
-      contextPath: contextPath,
-      statePath: statePath,
-      configPath: configPath,
-      typesPath: typesPath,
+      contextPath,
+      statePath,
+      configPath,
+      typesPath,
       planConfirmation: async () => true,
       overwriteConfirmation: async () => true,
     });
@@ -87,10 +87,10 @@ test("runInitCommand aborts when bootstrap confirmation is rejected", async () =
           logger: noopLogger,
           profile: "default",
           region: "eu-central-1",
-          contextPath: contextPath,
-          statePath: statePath,
-          configPath: configPath,
-          typesPath: typesPath,
+          contextPath,
+          statePath,
+          configPath,
+          typesPath,
           planConfirmation: async () => false,
           overwriteConfirmation: async () => true,
         }),
@@ -134,8 +134,8 @@ function createOrganizationsClientMock(): OrganizationsClient {
         const name = command.input.Name ?? "";
         const id = `ou-${name.toLowerCase()}`;
         rootChildren.push({
-          id: id,
-          name: name,
+          id,
+          name,
           arn: `arn:aws:organizations:::ou/${name.toLowerCase()}`,
         });
         return {};

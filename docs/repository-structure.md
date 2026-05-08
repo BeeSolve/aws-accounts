@@ -44,6 +44,7 @@ Agreed structure for implementation, with phase 1 emphasis.
 - Bootstrap planning helpers (`aws.context.json` schema, OU analysis, conflict checks) live in **`src/commands/bootstrap.ts`** next to `runBootstrapCommand`.
 - Functions take a single `props` object argument. Do not use positional argument lists.
 - Do not destructure `props` inside functions; access fields via `props.fieldName`.
+- Prefer object-property shorthand when key and variable names are identical (for example, use `{ organizationsClient }` instead of `{ organizationsClient: organizationsClient }`).
 - Define helper types (`FooProps`, `FooResult`) immediately above the function they belong to.
 - Do not export types or functions that are only used inside the same module.
 - Group related types together. Do not create a separate type for every small shape when an inline type keeps code clearer (for example, prefer an inline `{ planLines: string[] }` for one-off callback props instead of introducing a dedicated standalone type).
@@ -61,3 +62,4 @@ Agreed structure for implementation, with phase 1 emphasis.
 - Keep shared reusable helpers in `src/` root (not under `shared/`).
 - Keep command files under `src/commands/`.
 - Keep implementation explicit and simple.
+- For fixed command-name sets, define a `const` tuple and derive the union type from it (`type CommandName = (typeof commands)[number]`), then guard unknown input with a dedicated type guard (`isCommandName(value)`). When needed, add a small assert helper around the guard for fail-fast narrowing at module boundaries.
