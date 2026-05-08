@@ -1,4 +1,5 @@
 import {
+  CreateOrganizationalUnitCommand,
   MoveAccountCommand,
   OrganizationsClient,
 } from "@aws-sdk/client-organizations";
@@ -197,9 +198,41 @@ async function applyOperation(props: {
     };
   }
   if (operation.kind === "createOu") {
-    throw new Error(
-      `Operation kind "${operation.kind}" is not executable yet in apply.`,
+    props.logger.log(
+      `Creating OU "${operation.ouName}" under ${operation.parentOuName}...`,
     );
+    const response = await props.organizationsClient.send(
+      new CreateOrganizationalUnitCommand({
+        ParentId: operation.parentOuId,
+        Name: operation.ouName,
+      }),
+    );
+    const createdOu = response.OrganizationalUnit;
+    if (
+      createdOu?.Id == null ||
+      createdOu.Arn == null ||
+      createdOu.Name == null
+    ) {
+      throw new Error(
+        `CreateOrganizationalUnit for "${operation.ouName}" returned incomplete OU data.`,
+      );
+    }
+    props.logger.log(`Done: "${createdOu.Name}"`);
+    return {
+      ...props.state,
+      organization: {
+        ...props.state.organization,
+        organizationalUnits: [
+          ...props.state.organization.organizationalUnits,
+          {
+            id: createdOu.Id,
+            parentId: operation.parentOuId,
+            arn: createdOu.Arn,
+            name: createdOu.Name,
+          },
+        ],
+      },
+    };
   }
   if (operation.kind === "renameOu") {
     throw new Error(

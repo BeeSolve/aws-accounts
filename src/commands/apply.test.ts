@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  CreateOrganizationalUnitCommand,
   CreateAccountCommand,
   DescribeCreateAccountStatusCommand,
   ListAccountsCommand,
@@ -423,6 +424,85 @@ test("runApplyCommand applies createAccount using shared helper and persists rea
   }
 });
 
+test("runApplyCommand applies createOu and persists created OU with AWS id", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.organizationalUnits.push({
+          name: "Platform",
+          parentName: "Engineering",
+          accounts: [],
+        });
+      },
+    });
+
+    let createOuCalls = 0;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        createOuResponse: {
+          OrganizationalUnit: {
+            Id: "ou-platform",
+            Arn: "arn:aws:organizations:::ou/platform",
+            Name: "Platform",
+          },
+        },
+        onCreateOu: async (input) => {
+          createOuCalls += 1;
+          assert.equal(input.ParentId, "ou-engineering");
+          assert.equal(input.Name, "Platform");
+        },
+      }),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: {
+        createAccount: {
+          timeoutInMs: 5000,
+          pollIntervalInMs: 1,
+        },
+      },
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 1);
+    assert.equal(createOuCalls, 1);
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        organizationalUnits: Array<{
+          id: string;
+          parentId: string;
+          name: string;
+        }>;
+      };
+    };
+    const createdOu = persisted.organization.organizationalUnits.find(
+      (organizationalUnit) => organizationalUnit.name === "Platform",
+    );
+    assert.equal(createdOu?.id, "ou-platform");
+    assert.equal(createdOu?.parentId, "ou-engineering");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand persists partial state on operation failure", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
@@ -541,7 +621,11 @@ function createOrganizationsClientMock(props: {
     DestinationParentId?: string;
   }) => Promise<void>;
   onCreateAccount?: (input: { AccountName?: string; Email?: string }) => Promise<void>;
+  onCreateOu?: (input: { ParentId?: string; Name?: string }) => Promise<void>;
   createAccountResponse?: { CreateAccountStatus?: { Id?: string } };
+  createOuResponse?: {
+    OrganizationalUnit?: { Id?: string; Arn?: string; Name?: string };
+  };
   describeStatuses?: Array<{
     CreateAccountStatus?: {
       Id?: string;
@@ -581,6 +665,23 @@ function createOrganizationsClientMock(props: {
           });
         }
         return props.createAccountResponse ?? { CreateAccountStatus: { Id: "car-1" } };
+      }
+      if (command instanceof CreateOrganizationalUnitCommand) {
+        if (props.onCreateOu != null) {
+          await props.onCreateOu({
+            ParentId: command.input.ParentId,
+            Name: command.input.Name,
+          });
+        }
+        return (
+          props.createOuResponse ?? {
+            OrganizationalUnit: {
+              Id: "ou-created",
+              Arn: "arn:aws:organizations:::ou/created",
+              Name: command.input.Name,
+            },
+          }
+        );
       }
       if (command instanceof DescribeCreateAccountStatusCommand) {
         const response =
