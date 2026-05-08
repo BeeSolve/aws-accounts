@@ -194,25 +194,25 @@ If Wave 3 is attempted:
 
 ### Phase 6.1: Operation model expansion (`src/operations.ts`)
 
-- [ ] Add `createOu` operation schema + inferred type.
-- [ ] Add `renameOu` operation schema + inferred type.
-- [ ] Add `createAccount` operation schema + inferred type.
+- [x] Add `createOu` operation schema + inferred type.
+- [x] Add `renameOu` operation schema + inferred type.
+- [x] Add `createAccount` operation schema + inferred type.
 - [ ] (Wave 2) Add `createIdcUser` operation schema + inferred type.
 - [ ] (Wave 2) Add `createIdcGroup` operation schema + inferred type.
 - [ ] (Wave 2) Add `createIdcPermissionSet` operation schema + inferred type.
 - [ ] (Wave 2) Add `setIdcAssignments` operation schema + inferred type.
-- [ ] Keep unsupported diff schema list aligned to remaining unsupported kinds only.
+- [x] Keep unsupported diff schema list aligned to remaining unsupported kinds only.
 - [ ] Add/extend operation schema tests for all variants.
 
 ### Phase 6.2: Diff engine (Wave 1) (`src/diff.ts`)
 
-- [ ] Emit `createOu` operation for resolvable new OU instead of `newOu` unsupported.
-- [ ] Emit `renameOu` operation for supported rename cases instead of `renamedOu` unsupported.
-- [ ] Emit `createAccount` operation instead of `newAccount` unsupported.
-- [ ] Preserve `removedOu` as destructive unsupported.
-- [ ] Preserve `removedAccount` as destructive unsupported.
-- [ ] Keep deterministic operation sorting with expanded operation kinds.
-- [ ] Update diff tests for new operation output and stable ordering.
+- [x] Emit `createOu` operation for resolvable new OU instead of `newOu` unsupported.
+- [x] Emit `renameOu` operation for supported rename cases instead of `renamedOu` unsupported.
+- [x] Emit `createAccount` operation instead of `newAccount` unsupported.
+- [x] Preserve `removedOu` as destructive unsupported.
+- [x] Preserve `removedAccount` as destructive unsupported.
+- [x] Keep deterministic operation sorting with expanded operation kinds.
+- [x] Update diff tests for new operation output and stable ordering.
 
 ### Phase 6.3: Apply executor (Wave 1) (`src/commands/apply.ts`)
 
@@ -249,7 +249,7 @@ If Wave 3 is attempted:
 
 ### Phase 6.7: Docs and policy (Wave 1)
 
-- [ ] Update `docs/phase-6-plan.md` checkboxes as implementation lands.
+- [x] Update `docs/phase-6-plan.md` checkboxes as implementation lands.
 - [ ] Update `docs/phase-5-plan.md` with superseding Phase 6 status note.
 - [ ] Update `plan.md` with new phase/checkboxes for expanded apply scope.
 - [ ] Update README supported actions for `plan/apply`.
