@@ -241,6 +241,118 @@ test("diffStates keeps OU delete unsupported when same-batch moves do not empty 
   ]);
 });
 
+test("diffStates emits nested deleteOu operations deepest first", () => {
+  const current = createBaseState();
+  addOrganizationalUnit({
+    state: current,
+    organizationalUnit: {
+      id: "ou-parent",
+      parentId: "r-root",
+      arn: "arn:ou-parent",
+      name: "Parent",
+    },
+  });
+  addOrganizationalUnit({
+    state: current,
+    organizationalUnit: {
+      id: "ou-child",
+      parentId: "ou-parent",
+      arn: "arn:ou-child",
+      name: "Child",
+    },
+  });
+  const next = cloneState(current);
+  removeOrganizationalUnit({
+    state: next,
+    organizationalUnitName: "Parent",
+  });
+  removeOrganizationalUnit({
+    state: next,
+    organizationalUnitName: "Child",
+  });
+
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "deleteOu",
+      ouId: "ou-child",
+      ouName: "Child",
+      parentOuId: "ou-parent",
+      parentOuName: "Parent",
+    },
+    {
+      kind: "deleteOu",
+      ouId: "ou-parent",
+      ouName: "Parent",
+      parentOuId: "r-root",
+      parentOuName: "root",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates keeps nested OU delete unsupported when a descendant is not safe to delete", () => {
+  const current = createBaseState();
+  addOrganizationalUnit({
+    state: current,
+    organizationalUnit: {
+      id: "ou-parent",
+      parentId: "r-root",
+      arn: "arn:ou-parent",
+      name: "Parent",
+    },
+  });
+  addOrganizationalUnit({
+    state: current,
+    organizationalUnit: {
+      id: "ou-child",
+      parentId: "ou-parent",
+      arn: "arn:ou-child",
+      name: "Child",
+    },
+  });
+  current.organization.accounts.push({
+    id: "333333333333",
+    arn: "arn:acct-app-c",
+    name: "app-c",
+    email: "app-c@example.com",
+    status: "ACTIVE",
+    parentId: "ou-child",
+  });
+  const next = cloneState(current);
+  removeOrganizationalUnit({
+    state: next,
+    organizationalUnitName: "Parent",
+  });
+  removeOrganizationalUnit({
+    state: next,
+    organizationalUnitName: "Child",
+  });
+
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, [
+    {
+      kind: "removedOu",
+      category: "destructive",
+      description: 'removed OU "Child"',
+    },
+    {
+      kind: "removedOu",
+      category: "destructive",
+      description: 'removed OU "Parent"',
+    },
+  ]);
+});
+
 test("diffStates emits createOu and renameOu operations", () => {
   const current = createBaseState();
 

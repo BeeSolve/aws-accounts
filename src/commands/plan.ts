@@ -8,6 +8,7 @@ import { assertUnreachable } from "../helpers.js";
 import { readStateFile } from "../state.js";
 import type { Plan } from "../operations.js";
 import type { Logger } from "../logger.js";
+import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 
 type PlanCommandInput = {
   logger: Logger;
@@ -39,9 +40,12 @@ export async function runPlanCommand(
     currentState: currentState,
     context: context,
   });
-  const plan = diffStates({
-    current: currentState,
-    next: nextState,
+  const plan = applyReservedOuDeletionGuard({
+    plan: diffStates({
+      current: currentState,
+      next: nextState,
+    }),
+    context: context,
   });
 
   if (props.output === "json") {

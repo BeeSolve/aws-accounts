@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { regenerateAwsConfigTypes, writeAwsConfigFromState } from "../awsConfig.js";
+import {
+  regenerateAwsConfigTypes,
+  writeAwsConfigFromState,
+} from "../awsConfig.js";
 import { createTestWorkspace } from "../helpers.test.js";
 import type { Logger } from "../logger.js";
 import { noopLogger } from "../logger.js";
@@ -37,7 +40,9 @@ test("runPlanCommand prints human-readable move operations", async () => {
           (organizationalUnit) => organizationalUnit.name === "Engineering",
         );
         if (pending == null || engineering == null) {
-          throw new Error("Expected Pending and Engineering OUs in test config.");
+          throw new Error(
+            "Expected Pending and Engineering OUs in test config.",
+          );
         }
         engineering.accounts = [...pending.accounts];
         pending.accounts = [];
@@ -120,7 +125,9 @@ test("runPlanCommand prints human-readable createOu and createAccount operations
     assert.equal(result.plan.operations.length, 2);
     assert.equal(result.plan.unsupported.length, 0);
     assert.ok(
-      logger.logs.some((line) => line.includes('create OU "Platform" under Engineering')),
+      logger.logs.some((line) =>
+        line.includes('create OU "Platform" under Engineering'),
+      ),
     );
     assert.ok(
       logger.logs.some((line) =>
@@ -230,6 +237,71 @@ test("runPlanCommand prints human-readable deleteOu operations", async () => {
       logger.logs.some((line) =>
         line.includes('delete OU "Engineering" from root'),
       ),
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runPlanCommand refuses Pending OU deletion and explains it must be manual", async () => {
+  const workspace = await createTestWorkspace({ prefix: "plan-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        // todo: why here we are using `find` and not the `organizationalUnitsByName`?
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (pending == null || engineering == null) {
+          throw new Error(
+            "Expected Pending and Engineering OUs in test config.",
+          );
+        }
+        engineering.accounts = [...engineering.accounts, ...pending.accounts];
+        config.organizationalUnits = config.organizationalUnits.filter(
+          (organizationalUnit) => organizationalUnit.name !== "Pending",
+        );
+      },
+    });
+
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
+      output: "human",
+    });
+    assert.equal(result.plan.operations.length, 1);
+    assert.equal(result.plan.unsupported.length, 1);
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes('reserved OU "Pending" cannot be deleted by this tool'),
+      ),
+    );
+    assert.ok(
+      logger.logs.some((line) => line.includes("delete it manually in AWS")),
     );
   } finally {
     await workspace.cleanup();
@@ -397,9 +469,7 @@ test("runPlanCommand prints human-readable IdC operations", async () => {
     assert.equal(result.plan.operations.length, 4);
     assert.equal(result.plan.unsupported.length, 0);
     assert.ok(
-      logger.logs.some((line) =>
-        line.includes('create IdC user "bob"'),
-      ),
+      logger.logs.some((line) => line.includes('create IdC user "bob"')),
     );
     assert.ok(
       logger.logs.some((line) => line.includes('create IdC group "Operators"')),
@@ -509,7 +579,9 @@ async function updateConfigModel(props: {
     /v\.parse\(awsConfigSchema,\s*([\s\S]*?)\s*satisfies AwsConfig\);/,
   );
   if (matched == null || matched[1] == null) {
-    throw new Error("Could not extract awsConfig JSON payload from aws.config.ts.");
+    throw new Error(
+      "Could not extract awsConfig JSON payload from aws.config.ts.",
+    );
   }
   const parsedConfig = JSON.parse(matched[1]) as {
     organizationalUnits: Array<{

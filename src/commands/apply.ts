@@ -29,6 +29,7 @@ import {
 import { diffStates } from "../diff.js";
 import { assertUnreachable } from "../helpers.js";
 import type { Operation, Plan } from "../operations.js";
+import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 import {
   addAccountAssignmentToWorkingState,
   createWorkingState,
@@ -99,9 +100,12 @@ export async function runApplyCommand(
     currentState: currentState,
     context: context,
   });
-  const plan = diffStates({
-    current: currentState,
-    next: nextState,
+  const plan = applyReservedOuDeletionGuard({
+    plan: diffStates({
+      current: currentState,
+      next: nextState,
+    }),
+    context: context,
   });
 
   const destructiveUnsupported = plan.unsupported.filter(
@@ -114,8 +118,11 @@ export async function runApplyCommand(
         `  - ${unsupportedDiff.description} [${unsupportedDiff.category}]`,
       );
     }
+    const destructiveDescriptions = destructiveUnsupported
+      .map((unsupportedDiff) => unsupportedDiff.description)
+      .join("; ");
     throw new Error(
-      "Apply refused: destructive unsupported diffs are not supported.",
+      `Apply refused: destructive unsupported diffs are not supported. ${destructiveDescriptions}`,
     );
   }
 

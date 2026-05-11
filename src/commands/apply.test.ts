@@ -27,7 +27,10 @@ import {
   UpdateOrganizationalUnitCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
-import { regenerateAwsConfigTypes, writeAwsConfigFromState } from "../awsConfig.js";
+import {
+  regenerateAwsConfigTypes,
+  writeAwsConfigFromState,
+} from "../awsConfig.js";
 import { createTestWorkspace } from "../helpers.test.js";
 import { noopLogger } from "../logger.js";
 import { runApplyCommand } from "./apply.js";
@@ -677,6 +680,71 @@ test("runApplyCommand refuses destructive deleteOu operations without flag", asy
   }
 });
 
+test("runApplyCommand refuses Pending OU deletion and explains it must be manual", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        // todo: why here we are using `find` and not the `organizationalUnitsByName`?
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (pending == null || engineering == null) {
+          throw new Error("Expected Pending and Engineering OUs.");
+        }
+        engineering.accounts = [...engineering.accounts, ...pending.accounts];
+        config.organizationalUnits = config.organizationalUnits.filter(
+          (organizationalUnit) => organizationalUnit.name !== "Pending",
+        );
+      },
+    });
+
+    let deleteCalls = 0;
+    await assert.rejects(
+      () =>
+        runApplyCommand({
+          organizationsClient: createOrganizationsClientMock({
+            onDeleteOu: async () => {
+              deleteCalls += 1;
+            },
+          }),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
+          logger: noopLogger,
+          configPath: paths.configPath,
+          typesPath: paths.typesPath,
+          statePath: paths.statePath,
+          contextPath: paths.contextPath,
+          runtime: createApplyRuntime(),
+          allowDestructive: true,
+          ignoreUnsupported: false,
+          planConfirmation: async () => true,
+        }),
+      /delete it manually in AWS/,
+    );
+    assert.equal(deleteCalls, 0);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand deletes empty leaf OU with allowDestructive and persists state", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
@@ -777,7 +845,11 @@ test("runApplyCommand moves the last account out and deletes the OU in the same 
       throw new Error("Expected AppAccount.");
     }
     appAccount.parentId = "ou-legacy";
-    await writeFile(paths.statePath, `${JSON.stringify(rawState, null, 2)}\n`, "utf8");
+    await writeFile(
+      paths.statePath,
+      `${JSON.stringify(rawState, null, 2)}\n`,
+      "utf8",
+    );
     await writeAwsConfigFromState({
       statePath: paths.statePath,
       contextPath: paths.contextPath,
@@ -844,9 +916,105 @@ test("runApplyCommand moves the last account out and deletes the OU in the same 
       false,
     );
     assert.equal(
-      persisted.organization.accounts.find((account) => account.id === "111111111111")
-        ?.parentId,
+      persisted.organization.accounts.find(
+        (account) => account.id === "111111111111",
+      )?.parentId,
       "ou-engineering",
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand deletes nested OUs deepest first", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    const rawState = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        organizationalUnits: Array<{
+          id: string;
+          parentId: string;
+          arn: string;
+          name: string;
+        }>;
+      };
+    };
+    rawState.organization.organizationalUnits.push({
+      id: "ou-parent",
+      parentId: "r-root",
+      arn: "arn:aws:organizations:::ou/parent",
+      name: "Parent",
+    });
+    rawState.organization.organizationalUnits.push({
+      id: "ou-child",
+      parentId: "ou-parent",
+      arn: "arn:aws:organizations:::ou/child",
+      name: "Child",
+    });
+    await writeFile(
+      paths.statePath,
+      `${JSON.stringify(rawState, null, 2)}\n`,
+      "utf8",
+    );
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.organizationalUnits = config.organizationalUnits.filter(
+          (organizationalUnit) =>
+            organizationalUnit.name !== "Parent" &&
+            organizationalUnit.name !== "Child",
+        );
+      },
+    });
+
+    const callOrder: string[] = [];
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        onDeleteOu: async (input) => {
+          callOrder.push(`delete:${input.OrganizationalUnitId}`);
+        },
+      }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      allowDestructive: true,
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 2);
+    assert.deepEqual(callOrder, ["delete:ou-child", "delete:ou-parent"]);
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        organizationalUnits: Array<{ id: string }>;
+      };
+    };
+    assert.equal(
+      persisted.organization.organizationalUnits.some(
+        (organizationalUnit) =>
+          organizationalUnit.id === "ou-child" ||
+          organizationalUnit.id === "ou-parent",
+      ),
+      false,
     );
   } finally {
     await workspace.cleanup();
@@ -947,7 +1115,9 @@ test("runApplyCommand persists partial state on operation failure", async () => 
         }
         engineering.accounts = [
           ...engineering.accounts,
-          ...pending.accounts.filter((account) => account.name === "AppAccount"),
+          ...pending.accounts.filter(
+            (account) => account.name === "AppAccount",
+          ),
         ];
         pending.accounts = pending.accounts.filter(
           (account) => account.name !== "AppAccount",
@@ -961,7 +1131,9 @@ test("runApplyCommand persists partial state on operation failure", async () => 
         }
         graveyard.accounts = [
           ...graveyard.accounts,
-          ...pending.accounts.filter((account) => account.name === "DataAccount"),
+          ...pending.accounts.filter(
+            (account) => account.name === "DataAccount",
+          ),
         ];
         pending.accounts = pending.accounts.filter(
           (account) => account.name !== "DataAccount",
@@ -1055,7 +1227,9 @@ test("runApplyCommand persists mixed successful operations before later failure"
         ];
         graveyard.accounts = [
           ...graveyard.accounts,
-          ...pending.accounts.filter((account) => account.name === "AppAccount"),
+          ...pending.accounts.filter(
+            (account) => account.name === "AppAccount",
+          ),
         ];
         pending.accounts = pending.accounts.filter(
           (account) => account.name !== "AppAccount",
@@ -1265,7 +1439,8 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
     );
     assert.equal(
       persisted.identityCenter.groups.some(
-        (group) => group.groupId === "g-ops" && group.displayName === "Operators",
+        (group) =>
+          group.groupId === "g-ops" && group.displayName === "Operators",
       ),
       true,
     );
@@ -1427,7 +1602,8 @@ test("runApplyCommand resolves mixed dependency batches from working state", asy
     };
     assert.equal(
       persisted.organization.accounts.some(
-        (account) => account.id === "555555555555" && account.name === "BrandNew",
+        (account) =>
+          account.id === "555555555555" && account.name === "BrandNew",
       ),
       true,
     );
@@ -1496,10 +1672,13 @@ test("runApplyCommand revokes IdC assignments and persists state", async () => {
       permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
       principalId: "g-123",
       principalType: "GROUP",
-      roleName:
-        "AWSReservedSSO_ps-1_111111111111",
+      roleName: "AWSReservedSSO_ps-1_111111111111",
     });
-    await writeFile(paths.statePath, `${JSON.stringify(rawState, null, 2)}\n`, "utf8");
+    await writeFile(
+      paths.statePath,
+      `${JSON.stringify(rawState, null, 2)}\n`,
+      "utf8",
+    );
     await writeAwsConfigFromState({
       statePath: paths.statePath,
       contextPath: paths.contextPath,
@@ -1688,7 +1867,10 @@ function createOrganizationsClientMock(props: {
     SourceParentId?: string;
     DestinationParentId?: string;
   }) => Promise<void>;
-  onCreateAccount?: (input: { AccountName?: string; Email?: string }) => Promise<void>;
+  onCreateAccount?: (input: {
+    AccountName?: string;
+    Email?: string;
+  }) => Promise<void>;
   onCreateOu?: (input: { ParentId?: string; Name?: string }) => Promise<void>;
   onDeleteOu?: (input: { OrganizationalUnitId?: string }) => Promise<void>;
   onRenameOu?: (input: {
@@ -1739,7 +1921,9 @@ function createOrganizationsClientMock(props: {
     { Accounts: [] },
   ];
   const listOrganizationalUnitsForParentPages =
-    props.listOrganizationalUnitsForParentPages ?? [{ OrganizationalUnits: [] }];
+    props.listOrganizationalUnitsForParentPages ?? [
+      { OrganizationalUnits: [] },
+    ];
   let describeIndex = 0;
   let listIndex = 0;
   let listAccountsForParentIndex = 0;
@@ -1781,7 +1965,11 @@ function createOrganizationsClientMock(props: {
             Email: command.input.Email,
           });
         }
-        return props.createAccountResponse ?? { CreateAccountStatus: { Id: "car-1" } };
+        return (
+          props.createAccountResponse ?? {
+            CreateAccountStatus: { Id: "car-1" },
+          }
+        );
       }
       if (command instanceof CreateOrganizationalUnitCommand) {
         if (props.onCreateOu != null) {
@@ -1818,14 +2006,14 @@ function createOrganizationsClientMock(props: {
         return {};
       }
       if (command instanceof DescribeCreateAccountStatusCommand) {
-        const response =
-          describeStatuses[Math.min(describeIndex, describeStatuses.length - 1)] ??
-          {
-            CreateAccountStatus: {
-              Id: command.input.CreateAccountRequestId,
-              State: "IN_PROGRESS",
-            },
-          };
+        const response = describeStatuses[
+          Math.min(describeIndex, describeStatuses.length - 1)
+        ] ?? {
+          CreateAccountStatus: {
+            Id: command.input.CreateAccountRequestId,
+            State: "IN_PROGRESS",
+          },
+        };
         describeIndex += 1;
         return response;
       }
@@ -1870,10 +2058,12 @@ function createIdentityStoreClientMock(props: {
             })),
           });
         }
-        return props.createUserResponse ?? {
-          UserId: "u-created",
-          IdentityStoreId: command.input.IdentityStoreId,
-        };
+        return (
+          props.createUserResponse ?? {
+            UserId: "u-created",
+            IdentityStoreId: command.input.IdentityStoreId,
+          }
+        );
       }
       if (command instanceof CreateGroupCommand) {
         if (props.onCreateGroup != null) {
@@ -1882,9 +2072,11 @@ function createIdentityStoreClientMock(props: {
             DisplayName: command.input.DisplayName,
           });
         }
-        return props.createGroupResponse ?? {
-          GroupId: "g-created",
-        };
+        return (
+          props.createGroupResponse ?? {
+            GroupId: "g-created",
+          }
+        );
       }
       throw new Error("Unexpected Identity Store command in test.");
     },
@@ -1978,11 +2170,13 @@ function createSsoAdminClientMock(props: {
             PrincipalId: command.input.PrincipalId,
           });
         }
-        return props.createAccountAssignmentResponse ?? {
-          AccountAssignmentCreationStatus: {
-            RequestId: "caa-1",
-          },
-        };
+        return (
+          props.createAccountAssignmentResponse ?? {
+            AccountAssignmentCreationStatus: {
+              RequestId: "caa-1",
+            },
+          }
+        );
       }
       if (command instanceof DeleteAccountAssignmentCommand) {
         if (props.onDeleteAccountAssignment != null) {
@@ -1995,35 +2189,35 @@ function createSsoAdminClientMock(props: {
             PrincipalId: command.input.PrincipalId,
           });
         }
-        return props.deleteAccountAssignmentResponse ?? {
-          AccountAssignmentDeletionStatus: {
-            RequestId: "daa-1",
-          },
-        };
+        return (
+          props.deleteAccountAssignmentResponse ?? {
+            AccountAssignmentDeletionStatus: {
+              RequestId: "daa-1",
+            },
+          }
+        );
       }
       if (command instanceof DescribeAccountAssignmentCreationStatusCommand) {
-        const response =
-          creationStatuses[
-            Math.min(creationIndex, creationStatuses.length - 1)
-          ] ?? {
-            AccountAssignmentCreationStatus: {
-              Status: "SUCCEEDED",
-              RequestId: command.input.AccountAssignmentCreationRequestId,
-            },
-          };
+        const response = creationStatuses[
+          Math.min(creationIndex, creationStatuses.length - 1)
+        ] ?? {
+          AccountAssignmentCreationStatus: {
+            Status: "SUCCEEDED",
+            RequestId: command.input.AccountAssignmentCreationRequestId,
+          },
+        };
         creationIndex += 1;
         return response;
       }
       if (command instanceof DescribeAccountAssignmentDeletionStatusCommand) {
-        const response =
-          deletionStatuses[
-            Math.min(deletionIndex, deletionStatuses.length - 1)
-          ] ?? {
-            AccountAssignmentDeletionStatus: {
-              Status: "SUCCEEDED",
-              RequestId: command.input.AccountAssignmentDeletionRequestId,
-            },
-          };
+        const response = deletionStatuses[
+          Math.min(deletionIndex, deletionStatuses.length - 1)
+        ] ?? {
+          AccountAssignmentDeletionStatus: {
+            Status: "SUCCEEDED",
+            RequestId: command.input.AccountAssignmentDeletionRequestId,
+          },
+        };
         deletionIndex += 1;
         return response;
       }
@@ -2057,7 +2251,9 @@ async function updateConfigModel(props: {
     /v\.parse\(awsConfigSchema,\s*([\s\S]*?)\s*satisfies AwsConfig\);/,
   );
   if (matched == null || matched[1] == null) {
-    throw new Error("Could not extract awsConfig JSON payload from aws.config.ts.");
+    throw new Error(
+      "Could not extract awsConfig JSON payload from aws.config.ts.",
+    );
   }
   const parsedConfig = JSON.parse(matched[1]) as {
     organizationalUnits: Array<{

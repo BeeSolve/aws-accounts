@@ -5,9 +5,9 @@ This document covers the remaining OU deletion work after the current safe miles
 ## Implemented now
 
 - `plan` can emit `deleteOu` for an OU removed from config only when that OU is:
-  - a leaf in the current scanned state,
+  - part of a removed subtree where every current child OU is also safely deletable,
   - either empty in the current scanned state or fully emptied by same-batch direct account moves,
-  - not part of a nested multi-OU delete.
+  - ordered deepest-first for nested deletes.
 - `apply` requires `--allow-destructive` for that operation.
 - `apply` re-checks live AWS state before delete and refuses if the OU still contains:
   - any child OU,
@@ -15,37 +15,13 @@ This document covers the remaining OU deletion work after the current safe miles
 
 ## Remaining work
 
-### 1. Nested OU deletion
+### 1. Reserved OU policy
 
-Goal:
-- allow deleting parent/child OU trees when every OU in the removed subtree is empty and safe to delete.
+Decided:
+- `Pending` and `Graveyard` must not be deleted by this tool.
+- If config removal would imply deleting either reserved OU, `plan` / `apply` must fail and explain that deletion has to be done manually in AWS.
 
-Required changes:
-- replace the current nested-delete refusal with subtree analysis,
-- order `deleteOu` deepest-first,
-- reject mixed cases where some descendants are safe and others are not,
-- keep same live emptiness preflight on every OU before deletion.
-
-Tests:
-- delete child then parent,
-- deeper multi-level delete ordering,
-- refuse when any descendant still has accounts,
-- refuse when only part of the subtree is removed.
-
-### 2. Reserved OU policy
-
-Goal:
-- decide whether `Pending` and `Graveyard` should ever be deletable.
-
-Options:
-- allow when empty, same as any other OU,
-- block permanently in diff,
-- require a second explicit opt-in.
-
-Recommended default:
-- block them unless there is a strong product reason to allow deletion.
-
-### 3. UX improvements
+### 2. UX improvements
 
 Potential improvements:
 - mark destructive operations explicitly in human `plan` output,
@@ -53,7 +29,7 @@ Potential improvements:
 - print the live preflight reason in a more structured way,
 - add a dedicated JSON field later if plan consumers need to separate supported destructive operations from safe mutations.
 
-### 4. Documentation cleanup
+### 3. Documentation cleanup
 
 After the next deletion increment:
 - update README examples with a concrete destructive apply example,
