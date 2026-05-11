@@ -51,6 +51,23 @@ Implement:
 - `idcPermissionSetAdded`
 - `idcAssignmentChanged`
 
+Detailed broader Wave 2 plan lives in `docs/phase-6-wave-2-idc-plan.md`.
+
+Locked Wave 2 direction:
+
+- broad scope includes user/group/permission-set creation plus assignment grants
+  and revokes
+- assignment reconciliation uses granular operations, not a bulk
+  `setIdcAssignments`
+- IdC diffing uses a name-based normalized comparison layer rather than relying
+  only on mapped sentinelized tuples
+- derivative assignment revokes caused solely by unsupported IdC entity removal
+  are suppressed
+- operation order is fixed by planning-time priority; apply executes the
+  pre-sorted plan as-is
+- apply keeps the Wave 1 sequential/partial-failure contract, with assignment
+  grant/revoke success gated on terminal polling success
+
 Keep unsupported/destructive:
 
 - `removedOu`
@@ -258,7 +275,8 @@ If Wave 3 is attempted:
 ### Phase 6.8: Wave 2 (IdC) readiness decision gate
 
 - [ ] Decide go/no-go for Wave 2 immediately after Wave 1 stabilization.
-- [ ] If go: lock exact IdC mutation scope for first IdC increment.
+- [x] If go: lock exact IdC mutation scope for first IdC increment.
+- [x] If go: lock Wave 2 apply contract and polling behavior.
 - [ ] If go: add operation schemas and diff emission for IdC additions/assignment changes.
 - [ ] If go: implement apply execution + state mutation for IdC operations.
 - [ ] If go: add full IdC test matrix (diff, plan, apply, partial failure).
