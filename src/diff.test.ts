@@ -173,6 +173,28 @@ test("diffStates emits createOu and renameOu operations", () => {
   assert.deepEqual(renamePlan.unsupported, []);
 });
 
+test("diffStates reports OU reparent as unsupported mutation", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  setOrganizationalUnitParentId({
+    state: next,
+    organizationalUnitName: "Data",
+    parentId: "ou-eng",
+  });
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, [
+    {
+      kind: "reparentedOu",
+      category: "unsupportedMutation",
+      description: 'OU "Data" changed parent from "root" to "Engineering"',
+    },
+  ]);
+});
+
 test("diffStates reports ambiguous OU rename aggregated per parent", () => {
   const current = createBaseState();
   const next = cloneState(current);
@@ -442,6 +464,23 @@ function addOrganizationalUnit(props: {
   organizationalUnit: StateFile["organization"]["organizationalUnits"][number];
 }): void {
   props.state.organization.organizationalUnits.push(props.organizationalUnit);
+}
+
+function setOrganizationalUnitParentId(props: {
+  state: StateFile;
+  organizationalUnitName: string;
+  parentId: string;
+}): void {
+  const organizationalUnit = props.state.organization.organizationalUnits.find(
+    (currentOrganizationalUnit) =>
+      currentOrganizationalUnit.name === props.organizationalUnitName,
+  );
+  if (organizationalUnit == null) {
+    throw new Error(
+      `Could not find OU "${props.organizationalUnitName}" in test state.`,
+    );
+  }
+  organizationalUnit.parentId = props.parentId;
 }
 
 function removeOrganizationalUnit(props: {

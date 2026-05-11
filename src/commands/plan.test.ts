@@ -187,6 +187,61 @@ test("runPlanCommand prints human-readable renameOu operations", async () => {
   }
 });
 
+test("runPlanCommand reports OU reparent as unsupported mutation", async () => {
+  const workspace = await createTestWorkspace({ prefix: "plan-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (engineering == null) {
+          throw new Error("Expected Engineering OU in test config.");
+        }
+        engineering.parentName = "Pending";
+      },
+    });
+
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
+      output: "human",
+    });
+    assert.equal(result.plan.operations.length, 0);
+    assert.equal(result.plan.unsupported.length, 1);
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes(
+          'OU "Engineering" changed parent from "root" to "Pending" [unsupportedMutation]',
+        ),
+      ),
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runPlanCommand prints machine-readable JSON with --json output", async () => {
   const workspace = await createTestWorkspace({ prefix: "plan-test-" });
   try {

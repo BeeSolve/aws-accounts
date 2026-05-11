@@ -125,6 +125,33 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
+  for (const nextOrganizationalUnit of props.next.organization.organizationalUnits) {
+    const currentOrganizationalUnit = currentOrganizationalUnitByName.get(
+      nextOrganizationalUnit.name,
+    );
+    if (currentOrganizationalUnit == null) {
+      continue;
+    }
+    if (currentOrganizationalUnit.parentId === nextOrganizationalUnit.parentId) {
+      continue;
+    }
+    const fromParentOuName = resolveOrganizationalUnitName({
+      organizationalUnitNameById: currentOrganizationalUnitNameById,
+      rootId: props.current.organization.rootId,
+      organizationalUnitId: currentOrganizationalUnit.parentId,
+    });
+    const toParentOuName = resolveOrganizationalUnitName({
+      organizationalUnitNameById: nextOrganizationalUnitNameById,
+      rootId: props.next.organization.rootId,
+      organizationalUnitId: nextOrganizationalUnit.parentId,
+    });
+    unsupported.push({
+      kind: "reparentedOu",
+      category: "unsupportedMutation",
+      description: `OU "${nextOrganizationalUnit.name}" changed parent from "${fromParentOuName}" to "${toParentOuName}"`,
+    });
+  }
+
   const addedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] = [];
   const removedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] = [];
   for (const nextOrganizationalUnit of props.next.organization.organizationalUnits) {

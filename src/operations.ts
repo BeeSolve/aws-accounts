@@ -43,6 +43,7 @@ export const operationSchema = v.variant("kind", [
 
 const unsupportedDiffKindSchema = v.picklist([
   "ambiguousOuRename",
+  "reparentedOu",
   "newOuWithUnknownParent",
   "newAccountWithUnknownOu",
   "removedOu",
