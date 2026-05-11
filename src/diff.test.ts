@@ -156,8 +156,55 @@ test("diffStates emits deleteOu for removed empty leaf OU", () => {
   assert.deepEqual(plan.unsupported, []);
 });
 
-test("diffStates keeps OU delete unsupported when it is only emptied in the same batch", () => {
+test("diffStates emits moveAccount and deleteOu when the last account leaves in the same batch", () => {
   const current = createBaseState();
+  const next = cloneState(current);
+  setAccountParentId({
+    state: next,
+    accountName: "app-a",
+    parentId: "ou-data",
+  });
+  removeOrganizationalUnit({
+    state: next,
+    organizationalUnitName: "Engineering",
+  });
+
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "moveAccount",
+      accountId: "111111111111",
+      accountName: "app-a",
+      fromOuId: "ou-eng",
+      fromOuName: "Engineering",
+      toOuId: "ou-data",
+      toOuName: "Data",
+    },
+    {
+      kind: "deleteOu",
+      ouId: "ou-eng",
+      ouName: "Engineering",
+      parentOuId: "r-root",
+      parentOuName: "root",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates keeps OU delete unsupported when same-batch moves do not empty it completely", () => {
+  const current = createBaseState();
+  current.organization.accounts.push({
+    id: "333333333333",
+    arn: "arn:acct-app-c",
+    name: "app-c",
+    email: "app-c@example.com",
+    status: "ACTIVE",
+    parentId: "ou-eng",
+  });
   const next = cloneState(current);
   setAccountParentId({
     state: next,

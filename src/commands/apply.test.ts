@@ -741,6 +741,118 @@ test("runApplyCommand deletes empty leaf OU with allowDestructive and persists s
   }
 });
 
+test("runApplyCommand moves the last account out and deletes the OU in the same batch", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    const rawState = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        organizationalUnits: Array<{
+          id: string;
+          parentId: string;
+          arn: string;
+          name: string;
+        }>;
+        accounts: Array<{
+          id: string;
+          name: string;
+          parentId: string;
+        }>;
+      };
+    };
+    rawState.organization.organizationalUnits.push({
+      id: "ou-legacy",
+      parentId: "r-root",
+      arn: "arn:aws:organizations:::ou/legacy",
+      name: "Legacy",
+    });
+    const appAccount = rawState.organization.accounts.find(
+      (account) => account.name === "AppAccount",
+    );
+    if (appAccount == null) {
+      throw new Error("Expected AppAccount.");
+    }
+    appAccount.parentId = "ou-legacy";
+    await writeFile(paths.statePath, `${JSON.stringify(rawState, null, 2)}\n`, "utf8");
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const legacy = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Legacy",
+        );
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (legacy == null || engineering == null) {
+          throw new Error("Expected Legacy and Engineering OUs.");
+        }
+        engineering.accounts = [...engineering.accounts, ...legacy.accounts];
+        config.organizationalUnits = config.organizationalUnits.filter(
+          (organizationalUnit) => organizationalUnit.name !== "Legacy",
+        );
+      },
+    });
+
+    const callOrder: string[] = [];
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        onMoveAccount: async (input) => {
+          callOrder.push(`move:${input.AccountId}`);
+        },
+        onDeleteOu: async (input) => {
+          callOrder.push(`delete:${input.OrganizationalUnitId}`);
+        },
+      }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      allowDestructive: true,
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 2);
+    assert.deepEqual(callOrder, ["move:111111111111", "delete:ou-legacy"]);
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        organizationalUnits: Array<{ id: string }>;
+        accounts: Array<{ id: string; parentId: string }>;
+      };
+    };
+    assert.equal(
+      persisted.organization.organizationalUnits.some(
+        (organizationalUnit) => organizationalUnit.id === "ou-legacy",
+      ),
+      false,
+    );
+    assert.equal(
+      persisted.organization.accounts.find((account) => account.id === "111111111111")
+        ?.parentId,
+      "ou-engineering",
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand refuses deleteOu when live AWS still has child accounts", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {

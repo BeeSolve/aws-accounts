@@ -29,7 +29,7 @@ The tool's lifecycle has three phases:
 - move account between known OUs
 - create OU under a known parent OU
 - rename OU when the diff resolves to a strict one-to-one same-parent rename
-- delete an empty leaf OU with `apply --allow-destructive`
+- delete an OU with `apply --allow-destructive` when it is a leaf and is either already empty or becomes empty via same-batch account moves
 - create account in a known target OU
 
 `plan` and `apply` also support these IAM Identity Center mutations:
@@ -45,7 +45,6 @@ Still out of scope in the current increment:
 - account removals
 - deleting an OU that still has child OUs or accounts
 - deleting nested OUs in one batch
-- deleting an OU that is only emptied by same-batch account moves
 - removing IAM Identity Center users, groups, or permission sets
 - editing IAM Identity Center user metadata after creation
 - editing IAM Identity Center permission set metadata after creation

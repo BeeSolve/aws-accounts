@@ -218,6 +218,9 @@ export function diffStates(props: DiffStatesProps): Plan {
   const removedByParentId = groupOrganizationalUnitsByParentId({
     organizationalUnits: removedOrganizationalUnits,
   });
+  const plannedMoveAccountDeparturesByOuId = countMoveAccountDeparturesByOuId({
+    operations: operations,
+  });
   const removedOrganizationalUnitIds = new Set(
     removedOrganizationalUnits.map((organizationalUnit) => organizationalUnit.id),
   );
@@ -324,13 +327,14 @@ export function diffStates(props: DiffStatesProps): Plan {
       (currentOrganizationalUnitChildrenByParentId.get(
         removedOrganizationalUnit.id,
       ) ?? 0) > 0;
-    const hasCurrentAccounts =
-      (currentAccountsByParentId.get(removedOrganizationalUnit.id) ?? 0) > 0;
+    const projectedRemainingAccounts =
+      (currentAccountsByParentId.get(removedOrganizationalUnit.id) ?? 0) -
+      (plannedMoveAccountDeparturesByOuId.get(removedOrganizationalUnit.id) ?? 0);
     const isNestedDeletion =
       removedOrganizationalUnitIds.has(removedOrganizationalUnit.parentId);
     if (
       hasCurrentChildOrganizationalUnits === false &&
-      hasCurrentAccounts === false &&
+      projectedRemainingAccounts === 0 &&
       isNestedDeletion === false
     ) {
       const parentOuName = resolveOrganizationalUnitName({
@@ -530,6 +534,22 @@ function countChildrenByParentId(props: {
   const counts = new Map<string, number>();
   for (const value of props.values) {
     counts.set(value.parentId, (counts.get(value.parentId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function countMoveAccountDeparturesByOuId(props: {
+  operations: Operation[];
+}): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const operation of props.operations) {
+    if (operation.kind !== "moveAccount") {
+      continue;
+    }
+    counts.set(
+      operation.fromOuId,
+      (counts.get(operation.fromOuId) ?? 0) + 1,
+    );
   }
   return counts;
 }
