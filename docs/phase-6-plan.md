@@ -67,6 +67,12 @@ Locked Wave 2 direction:
   pre-sorted plan as-is
 - apply keeps the Wave 1 sequential/partial-failure contract, with assignment
   grant/revoke success gated on terminal polling success
+- initial permission-set create + assign does not require explicit
+  `ProvisionPermissionSet`; that becomes relevant only for future permission-set
+  update support
+- IdC operation payloads stay minimal and name-based; assignment operations use
+  `principalType` + `principalName`, and resolved ids / arns stay out of the
+  public operation schema
 
 Keep unsupported/destructive:
 

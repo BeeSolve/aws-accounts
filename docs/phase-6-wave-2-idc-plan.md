@@ -348,9 +348,6 @@ Locked Step 4 decisions:
 
 - call `CreatePermissionSet`
 - success requires a real returned `permissionSetArn`
-- if AWS requires explicit provisioning before assignment grants can work
-  reliably, that provisioning is part of this same logical operation and must
-  succeed before the operation is considered complete
 - only then update working state as a fully usable permission set
 
 `grantIdcAccountAssignment`
@@ -399,17 +396,91 @@ for example:
 - create user -> grant assignment to the new user
 - create permission set -> grant assignment using the new permission set arn
 
-## Open sequencing choice
+## Locked AWS behavior for permission set creation
 
-For `createIdcPermissionSet`, the code should assume the minimum viable support
-matches the current config model:
+AWS documentation confirms this Wave 2 behavior:
+
+- for an initial create-and-assign flow, `CreatePermissionSet` can be followed
+  directly by `CreateAccountAssignment`
+- `CreateAccountAssignment` performs the provisioning needed for that initial
+  assignment flow
+- explicit `ProvisionPermissionSet` is **not** required before the first account
+  assignment
+
+So for this increment, `createIdcPermissionSet` should assume the minimum viable
+support matches the current config model:
 
 - create the permission set with `name` + `description`
 - do not yet reconcile inline policy, managed policies, or permission boundary
 
-Implementation must verify whether AWS requires explicit provisioning before
-assignment creation becomes reliable. If so, provisioning becomes part of
-`createIdcPermissionSet` before downstream assignment grants run.
+`ProvisionPermissionSet` becomes relevant later only if we add support for
+updating existing permission sets and need to push those updates out to already
+provisioned accounts.
+
+## Locked operation payload shapes
+
+Wave 2 operation payloads should stay minimal, name-based, and execution
+oriented.
+
+Locked shapes:
+
+- `createIdcUser`
+  - `userName`
+  - `displayName`
+  - `emails`
+- `createIdcGroup`
+  - `groupDisplayName`
+- `createIdcPermissionSet`
+  - `permissionSetName`
+  - `description`
+- `grantIdcAccountAssignment`
+  - `accountName`
+  - `permissionSetName`
+  - `principalType`
+  - `principalName`
+- `revokeIdcAccountAssignment`
+  - `accountName`
+  - `permissionSetName`
+  - `principalType`
+  - `principalName`
+
+### Payload-shape rules
+
+1. Assignment operations use the normalized pair:
+   - `principalType`
+   - `principalName`
+
+   rather than separate optional `group` / `user` fields.
+
+2. Operation schemas do **not** carry resolved execution identifiers such as:
+   - `accountId`
+   - `principalId`
+   - `permissionSetArn`
+
+   Those values are resolved during apply from the current working state.
+
+3. Operation schemas do **not** expose planning metadata such as `priority`.
+   Priority remains an internal planning concern used only for operation sorting.
+
+4. Payloads should stay aligned with the current config model rather than
+   mirroring raw AWS SDK input types directly.
+
+### Consequence for unsupported diff kinds
+
+Once Wave 2 additions and assignment reconciliation are implemented, the old
+coarse IdC unsupported kinds are no longer correct:
+
+- `idcUserAdded`
+- `idcGroupAdded`
+- `idcPermissionSetAdded`
+- `idcAssignmentChanged`
+
+Remaining IdC unsupported kinds should instead describe only the still
+out-of-scope removals:
+
+- `idcUserRemoved`
+- `idcGroupRemoved`
+- `idcPermissionSetRemoved`
 
 ## CLI and runtime changes
 
@@ -508,6 +579,8 @@ After implementation, run these real scenarios:
 - [x] Lock name-based IdC diff strategy and derivative-revoke suppression rules.
 - [x] Lock WorkingState IdC index strategy and apply-time resolution rules.
 - [x] Lock apply execution contract, polling rules, and mixed dependency behavior.
+- [x] Lock AWS create-permission-set vs provision-permission-set behavior for initial assignment flows.
+- [x] Lock IdC operation payload shapes and unsupported-kind cleanup.
 - [ ] Add IdC operation schemas and tests.
 - [ ] Implement granular IdC diff emission.
 - [ ] Extend working state for IdC entities and assignments.
