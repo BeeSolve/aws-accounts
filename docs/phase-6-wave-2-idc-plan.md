@@ -182,7 +182,7 @@ name-based set differences:
 - removed group
 - removed permission set
 
-Those should stay as non-destructive unsupported diffs until we explicitly plan
+Those should stay as destructive unsupported diffs until we explicitly plan
 entity deletion behavior.
 
 ### Suppression rule for downstream assignment noise
@@ -327,8 +327,9 @@ Locked Step 4 decisions:
    successful until status polling reaches terminal success.
 4. Polling timeout is treated as an operation failure.
 5. Mixed Organizations + IdC dependency batches are supported in one apply run.
-6. `createIdcPermissionSet` must verify whether provisioning is required before
-   downstream assignment grants can succeed reliably.
+6. `createIdcPermissionSet` should assume the initial create-and-assign flow can
+   proceed without an explicit provisioning step before the first downstream
+   assignment grant.
 
 ### Per-operation success model
 
@@ -427,7 +428,7 @@ Locked shapes:
 - `createIdcUser`
   - `userName`
   - `displayName`
-  - `emails`
+  - `email`
 - `createIdcGroup`
   - `groupDisplayName`
 - `createIdcPermissionSet`
@@ -464,6 +465,9 @@ Locked shapes:
 
 4. Payloads should stay aligned with the current config model rather than
    mirroring raw AWS SDK input types directly.
+
+5. `createIdcUser` uses a single config/state `email` field. Apply expands that
+   to the AWS `Emails` array shape only at the `CreateUser` call site.
 
 ### Consequence for unsupported diff kinds
 
@@ -552,6 +556,8 @@ only after the exact command usage is confirmed in code.
 
 ## Manual smoke tests
 
+Completed during implementation validation:
+
 After implementation, run these real scenarios:
 
 1. Add a new user and grant an existing permission set on an existing account.
@@ -581,11 +587,11 @@ After implementation, run these real scenarios:
 - [x] Lock apply execution contract, polling rules, and mixed dependency behavior.
 - [x] Lock AWS create-permission-set vs provision-permission-set behavior for initial assignment flows.
 - [x] Lock IdC operation payload shapes and unsupported-kind cleanup.
-- [ ] Add IdC operation schemas and tests.
-- [ ] Implement granular IdC diff emission.
-- [ ] Extend working state for IdC entities and assignments.
-- [ ] Implement IdC apply execution with status polling.
-- [ ] Update plan/apply output and CLI runtime wiring.
-- [ ] Update README supported actions and IAM permissions.
-- [ ] Add regression coverage for mixed success / failure and dependency batches.
-- [ ] Define and run manual smoke tests.
+- [x] Add IdC operation schemas and tests.
+- [x] Implement granular IdC diff emission.
+- [x] Extend working state for IdC entities and assignments.
+- [x] Implement IdC apply execution with status polling.
+- [x] Update plan/apply output and CLI runtime wiring.
+- [x] Update README supported actions and IAM permissions.
+- [x] Add regression coverage for mixed success / failure and dependency batches.
+- [x] Define and run manual smoke tests.

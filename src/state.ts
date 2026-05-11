@@ -320,6 +320,30 @@ export function renameOrganizationalUnitInWorkingState(props: {
   };
 }
 
+export function removeOrganizationalUnitFromWorkingState(props: {
+  workingState: WorkingState;
+  organizationalUnitId: string;
+}): WorkingState {
+  if (
+    props.workingState.organization.organizationalUnitsById[
+      props.organizationalUnitId
+    ] == null
+  ) {
+    return props.workingState;
+  }
+  const nextOrganizationalUnitsById = {
+    ...props.workingState.organization.organizationalUnitsById,
+  };
+  delete nextOrganizationalUnitsById[props.organizationalUnitId];
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      organizationalUnitsById: nextOrganizationalUnitsById,
+    },
+  };
+}
+
 export function createAccountAssignmentKey(props: {
   accountId: string;
   permissionSetArn: string;

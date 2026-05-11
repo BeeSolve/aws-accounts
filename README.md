@@ -18,6 +18,7 @@ The tool's lifecycle has three phases:
 - `apply` recomputes the plan before executing any operations.
 - `apply --yes` skips the interactive confirmation prompt.
 - `apply --ignore-unsupported` proceeds only when unsupported diffs are non-destructive (`unsupportedMutation`).
+- `apply --allow-destructive` is required for supported destructive operations.
 - Destructive unsupported diffs always block `apply` (no override).
 - If `apply` fails mid-run, the CLI persists partial `state.json`; recovery flow is: run `scan`, verify state, then re-run `apply`.
 
@@ -28,6 +29,7 @@ The tool's lifecycle has three phases:
 - move account between known OUs
 - create OU under a known parent OU
 - rename OU when the diff resolves to a strict one-to-one same-parent rename
+- delete an empty leaf OU with `apply --allow-destructive`
 - create account in a known target OU
 
 `plan` and `apply` also support these IAM Identity Center mutations:
@@ -40,7 +42,10 @@ The tool's lifecycle has three phases:
 
 Still out of scope in the current increment:
 
-- destructive mutations (OU/account removals)
+- account removals
+- deleting an OU that still has child OUs or accounts
+- deleting nested OUs in one batch
+- deleting an OU that is only emptied by same-batch account moves
 - removing IAM Identity Center users, groups, or permission sets
 - editing IAM Identity Center user metadata after creation
 - editing IAM Identity Center permission set metadata after creation
@@ -157,6 +162,9 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "organizations:MoveAccount",
         "organizations:CreateOrganizationalUnit",
         "organizations:UpdateOrganizationalUnit",
+        "organizations:DeleteOrganizationalUnit",
+        "organizations:ListAccountsForParent",
+        "organizations:ListOrganizationalUnitsForParent",
         "organizations:CreateAccount",
         "organizations:DescribeCreateAccountStatus",
         "identitystore:CreateUser",

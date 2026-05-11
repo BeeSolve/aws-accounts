@@ -20,7 +20,10 @@ import {
   CreateAccountCommand,
   DescribeCreateAccountStatusCommand,
   ListAccountsCommand,
+  ListAccountsForParentCommand,
+  ListOrganizationalUnitsForParentCommand,
   MoveAccountCommand,
+  DeleteOrganizationalUnitCommand,
   UpdateOrganizationalUnitCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
@@ -622,6 +625,181 @@ test("runApplyCommand applies renameOu and persists renamed OU in state", async 
       (organizationalUnit) => organizationalUnit.id === "ou-engineering",
     );
     assert.equal(renamedOu?.name, "CoreEngineering");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand refuses destructive deleteOu operations without flag", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.organizationalUnits = config.organizationalUnits.filter(
+          (organizationalUnit) => organizationalUnit.name !== "Engineering",
+        );
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        runApplyCommand({
+          organizationsClient: createOrganizationsClientMock({}),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
+          logger: noopLogger,
+          configPath: paths.configPath,
+          typesPath: paths.typesPath,
+          statePath: paths.statePath,
+          contextPath: paths.contextPath,
+          runtime: createApplyRuntime(),
+          ignoreUnsupported: false,
+          planConfirmation: async () => true,
+        }),
+      /--allow-destructive/,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand deletes empty leaf OU with allowDestructive and persists state", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.organizationalUnits = config.organizationalUnits.filter(
+          (organizationalUnit) => organizationalUnit.name !== "Engineering",
+        );
+      },
+    });
+
+    let deletedOuId: string | undefined;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        onDeleteOu: async (input) => {
+          deletedOuId = input.OrganizationalUnitId;
+        },
+      }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      allowDestructive: true,
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 1);
+    assert.equal(deletedOuId, "ou-engineering");
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        organizationalUnits: Array<{ id: string; name: string }>;
+      };
+    };
+    assert.equal(
+      persisted.organization.organizationalUnits.some(
+        (organizationalUnit) => organizationalUnit.id === "ou-engineering",
+      ),
+      false,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand refuses deleteOu when live AWS still has child accounts", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.organizationalUnits = config.organizationalUnits.filter(
+          (organizationalUnit) => organizationalUnit.name !== "Engineering",
+        );
+      },
+    });
+
+    let deleteCalls = 0;
+    await assert.rejects(
+      () =>
+        runApplyCommand({
+          organizationsClient: createOrganizationsClientMock({
+            listAccountsForParentPages: [
+              {
+                Accounts: [
+                  {
+                    Id: "333333333333",
+                    Name: "StrayAccount",
+                  },
+                ],
+              },
+            ],
+            onDeleteOu: async () => {
+              deleteCalls += 1;
+            },
+          }),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
+          logger: noopLogger,
+          configPath: paths.configPath,
+          typesPath: paths.typesPath,
+          statePath: paths.statePath,
+          contextPath: paths.contextPath,
+          runtime: createApplyRuntime(),
+          allowDestructive: true,
+          ignoreUnsupported: false,
+          planConfirmation: async () => true,
+        }),
+      /still contains account "StrayAccount"/,
+    );
+    assert.equal(deleteCalls, 0);
   } finally {
     await workspace.cleanup();
   }
@@ -1400,6 +1578,7 @@ function createOrganizationsClientMock(props: {
   }) => Promise<void>;
   onCreateAccount?: (input: { AccountName?: string; Email?: string }) => Promise<void>;
   onCreateOu?: (input: { ParentId?: string; Name?: string }) => Promise<void>;
+  onDeleteOu?: (input: { OrganizationalUnitId?: string }) => Promise<void>;
   onRenameOu?: (input: {
     OrganizationalUnitId?: string;
     Name?: string;
@@ -1426,17 +1605,61 @@ function createOrganizationsClientMock(props: {
     }>;
     NextToken?: string;
   }>;
+  listAccountsForParentPages?: Array<{
+    Accounts?: Array<{
+      Id?: string;
+      Name?: string;
+    }>;
+    NextToken?: string;
+  }>;
+  listOrganizationalUnitsForParentPages?: Array<{
+    OrganizationalUnits?: Array<{
+      Id?: string;
+      Arn?: string;
+      Name?: string;
+    }>;
+    NextToken?: string;
+  }>;
 }): OrganizationsClient {
   const describeStatuses = props.describeStatuses ?? [];
   const listAccountsPages = props.listAccountsPages ?? [{ Accounts: [] }];
+  const listAccountsForParentPages = props.listAccountsForParentPages ?? [
+    { Accounts: [] },
+  ];
+  const listOrganizationalUnitsForParentPages =
+    props.listOrganizationalUnitsForParentPages ?? [{ OrganizationalUnits: [] }];
   let describeIndex = 0;
   let listIndex = 0;
+  let listAccountsForParentIndex = 0;
+  let listOrganizationalUnitsForParentIndex = 0;
   const mock = {
     async send(command: unknown): Promise<unknown> {
       if (command instanceof ListAccountsCommand) {
         const page =
           listAccountsPages[Math.min(listIndex, listAccountsPages.length - 1)];
         listIndex += 1;
+        return page;
+      }
+      if (command instanceof ListAccountsForParentCommand) {
+        const page =
+          listAccountsForParentPages[
+            Math.min(
+              listAccountsForParentIndex,
+              listAccountsForParentPages.length - 1,
+            )
+          ];
+        listAccountsForParentIndex += 1;
+        return page;
+      }
+      if (command instanceof ListOrganizationalUnitsForParentCommand) {
+        const page =
+          listOrganizationalUnitsForParentPages[
+            Math.min(
+              listOrganizationalUnitsForParentIndex,
+              listOrganizationalUnitsForParentPages.length - 1,
+            )
+          ];
+        listOrganizationalUnitsForParentIndex += 1;
         return page;
       }
       if (command instanceof CreateAccountCommand) {
@@ -1470,6 +1693,14 @@ function createOrganizationsClientMock(props: {
           await props.onRenameOu({
             OrganizationalUnitId: command.input.OrganizationalUnitId,
             Name: command.input.Name,
+          });
+        }
+        return {};
+      }
+      if (command instanceof DeleteOrganizationalUnitCommand) {
+        if (props.onDeleteOu != null) {
+          await props.onDeleteOu({
+            OrganizationalUnitId: command.input.OrganizationalUnitId,
           });
         }
         return {};

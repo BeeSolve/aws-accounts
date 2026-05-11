@@ -37,4 +37,4 @@ We want to show user feedback on what is going to be changed and what has change
 - the code should be simple and boring and explicit
 - name everything in camelCase
 - make sure the names are clear and descriptive
-- no delete/destructive actions should be implemented!
+- destructive actions should stay opt-in and heavily gated; currently only safe empty leaf OU deletion is allowed with explicit confirmation and a dedicated CLI flag

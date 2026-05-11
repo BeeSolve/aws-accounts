@@ -7,6 +7,7 @@ import {
   moveAccountInWorkingState,
   normalizeState,
   removeAccountAssignmentFromWorkingState,
+  removeOrganizationalUnitFromWorkingState,
   renameOrganizationalUnitInWorkingState,
   upsertIdcGroupInWorkingState,
   upsertIdcPermissionSetInWorkingState,
@@ -180,8 +181,12 @@ test("working state helpers update organization records immutably", () => {
       parentId: "ou-c"
     }
   });
+  const withoutBetaOu = removeOrganizationalUnitFromWorkingState({
+    workingState: withCreatedAccount,
+    organizationalUnitId: "ou-b",
+  });
   const materialized = materializeWorkingState({
-    workingState: withCreatedAccount
+    workingState: withoutBetaOu
   });
 
   assert.equal(input.organization.accounts[0]?.parentId, "ou-a");
@@ -189,6 +194,12 @@ test("working state helpers update organization records immutably", () => {
   assert.equal(materialized.organization.accounts.find((account) => account.id === "111111111111")?.parentId, "ou-b");
   assert.equal(materialized.organization.organizationalUnits.find((organizationalUnit) => organizationalUnit.id === "ou-a")?.name, "AlphaRenamed");
   assert.equal(materialized.organization.organizationalUnits.find((organizationalUnit) => organizationalUnit.id === "ou-c")?.name, "Gamma");
+  assert.equal(
+    materialized.organization.organizationalUnits.some(
+      (organizationalUnit) => organizationalUnit.id === "ou-b",
+    ),
+    false,
+  );
   assert.equal(materialized.organization.accounts.find((account) => account.id === "333333333333")?.parentId, "ou-c");
 });
 

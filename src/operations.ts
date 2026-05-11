@@ -26,6 +26,14 @@ const renameOuOperationSchema = v.strictObject({
   parentOuName: v.string(),
 });
 
+const deleteOuOperationSchema = v.strictObject({
+  kind: v.literal("deleteOu"),
+  ouId: v.string(),
+  ouName: v.string(),
+  parentOuId: v.string(),
+  parentOuName: v.string(),
+});
+
 const createAccountOperationSchema = v.strictObject({
   kind: v.literal("createAccount"),
   accountName: v.string(),
@@ -72,6 +80,7 @@ export const operationSchema = v.variant("kind", [
   moveAccountOperationSchema,
   createOuOperationSchema,
   renameOuOperationSchema,
+  deleteOuOperationSchema,
   createAccountOperationSchema,
   createIdcUserOperationSchema,
   createIdcGroupOperationSchema,
@@ -111,6 +120,7 @@ export const planSchema = v.strictObject({
 export type MoveAccountOperation = v.InferOutput<typeof moveAccountOperationSchema>;
 export type CreateOuOperation = v.InferOutput<typeof createOuOperationSchema>;
 export type RenameOuOperation = v.InferOutput<typeof renameOuOperationSchema>;
+export type DeleteOuOperation = v.InferOutput<typeof deleteOuOperationSchema>;
 export type CreateAccountOperation = v.InferOutput<
   typeof createAccountOperationSchema
 >;

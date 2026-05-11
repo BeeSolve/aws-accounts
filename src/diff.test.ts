@@ -122,6 +122,78 @@ test("diffStates classifies removed account and removed OU as destructive", () =
   ]);
 });
 
+test("diffStates emits deleteOu for removed empty leaf OU", () => {
+  const current = createBaseState();
+  addOrganizationalUnit({
+    state: current,
+    organizationalUnit: {
+      id: "ou-empty",
+      parentId: "r-root",
+      arn: "arn:ou-empty",
+      name: "Empty",
+    },
+  });
+  const next = cloneState(current);
+  removeOrganizationalUnit({
+    state: next,
+    organizationalUnitName: "Empty",
+  });
+
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "deleteOu",
+      ouId: "ou-empty",
+      ouName: "Empty",
+      parentOuId: "r-root",
+      parentOuName: "root",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates keeps OU delete unsupported when it is only emptied in the same batch", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  setAccountParentId({
+    state: next,
+    accountName: "app-a",
+    parentId: "ou-data",
+  });
+  removeOrganizationalUnit({
+    state: next,
+    organizationalUnitName: "Engineering",
+  });
+
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "moveAccount",
+      accountId: "111111111111",
+      accountName: "app-a",
+      fromOuId: "ou-eng",
+      fromOuName: "Engineering",
+      toOuId: "ou-data",
+      toOuName: "Data",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, [
+    {
+      kind: "removedOu",
+      category: "destructive",
+      description: 'removed OU "Engineering"',
+    },
+  ]);
+});
+
 test("diffStates emits createOu and renameOu operations", () => {
   const current = createBaseState();
 

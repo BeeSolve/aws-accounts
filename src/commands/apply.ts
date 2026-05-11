@@ -1,5 +1,8 @@
 import {
   CreateOrganizationalUnitCommand,
+  DeleteOrganizationalUnitCommand,
+  ListAccountsForParentCommand,
+  ListOrganizationalUnitsForParentCommand,
   MoveAccountCommand,
   OrganizationsClient,
   UpdateOrganizationalUnitCommand,
@@ -32,6 +35,7 @@ import {
   materializeWorkingState,
   moveAccountInWorkingState,
   removeAccountAssignmentFromWorkingState,
+  removeOrganizationalUnitFromWorkingState,
   readStateFile,
   renameOrganizationalUnitInWorkingState,
   type StateFile,
@@ -64,6 +68,7 @@ type ApplyCommandInput = {
       pollIntervalInMs: number;
     };
   };
+  allowDestructive: boolean;
   ignoreUnsupported: boolean;
   planConfirmation: (props: { planLines: string[] }) => Promise<boolean>;
 };
@@ -76,8 +81,11 @@ type ApplyCommandResult = {
 };
 
 export async function runApplyCommand(
-  props: ApplyCommandInput,
+  props: Omit<ApplyCommandInput, "allowDestructive"> & {
+    allowDestructive?: boolean;
+  },
 ): Promise<ApplyCommandResult> {
+  const allowDestructive = props.allowDestructive ?? false;
   const [config, currentState, context] = await Promise.all([
     loadAwsConfigModelFromTsFile({
       configPath: props.configPath,
@@ -107,7 +115,7 @@ export async function runApplyCommand(
       );
     }
     throw new Error(
-      "Apply refused: destructive unsupported diffs are not allowed in increment 1.",
+      "Apply refused: destructive unsupported diffs are not supported.",
     );
   }
 
@@ -125,6 +133,19 @@ export async function runApplyCommand(
   if (plan.unsupported.length > 0 && props.ignoreUnsupported) {
     props.logger.log(
       "Proceeding with supported operations only; unsupported diffs are skipped.",
+    );
+  }
+
+  const destructiveOperations = plan.operations.filter((operation) =>
+    isDestructiveOperation(operation),
+  );
+  if (destructiveOperations.length > 0 && allowDestructive !== true) {
+    props.logger.log("Destructive operations:");
+    for (const operation of destructiveOperations) {
+      props.logger.log(`  - ${describeDestructiveOperation(operation)}`);
+    }
+    throw new Error(
+      "Apply refused: destructive operations detected. Re-run with --allow-destructive to apply supported destructive changes.",
     );
   }
 
@@ -280,6 +301,24 @@ async function applyOperation(props: {
       workingState: props.state,
       organizationalUnitId: operation.ouId,
       name: operation.toOuName,
+    });
+  }
+  if (operation.kind === "deleteOu") {
+    props.logger.log(`Deleting OU "${operation.ouName}"...`);
+    await assertOrganizationalUnitIsEmpty({
+      organizationsClient: props.organizationsClient,
+      organizationalUnitId: operation.ouId,
+      organizationalUnitName: operation.ouName,
+    });
+    await props.organizationsClient.send(
+      new DeleteOrganizationalUnitCommand({
+        OrganizationalUnitId: operation.ouId,
+      }),
+    );
+    props.logger.log(`Done: "${operation.ouName}"`);
+    return removeOrganizationalUnitFromWorkingState({
+      workingState: props.state,
+      organizationalUnitId: operation.ouId,
     });
   }
   if (operation.kind === "createAccount") {
@@ -530,6 +569,12 @@ function buildApplyPlanLines(props: { plan: Plan }): string[] {
       );
       continue;
     }
+    if (operation.kind === "deleteOu") {
+      lines.push(
+        `  delete OU "${operation.ouName}" from ${operation.parentOuName}`,
+      );
+      continue;
+    }
     if (operation.kind === "createAccount") {
       lines.push(
         `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`,
@@ -586,6 +631,18 @@ function buildApplyPlanLines(props: { plan: Plan }): string[] {
     }
   }
   return lines;
+}
+
+function isDestructiveOperation(
+  operation: Operation,
+): operation is Extract<Operation, { kind: "deleteOu" }> {
+  return operation.kind === "deleteOu";
+}
+
+function describeDestructiveOperation(
+  operation: Extract<Operation, { kind: "deleteOu" }>,
+): string {
+  return `delete OU "${operation.ouName}"`;
 }
 
 function resolveAssignmentDependencies(props: {
@@ -650,6 +707,73 @@ function buildIdentityStoreUserName(props: { displayName: string }): {
     Formatted: props.displayName,
     GivenName: props.displayName,
   };
+}
+
+async function assertOrganizationalUnitIsEmpty(props: {
+  organizationsClient: OrganizationsClient;
+  organizationalUnitId: string;
+  organizationalUnitName: string;
+}): Promise<void> {
+  const childOrganizationalUnit = await listFirstChildOrganizationalUnit({
+    organizationsClient: props.organizationsClient,
+    parentId: props.organizationalUnitId,
+  });
+  if (childOrganizationalUnit != null) {
+    throw new Error(
+      `Refusing to delete OU "${props.organizationalUnitName}": it still contains child OU "${childOrganizationalUnit.Name ?? childOrganizationalUnit.Id ?? "unknown"}".`,
+    );
+  }
+  const account = await listFirstAccountForParent({
+    organizationsClient: props.organizationsClient,
+    parentId: props.organizationalUnitId,
+  });
+  if (account != null) {
+    throw new Error(
+      `Refusing to delete OU "${props.organizationalUnitName}": it still contains account "${account.Name ?? account.Id ?? "unknown"}".`,
+    );
+  }
+}
+
+async function listFirstChildOrganizationalUnit(props: {
+  organizationsClient: OrganizationsClient;
+  parentId: string;
+}): Promise<{ Id?: string; Name?: string } | undefined> {
+  let nextToken: string | undefined;
+  do {
+    const response = await props.organizationsClient.send(
+      new ListOrganizationalUnitsForParentCommand({
+        ParentId: props.parentId,
+        NextToken: nextToken,
+      }),
+    );
+    const organizationalUnit = response.OrganizationalUnits?.[0];
+    if (organizationalUnit != null) {
+      return organizationalUnit;
+    }
+    nextToken = response.NextToken;
+  } while (nextToken != null);
+  return undefined;
+}
+
+async function listFirstAccountForParent(props: {
+  organizationsClient: OrganizationsClient;
+  parentId: string;
+}): Promise<{ Id?: string; Name?: string } | undefined> {
+  let nextToken: string | undefined;
+  do {
+    const response = await props.organizationsClient.send(
+      new ListAccountsForParentCommand({
+        ParentId: props.parentId,
+        NextToken: nextToken,
+      }),
+    );
+    const account = response.Accounts?.[0];
+    if (account != null) {
+      return account;
+    }
+    nextToken = response.NextToken;
+  } while (nextToken != null);
+  return undefined;
 }
 
 async function waitForAccountAssignmentCreationSuccess(props: {

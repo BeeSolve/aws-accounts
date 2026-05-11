@@ -73,6 +73,10 @@ export async function runPlanCommand(
       );
       continue;
     }
+    if (operation.kind === "deleteOu") {
+      props.logger.log(`  delete OU "${operation.ouName}" from ${operation.parentOuName}`);
+      continue;
+    }
     if (operation.kind === "createAccount") {
       props.logger.log(
         `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`,

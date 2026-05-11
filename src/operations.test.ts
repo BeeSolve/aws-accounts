@@ -3,8 +3,15 @@ import test from "node:test";
 import * as v from "valibot";
 import { operationSchema, unsupportedDiffSchema } from "./operations.js";
 
-test("operationSchema accepts Wave 2 IdC operations", () => {
+test("operationSchema accepts supported organization and IdC operations", () => {
   const operations = [
+    {
+      kind: "deleteOu",
+      ouId: "ou-empty",
+      ouName: "Empty",
+      parentOuId: "r-root",
+      parentOuName: "root",
+    },
     {
       kind: "createIdcUser",
       userName: "alice",

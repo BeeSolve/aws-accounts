@@ -61,6 +61,7 @@ async function main(): Promise<void> {
       yes: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
       "ignore-unsupported": { type: "boolean", default: false },
+      "allow-destructive": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -254,6 +255,7 @@ async function main(): Promise<void> {
       `Replay command: ${buildReplayCommand({
         command,
         yes: args.values.yes,
+        allowDestructive: args.values["allow-destructive"],
         ignoreUnsupported: args.values["ignore-unsupported"],
       })}`,
     );
@@ -280,6 +282,7 @@ async function main(): Promise<void> {
           pollIntervalInMs: accountAssignmentPollIntervalInMs,
         },
       },
+      allowDestructive: args.values["allow-destructive"] ?? false,
       ignoreUnsupported: args.values["ignore-unsupported"] ?? false,
       planConfirmation,
     });
@@ -361,7 +364,9 @@ function printHelp(logger: Logger): void {
     "  npm run cli -- create-account [--email <email>] [--name <account-name>] [--profile <name>] [--region <region>]",
   );
   logger.log("  npm run cli -- plan [--json]");
-  logger.log("  npm run cli -- apply [--yes] [--ignore-unsupported]");
+  logger.log(
+    "  npm run cli -- apply [--yes] [--ignore-unsupported] [--allow-destructive]",
+  );
   logger.log("");
   logger.log("Environment fallback:");
   logger.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
@@ -462,12 +467,18 @@ type BuildReplayCommandProps = {
   instanceArn?: string;
   yes?: boolean;
   json?: boolean;
+  allowDestructive: boolean;
   ignoreUnsupported?: boolean;
   email?: string;
   name?: string;
 };
 
-function buildReplayCommand(props: BuildReplayCommandProps): string {
+function buildReplayCommand(
+  props: Omit<BuildReplayCommandProps, "allowDestructive"> & {
+    allowDestructive?: boolean;
+  },
+): string {
+  const allowDestructive = props.allowDestructive ?? false;
   const parts = ["npm", "run", "cli", "--", props.command];
   if (props.email != null) {
     parts.push("--email", quoteCliValue(props.email));
@@ -489,6 +500,9 @@ function buildReplayCommand(props: BuildReplayCommandProps): string {
   }
   if (props.json) {
     parts.push("--json");
+  }
+  if (allowDestructive) {
+    parts.push("--allow-destructive");
   }
   if (props.ignoreUnsupported) {
     parts.push("--ignore-unsupported");

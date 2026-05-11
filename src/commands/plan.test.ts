@@ -187,6 +187,55 @@ test("runPlanCommand prints human-readable renameOu operations", async () => {
   }
 });
 
+test("runPlanCommand prints human-readable deleteOu operations", async () => {
+  const workspace = await createTestWorkspace({ prefix: "plan-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        config.organizationalUnits = config.organizationalUnits.filter(
+          (organizationalUnit) => organizationalUnit.name !== "Engineering",
+        );
+      },
+    });
+
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
+      output: "human",
+    });
+    assert.equal(result.plan.operations.length, 1);
+    assert.equal(result.plan.unsupported.length, 0);
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes('delete OU "Engineering" from root'),
+      ),
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runPlanCommand reports OU reparent as unsupported mutation", async () => {
   const workspace = await createTestWorkspace({ prefix: "plan-test-" });
   try {

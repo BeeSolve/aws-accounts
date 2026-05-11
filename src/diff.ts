@@ -18,6 +18,7 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   createIdcPermissionSet: 7,
   grantIdcAccountAssignment: 8,
   revokeIdcAccountAssignment: 9,
+  deleteOu: 10,
 };
 
 type DiffStatesProps = {
@@ -80,6 +81,12 @@ export function diffStates(props: DiffStatesProps): Plan {
       organizationalUnit.name,
     ]),
   );
+  const currentOrganizationalUnitChildrenByParentId = countChildrenByParentId({
+    values: props.current.organization.organizationalUnits,
+  });
+  const currentAccountsByParentId = countChildrenByParentId({
+    values: props.current.organization.accounts,
+  });
   const nextOrganizationalUnitNameById = new Map(
     props.next.organization.organizationalUnits.map((organizationalUnit) => [
       organizationalUnit.id,
@@ -211,6 +218,9 @@ export function diffStates(props: DiffStatesProps): Plan {
   const removedByParentId = groupOrganizationalUnitsByParentId({
     organizationalUnits: removedOrganizationalUnits,
   });
+  const removedOrganizationalUnitIds = new Set(
+    removedOrganizationalUnits.map((organizationalUnit) => organizationalUnit.id),
+  );
   const consumedAddedOrganizationalUnitNames = new Set<string>();
   const consumedRemovedOrganizationalUnitNames = new Set<string>();
 
@@ -308,6 +318,33 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
   for (const removedOrganizationalUnit of removedOrganizationalUnits) {
     if (consumedRemovedOrganizationalUnitNames.has(removedOrganizationalUnit.name)) {
+      continue;
+    }
+    const hasCurrentChildOrganizationalUnits =
+      (currentOrganizationalUnitChildrenByParentId.get(
+        removedOrganizationalUnit.id,
+      ) ?? 0) > 0;
+    const hasCurrentAccounts =
+      (currentAccountsByParentId.get(removedOrganizationalUnit.id) ?? 0) > 0;
+    const isNestedDeletion =
+      removedOrganizationalUnitIds.has(removedOrganizationalUnit.parentId);
+    if (
+      hasCurrentChildOrganizationalUnits === false &&
+      hasCurrentAccounts === false &&
+      isNestedDeletion === false
+    ) {
+      const parentOuName = resolveOrganizationalUnitName({
+        organizationalUnitNameById: currentOrganizationalUnitNameById,
+        rootId: props.current.organization.rootId,
+        organizationalUnitId: removedOrganizationalUnit.parentId,
+      });
+      operations.push({
+        kind: "deleteOu",
+        ouId: removedOrganizationalUnit.id,
+        ouName: removedOrganizationalUnit.name,
+        parentOuId: removedOrganizationalUnit.parentId,
+        parentOuName: parentOuName,
+      });
       continue;
     }
     unsupported.push({
@@ -487,6 +524,16 @@ function groupOrganizationalUnitsByParentId(
   return grouped;
 }
 
+function countChildrenByParentId(props: {
+  values: Array<{ parentId: string }>;
+}): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const value of props.values) {
+    counts.set(value.parentId, (counts.get(value.parentId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 function getOperationExecutionPriority(operation: Operation): number {
   return operationExecutionPriority[operation.kind];
 }
@@ -503,6 +550,9 @@ function getOperationSortKey(operation: Operation): string {
   }
   if (operation.kind === "createAccount") {
     return `${operation.kind}|${operation.accountName}|${operation.targetOuName}`;
+  }
+  if (operation.kind === "deleteOu") {
+    return `${operation.kind}|${operation.ouName}|${operation.parentOuName}`;
   }
   if (operation.kind === "createIdcUser") {
     return `${operation.kind}|${operation.userName}`;
