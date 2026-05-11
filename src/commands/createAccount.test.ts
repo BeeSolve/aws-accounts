@@ -568,7 +568,7 @@ async function updateConfigModel(props: {
       parentName: string | null;
       accounts: Array<{ name: string; email: string }>;
     }>;
-    users: Array<{ userName: string; displayName: string; emails: string[] }>;
+    users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
@@ -592,7 +592,7 @@ async function updateConfigModel(props: {
       parentName: string | null;
       accounts: Array<{ name: string; email: string }>;
     }>;
-    users: Array<{ userName: string; displayName: string; emails: string[] }>;
+    users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
@@ -652,7 +652,7 @@ async function writeFixtureFiles(props: {
           userId: "u-123",
           userName: "alice",
           displayName: "Alice",
-          emails: ["alice@example.com"],
+          email: "alice@example.com",
         },
       ],
       groups: [

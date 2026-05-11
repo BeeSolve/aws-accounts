@@ -8,10 +8,48 @@ import {
 } from "./operations.js";
 
 const pendingCreationId = "__pending_creation__" as const;
+const operationExecutionPriority: Record<Operation["kind"], number> = {
+  createOu: 1,
+  renameOu: 2,
+  createAccount: 3,
+  moveAccount: 4,
+  createIdcUser: 5,
+  createIdcGroup: 6,
+  createIdcPermissionSet: 7,
+  grantIdcAccountAssignment: 8,
+  revokeIdcAccountAssignment: 9,
+};
 
 type DiffStatesProps = {
   current: StateFile;
   next: StateFile;
+};
+
+type GroupOrganizationalUnitsByParentIdProps = {
+  organizationalUnits: StateFile["organization"]["organizationalUnits"];
+};
+
+type NormalizedIdcAssignment = {
+  accountName: string;
+  permissionSetName: string;
+  principalType: StateFile["identityCenter"]["accountAssignments"][number]["principalType"];
+  principalName: string;
+};
+
+type NormalizedIdcView = {
+  usersByUserName: Map<
+    string,
+    StateFile["identityCenter"]["users"][number]
+  >;
+  groupsByDisplayName: Map<
+    string,
+    StateFile["identityCenter"]["groups"][number]
+  >;
+  permissionSetsByName: Map<
+    string,
+    StateFile["identityCenter"]["permissionSets"][number]
+  >;
+  assignmentsByKey: Map<string, NormalizedIdcAssignment>;
 };
 
 export function diffStates(props: DiffStatesProps): Plan {
@@ -279,66 +317,147 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
-  const currentUserNameSet = new Set(
-    props.current.identityCenter.users.map((user) => user.userName),
-  );
+  const currentIdcView = normalizeIdentityCenterState({
+    state: props.current,
+  });
+  const nextIdcView = normalizeIdentityCenterState({
+    state: props.next,
+  });
+
   for (const nextUser of props.next.identityCenter.users) {
-    if (currentUserNameSet.has(nextUser.userName)) {
+    if (currentIdcView.usersByUserName.has(nextUser.userName)) {
+      continue;
+    }
+    operations.push({
+      kind: "createIdcUser",
+      userName: nextUser.userName,
+      displayName: nextUser.displayName,
+      email: nextUser.email,
+    });
+  }
+  for (const currentUser of props.current.identityCenter.users) {
+    if (nextIdcView.usersByUserName.has(currentUser.userName)) {
       continue;
     }
     unsupported.push({
-      kind: "idcUserAdded",
-      category: "unsupportedMutation",
-      description: `new IdC user "${nextUser.userName}"`,
+      kind: "idcUserRemoved",
+      category: "destructive",
+      description: `removed IdC user "${currentUser.userName}"`,
     });
   }
 
-  const currentGroupNameSet = new Set(
-    props.current.identityCenter.groups.map((group) => group.displayName),
-  );
   for (const nextGroup of props.next.identityCenter.groups) {
-    if (currentGroupNameSet.has(nextGroup.displayName)) {
+    if (currentIdcView.groupsByDisplayName.has(nextGroup.displayName)) {
+      continue;
+    }
+    operations.push({
+      kind: "createIdcGroup",
+      groupDisplayName: nextGroup.displayName,
+    });
+  }
+  for (const currentGroup of props.current.identityCenter.groups) {
+    if (nextIdcView.groupsByDisplayName.has(currentGroup.displayName)) {
       continue;
     }
     unsupported.push({
-      kind: "idcGroupAdded",
-      category: "unsupportedMutation",
-      description: `new IdC group "${nextGroup.displayName}"`,
+      kind: "idcGroupRemoved",
+      category: "destructive",
+      description: `removed IdC group "${currentGroup.displayName}"`,
     });
   }
 
-  const currentPermissionSetNameSet = new Set(
-    props.current.identityCenter.permissionSets.map(
-      (permissionSet) => permissionSet.name,
-    ),
-  );
   for (const nextPermissionSet of props.next.identityCenter.permissionSets) {
-    if (currentPermissionSetNameSet.has(nextPermissionSet.name)) {
+    if (currentIdcView.permissionSetsByName.has(nextPermissionSet.name)) {
+      continue;
+    }
+    operations.push({
+      kind: "createIdcPermissionSet",
+      permissionSetName: nextPermissionSet.name,
+      description: nextPermissionSet.description,
+    });
+  }
+  for (const currentPermissionSet of props.current.identityCenter.permissionSets) {
+    if (nextIdcView.permissionSetsByName.has(currentPermissionSet.name)) {
       continue;
     }
     unsupported.push({
-      kind: "idcPermissionSetAdded",
-      category: "unsupportedMutation",
-      description: `new IdC permission set "${nextPermissionSet.name}"`,
+      kind: "idcPermissionSetRemoved",
+      category: "destructive",
+      description: `removed IdC permission set "${currentPermissionSet.name}"`,
     });
   }
 
-  if (
-    areIdentityCenterAssignmentsEquivalent({
-      current: props.current.identityCenter.accountAssignments,
-      next: props.next.identityCenter.accountAssignments,
-    }) === false
-  ) {
-    unsupported.push({
-      kind: "idcAssignmentChanged",
-      category: "unsupportedMutation",
-      description: "IdC account assignments changed",
-    });
-  }
-
-  operations.sort((left, right) =>
-    getOperationSortKey(left).localeCompare(getOperationSortKey(right)),
+  const removedUserNames = new Set(
+    props.current.identityCenter.users
+      .filter((user) => nextIdcView.usersByUserName.has(user.userName) === false)
+      .map((user) => user.userName),
   );
+  const removedGroupDisplayNames = new Set(
+    props.current.identityCenter.groups
+      .filter(
+        (group) =>
+          nextIdcView.groupsByDisplayName.has(group.displayName) === false,
+      )
+      .map((group) => group.displayName),
+  );
+  const removedPermissionSetNames = new Set(
+    props.current.identityCenter.permissionSets
+      .filter(
+        (permissionSet) =>
+          nextIdcView.permissionSetsByName.has(permissionSet.name) === false,
+      )
+      .map((permissionSet) => permissionSet.name),
+  );
+
+  for (const nextAssignment of nextIdcView.assignmentsByKey.values()) {
+    const assignmentKey = createNormalizedIdcAssignmentKey({
+      assignment: nextAssignment,
+    });
+    if (currentIdcView.assignmentsByKey.has(assignmentKey)) {
+      continue;
+    }
+    operations.push({
+      kind: "grantIdcAccountAssignment",
+      accountName: nextAssignment.accountName,
+      permissionSetName: nextAssignment.permissionSetName,
+      principalType: nextAssignment.principalType,
+      principalName: nextAssignment.principalName,
+    });
+  }
+  for (const currentAssignment of currentIdcView.assignmentsByKey.values()) {
+    const assignmentKey = createNormalizedIdcAssignmentKey({
+      assignment: currentAssignment,
+    });
+    if (nextIdcView.assignmentsByKey.has(assignmentKey)) {
+      continue;
+    }
+    if (
+      shouldSuppressDerivativeAssignmentRevoke({
+        assignment: currentAssignment,
+        removedUserNames: removedUserNames,
+        removedGroupDisplayNames: removedGroupDisplayNames,
+        removedPermissionSetNames: removedPermissionSetNames,
+      })
+    ) {
+      continue;
+    }
+    operations.push({
+      kind: "revokeIdcAccountAssignment",
+      accountName: currentAssignment.accountName,
+      permissionSetName: currentAssignment.permissionSetName,
+      principalType: currentAssignment.principalType,
+      principalName: currentAssignment.principalName,
+    });
+  }
+
+  operations.sort((left, right) => {
+    const priorityComparison =
+      getOperationExecutionPriority(left) - getOperationExecutionPriority(right);
+    if (priorityComparison !== 0) {
+      return priorityComparison;
+    }
+    return getOperationSortKey(left).localeCompare(getOperationSortKey(right));
+  });
   unsupported.sort((left, right) => {
     const kindComparison = left.kind.localeCompare(right.kind);
     if (kindComparison !== 0) {
@@ -352,10 +471,6 @@ export function diffStates(props: DiffStatesProps): Plan {
     unsupported: unsupported,
   });
 }
-
-type GroupOrganizationalUnitsByParentIdProps = {
-  organizationalUnits: StateFile["organization"]["organizationalUnits"];
-};
 
 function groupOrganizationalUnitsByParentId(
   props: GroupOrganizationalUnitsByParentIdProps,
@@ -372,6 +487,10 @@ function groupOrganizationalUnitsByParentId(
   return grouped;
 }
 
+function getOperationExecutionPriority(operation: Operation): number {
+  return operationExecutionPriority[operation.kind];
+}
+
 function getOperationSortKey(operation: Operation): string {
   if (operation.kind === "moveAccount") {
     return `${operation.kind}|${operation.accountName}|${operation.accountId}`;
@@ -385,42 +504,151 @@ function getOperationSortKey(operation: Operation): string {
   if (operation.kind === "createAccount") {
     return `${operation.kind}|${operation.accountName}|${operation.targetOuName}`;
   }
+  if (operation.kind === "createIdcUser") {
+    return `${operation.kind}|${operation.userName}`;
+  }
+  if (operation.kind === "createIdcGroup") {
+    return `${operation.kind}|${operation.groupDisplayName}`;
+  }
+  if (operation.kind === "createIdcPermissionSet") {
+    return `${operation.kind}|${operation.permissionSetName}`;
+  }
+  if (
+    operation.kind === "grantIdcAccountAssignment" ||
+    operation.kind === "revokeIdcAccountAssignment"
+  ) {
+    return [
+      operation.kind,
+      operation.accountName,
+      operation.permissionSetName,
+      operation.principalType,
+      operation.principalName,
+    ].join("|");
+  }
   return "zzzz";
 }
 
-function areIdentityCenterAssignmentsEquivalent(props: {
-  current: StateFile["identityCenter"]["accountAssignments"];
-  next: StateFile["identityCenter"]["accountAssignments"];
-}): boolean {
-  if (props.current.length !== props.next.length) {
-    return false;
-  }
-  const currentKeys = props.current
-    .map((assignment) =>
-      [
-        assignment.accountId,
-        assignment.permissionSetArn,
-        assignment.principalId,
-        assignment.principalType,
-      ].join("|"),
-    )
-    .sort((left, right) => left.localeCompare(right));
-  const nextKeys = props.next
-    .map((assignment) =>
-      [
-        assignment.accountId,
-        assignment.permissionSetArn,
-        assignment.principalId,
-        assignment.principalType,
-      ].join("|"),
-    )
-    .sort((left, right) => left.localeCompare(right));
-  for (let index = 0; index < currentKeys.length; index += 1) {
-    if (currentKeys[index] !== nextKeys[index]) {
-      return false;
+function normalizeIdentityCenterState(props: {
+  state: StateFile;
+}): NormalizedIdcView {
+  const usersByUserName = new Map(
+    props.state.identityCenter.users.map((user) => [user.userName, user]),
+  );
+  const groupsByDisplayName = new Map(
+    props.state.identityCenter.groups.map((group) => [group.displayName, group]),
+  );
+  const permissionSetsByName = new Map(
+    props.state.identityCenter.permissionSets.map((permissionSet) => [
+      permissionSet.name,
+      permissionSet,
+    ]),
+  );
+  const accountNameById = new Map(
+    props.state.organization.accounts.map((account) => [account.id, account.name]),
+  );
+  const permissionSetNameByArn = new Map(
+    props.state.identityCenter.permissionSets.map((permissionSet) => [
+      permissionSet.permissionSetArn,
+      permissionSet.name,
+    ]),
+  );
+  const groupDisplayNameById = new Map(
+    props.state.identityCenter.groups.map((group) => [group.groupId, group.displayName]),
+  );
+  const userNameById = new Map(
+    props.state.identityCenter.users.map((user) => [user.userId, user.userName]),
+  );
+  const assignmentsByKey = new Map<string, NormalizedIdcAssignment>();
+  for (const accountAssignment of props.state.identityCenter.accountAssignments) {
+    const accountName = accountNameById.get(accountAssignment.accountId);
+    if (accountName == null) {
+      throw new Error(
+        `Could not resolve account name for IdC assignment accountId "${accountAssignment.accountId}".`,
+      );
     }
+    const permissionSetName = permissionSetNameByArn.get(
+      accountAssignment.permissionSetArn,
+    );
+    if (permissionSetName == null) {
+      throw new Error(
+        `Could not resolve permission set name for IdC assignment permissionSetArn "${accountAssignment.permissionSetArn}".`,
+      );
+    }
+    const principalName = resolveAssignmentPrincipalName({
+      principalId: accountAssignment.principalId,
+      principalType: accountAssignment.principalType,
+      groupDisplayNameById: groupDisplayNameById,
+      userNameById: userNameById,
+    });
+    const normalizedAssignment = {
+      accountName: accountName,
+      permissionSetName: permissionSetName,
+      principalType: accountAssignment.principalType,
+      principalName: principalName,
+    };
+    assignmentsByKey.set(
+      createNormalizedIdcAssignmentKey({
+        assignment: normalizedAssignment,
+      }),
+      normalizedAssignment,
+    );
   }
-  return true;
+  return {
+    usersByUserName: usersByUserName,
+    groupsByDisplayName: groupsByDisplayName,
+    permissionSetsByName: permissionSetsByName,
+    assignmentsByKey: assignmentsByKey,
+  };
+}
+
+function resolveAssignmentPrincipalName(props: {
+  principalId: string;
+  principalType: StateFile["identityCenter"]["accountAssignments"][number]["principalType"];
+  groupDisplayNameById: Map<string, string>;
+  userNameById: Map<string, string>;
+}): string {
+  if (props.principalType === "GROUP") {
+    const groupDisplayName = props.groupDisplayNameById.get(props.principalId);
+    if (groupDisplayName == null) {
+      throw new Error(
+        `Could not resolve group display name for IdC assignment principalId "${props.principalId}".`,
+      );
+    }
+    return groupDisplayName;
+  }
+  const userName = props.userNameById.get(props.principalId);
+  if (userName == null) {
+    throw new Error(
+      `Could not resolve user name for IdC assignment principalId "${props.principalId}".`,
+    );
+  }
+  return userName;
+}
+
+function createNormalizedIdcAssignmentKey(props: {
+  assignment: NormalizedIdcAssignment;
+}): string {
+  return [
+    props.assignment.accountName,
+    props.assignment.permissionSetName,
+    props.assignment.principalType,
+    props.assignment.principalName,
+  ].join("|");
+}
+
+function shouldSuppressDerivativeAssignmentRevoke(props: {
+  assignment: NormalizedIdcAssignment;
+  removedUserNames: Set<string>;
+  removedGroupDisplayNames: Set<string>;
+  removedPermissionSetNames: Set<string>;
+}): boolean {
+  if (props.removedPermissionSetNames.has(props.assignment.permissionSetName)) {
+    return true;
+  }
+  if (props.assignment.principalType === "USER") {
+    return props.removedUserNames.has(props.assignment.principalName);
+  }
+  return props.removedGroupDisplayNames.has(props.assignment.principalName);
 }
 
 function resolveOrganizationalUnitName(props: {

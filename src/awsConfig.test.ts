@@ -309,7 +309,7 @@ test("mapAwsConfigToState emits sentinel ids for entities missing in current sta
     config.users.push({
       userName: "bob",
       displayName: "Bob",
-      emails: ["bob@example.com"],
+      email: "bob@example.com",
     });
     config.groups.push({
       displayName: "Operators",
@@ -533,7 +533,7 @@ async function writeFixtureFiles(props: {
           userId: "u-123",
           userName: "alice",
           displayName: "Alice",
-          emails: ["alice@example.com"],
+          email: "alice@example.com",
         },
       ],
       groups: [

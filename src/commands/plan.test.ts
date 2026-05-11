@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import { writeAwsConfigFromState } from "../awsConfig.js";
+import { regenerateAwsConfigTypes, writeAwsConfigFromState } from "../awsConfig.js";
 import { createTestWorkspace } from "../helpers.test.js";
 import type { Logger } from "../logger.js";
 import { noopLogger } from "../logger.js";
@@ -283,7 +283,7 @@ test("runPlanCommand prints machine-readable JSON with --json output", async () 
   }
 });
 
-test("runPlanCommand human output includes unsupported categories", async () => {
+test("runPlanCommand prints human-readable IdC operations", async () => {
   const workspace = await createTestWorkspace({ prefix: "plan-test-" });
   try {
     const statePath = join(workspace.workspacePath, "state.json");
@@ -308,8 +308,93 @@ test("runPlanCommand human output includes unsupported categories", async () => 
         config.users.push({
           userName: "bob",
           displayName: "Bob",
-          emails: ["bob@example.com"],
+          email: "bob@example.com",
         });
+        config.groups.push({
+          displayName: "Operators",
+        });
+        config.permissionSets.push({
+          name: "ReadOnly",
+          description: "Read only",
+        });
+      },
+    });
+    await regenerateAwsConfigTypes({
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        config.assignments.push({
+          permissionSet: "ReadOnly",
+          user: "bob",
+          accounts: ["AppAccount"],
+        });
+      },
+    });
+
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
+      output: "human",
+    });
+    assert.equal(result.plan.operations.length, 4);
+    assert.equal(result.plan.unsupported.length, 0);
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes('create IdC user "bob"'),
+      ),
+    );
+    assert.ok(
+      logger.logs.some((line) => line.includes('create IdC group "Operators"')),
+    );
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes('create IdC permission set "ReadOnly"'),
+      ),
+    );
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes(
+          'grant IdC assignment "ReadOnly" to user "bob" on "AppAccount"',
+        ),
+      ),
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runPlanCommand human output includes unsupported removal categories", async () => {
+  const workspace = await createTestWorkspace({ prefix: "plan-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        config.users = [];
       },
     });
 
@@ -327,7 +412,7 @@ test("runPlanCommand human output includes unsupported categories", async () => 
     assert.ok(logger.logs.some((line) => line.includes("Unsupported diffs:")));
     assert.ok(
       logger.logs.some((line) =>
-        line.includes('new IdC user "bob" [unsupportedMutation]'),
+        line.includes('removed IdC user "alice" [destructive]'),
       ),
     );
   } finally {
@@ -359,7 +444,7 @@ async function updateConfigModel(props: {
       parentName: string | null;
       accounts: Array<{ name: string; email: string }>;
     }>;
-    users: Array<{ userName: string; displayName: string; emails: string[] }>;
+    users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
@@ -383,7 +468,7 @@ async function updateConfigModel(props: {
       parentName: string | null;
       accounts: Array<{ name: string; email: string }>;
     }>;
-    users: Array<{ userName: string; displayName: string; emails: string[] }>;
+    users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
@@ -449,7 +534,7 @@ async function writeFixtureFiles(props: {
           userId: "u-123",
           userName: "alice",
           displayName: "Alice",
-          emails: ["alice@example.com"],
+          email: "alice@example.com",
         },
       ],
       groups: [

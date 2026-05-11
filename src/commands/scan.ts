@@ -271,9 +271,9 @@ async function listIdentityStoreUsers(props: {
         userId: user.UserId,
         userName: user.UserName,
         displayName: user.DisplayName ?? "",
-        emails: (user.Emails ?? [])
-          .map((email) => email.Value ?? "")
-          .filter((value) => value.length > 0),
+        email: resolveIdentityStoreUserEmail({
+          emails: user.Emails ?? [],
+        }),
       });
     }
     nextToken = response.NextToken;
@@ -306,6 +306,21 @@ async function listIdentityStoreGroups(props: {
     nextToken = response.NextToken;
   } while (nextToken != null);
   return groups;
+}
+
+function resolveIdentityStoreUserEmail(props: {
+  emails: Array<{ Value?: string; Primary?: boolean }>;
+}): string {
+  const primaryEmail = props.emails.find(
+    (email) => email.Primary === true && email.Value != null && email.Value.length > 0,
+  );
+  if (primaryEmail?.Value != null) {
+    return primaryEmail.Value;
+  }
+  return (
+    props.emails.find((email) => email.Value != null && email.Value.length > 0)
+      ?.Value ?? ""
+  );
 }
 
 async function listPermissionSets(props: {

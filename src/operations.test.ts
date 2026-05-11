@@ -1,0 +1,69 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import * as v from "valibot";
+import { operationSchema, unsupportedDiffSchema } from "./operations.js";
+
+test("operationSchema accepts Wave 2 IdC operations", () => {
+  const operations = [
+    {
+      kind: "createIdcUser",
+      userName: "alice",
+      displayName: "Alice",
+      email: "alice@example.com",
+    },
+    {
+      kind: "createIdcGroup",
+      groupDisplayName: "Admins",
+    },
+    {
+      kind: "createIdcPermissionSet",
+      permissionSetName: "AdminAccess",
+      description: "Admin",
+    },
+    {
+      kind: "grantIdcAccountAssignment",
+      accountName: "AppAccount",
+      permissionSetName: "AdminAccess",
+      principalType: "GROUP",
+      principalName: "Admins",
+    },
+    {
+      kind: "revokeIdcAccountAssignment",
+      accountName: "AppAccount",
+      permissionSetName: "AdminAccess",
+      principalType: "USER",
+      principalName: "alice",
+    },
+  ];
+
+  for (const operation of operations) {
+    assert.deepEqual(v.parse(operationSchema, operation), operation);
+  }
+});
+
+test("unsupportedDiffSchema accepts Wave 2 IdC removal kinds", () => {
+  const unsupportedDiffs = [
+    {
+      kind: "idcUserRemoved",
+      category: "destructive",
+      description: 'removed IdC user "alice"',
+    },
+    {
+      kind: "idcGroupRemoved",
+      category: "destructive",
+      description: 'removed IdC group "Admins"',
+    },
+    {
+      kind: "idcPermissionSetRemoved",
+      category: "destructive",
+      description: 'removed IdC permission set "AdminAccess"',
+    },
+  ];
+
+  for (const unsupportedDiff of unsupportedDiffs) {
+    assert.deepEqual(
+      v.parse(unsupportedDiffSchema, unsupportedDiff),
+      unsupportedDiff,
+    );
+  }
+});

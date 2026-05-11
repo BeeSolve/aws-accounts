@@ -292,14 +292,14 @@ test("diffStates reports new account with unresolved target OU", () => {
   ]);
 });
 
-test("diffStates classifies IdC entity additions as unsupported mutations", () => {
+test("diffStates emits IdC entity creation operations", () => {
   const current = createBaseState();
   const next = cloneState(current);
   next.identityCenter.users.push({
     userId: "u-2",
     userName: "bob",
     displayName: "Bob",
-    emails: ["bob@example.com"],
+    email: "bob@example.com",
   });
   next.identityCenter.groups.push({
     groupId: "g-2",
@@ -314,30 +314,31 @@ test("diffStates classifies IdC entity additions as unsupported mutations", () =
     current: current,
     next: next,
   });
-  assert.deepEqual(plan.operations, []);
-  assert.deepEqual(plan.unsupported, [
+  assert.deepEqual(plan.operations, [
     {
-      kind: "idcGroupAdded",
-      category: "unsupportedMutation",
-      description: 'new IdC group "Security"',
+      kind: "createIdcUser",
+      userName: "bob",
+      displayName: "Bob",
+      email: "bob@example.com",
     },
     {
-      kind: "idcPermissionSetAdded",
-      category: "unsupportedMutation",
-      description: 'new IdC permission set "ReadOnly"',
+      kind: "createIdcGroup",
+      groupDisplayName: "Security",
     },
     {
-      kind: "idcUserAdded",
-      category: "unsupportedMutation",
-      description: 'new IdC user "bob"',
+      kind: "createIdcPermissionSet",
+      permissionSetName: "ReadOnly",
+      description: "Read only",
     },
   ]);
+  assert.deepEqual(plan.unsupported, []);
 });
 
-test("diffStates classifies IdC assignment changes as unsupported mutations", () => {
+test("diffStates emits additive IdC assignment grants", () => {
   const current = createBaseState();
   const next = cloneState(current);
   next.identityCenter.accountAssignments = [
+    ...next.identityCenter.accountAssignments,
     {
       accountId: "222222222222",
       permissionSetArn: "arn:ps-admin",
@@ -349,14 +350,114 @@ test("diffStates classifies IdC assignment changes as unsupported mutations", ()
     current: current,
     next: next,
   });
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "grantIdcAccountAssignment",
+      accountName: "app-b",
+      permissionSetName: "Admin",
+      principalType: "GROUP",
+      principalName: "Platform",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates emits IdC assignment revokes when entities remain supported", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  next.identityCenter.accountAssignments = [];
+
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "revokeIdcAccountAssignment",
+      accountName: "app-a",
+      permissionSetName: "Admin",
+      principalType: "GROUP",
+      principalName: "Platform",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates keeps IdC removals unsupported and suppresses derivative revokes", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  next.identityCenter.users = [];
+  next.identityCenter.groups = [];
+  next.identityCenter.permissionSets = [];
+  next.identityCenter.accountAssignments = [];
+
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
   assert.deepEqual(plan.operations, []);
   assert.deepEqual(plan.unsupported, [
     {
-      kind: "idcAssignmentChanged",
-      category: "unsupportedMutation",
-      description: "IdC account assignments changed",
+      kind: "idcGroupRemoved",
+      category: "destructive",
+      description: 'removed IdC group "Platform"',
+    },
+    {
+      kind: "idcPermissionSetRemoved",
+      category: "destructive",
+      description: 'removed IdC permission set "Admin"',
+    },
+    {
+      kind: "idcUserRemoved",
+      category: "destructive",
+      description: 'removed IdC user "alice"',
     },
   ]);
+});
+
+test("diffStates keeps deterministic mixed Organizations and IdC ordering", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  next.organization.accounts.push({
+    id: "__pending_creation__",
+    arn: "__pending_creation__",
+    name: "app-c",
+    email: "app-c@example.com",
+    status: "ACTIVE",
+    parentId: "ou-eng",
+  });
+  next.identityCenter.users.push({
+    userId: "__pending_creation__",
+    userName: "bob",
+    displayName: "Bob",
+    email: "bob@example.com",
+  });
+  next.identityCenter.permissionSets.push({
+    permissionSetArn: "__pending_creation__",
+    name: "ReadOnly",
+    description: "Read only",
+  });
+  next.identityCenter.accountAssignments.push({
+    accountId: "__pending_creation__",
+    permissionSetArn: "__pending_creation__",
+    principalId: "__pending_creation__",
+    principalType: "USER",
+  });
+
+  const plan = diffStates({
+    current: current,
+    next: next,
+  });
+
+  assert.deepEqual(
+    plan.operations.map((operation) => operation.kind),
+    [
+      "createAccount",
+      "createIdcUser",
+      "createIdcPermissionSet",
+      "grantIdcAccountAssignment",
+    ],
+  );
 });
 
 function createBaseState(): StateFile {
@@ -406,7 +507,7 @@ function createBaseState(): StateFile {
           userId: "u-1",
           userName: "alice",
           displayName: "Alice",
-          emails: ["alice@example.com"],
+          email: "alice@example.com",
         },
       ],
       groups: [

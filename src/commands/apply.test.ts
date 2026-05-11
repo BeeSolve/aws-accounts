@@ -3,6 +3,19 @@ import test from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  CreateGroupCommand,
+  CreateUserCommand,
+  type IdentitystoreClient,
+} from "@aws-sdk/client-identitystore";
+import {
+  CreateAccountAssignmentCommand,
+  CreatePermissionSetCommand,
+  DeleteAccountAssignmentCommand,
+  DescribeAccountAssignmentCreationStatusCommand,
+  DescribeAccountAssignmentDeletionStatusCommand,
+  type SSOAdminClient,
+} from "@aws-sdk/client-sso-admin";
+import {
   CreateOrganizationalUnitCommand,
   CreateAccountCommand,
   DescribeCreateAccountStatusCommand,
@@ -11,7 +24,7 @@ import {
   UpdateOrganizationalUnitCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
-import { writeAwsConfigFromState } from "../awsConfig.js";
+import { regenerateAwsConfigTypes, writeAwsConfigFromState } from "../awsConfig.js";
 import { createTestWorkspace } from "../helpers.test.js";
 import { noopLogger } from "../logger.js";
 import { runApplyCommand } from "./apply.js";
@@ -49,17 +62,14 @@ test("runApplyCommand refuses destructive unsupported diffs regardless of flag",
       () =>
         runApplyCommand({
           organizationsClient: createOrganizationsClientMock({}),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
           statePath: paths.statePath,
           contextPath: paths.contextPath,
-          runtime: {
-            createAccount: {
-              timeoutInMs: 5000,
-              pollIntervalInMs: 1,
-            },
-          },
+          runtime: createApplyRuntime(),
           ignoreUnsupported: true,
           planConfirmation: async () => true,
         }),
@@ -115,17 +125,14 @@ test("runApplyCommand refuses destructive unsupported diffs before createOu exec
               createOuCalls += 1;
             },
           }),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
           statePath: paths.statePath,
           contextPath: paths.contextPath,
-          runtime: {
-            createAccount: {
-              timeoutInMs: 5000,
-              pollIntervalInMs: 1,
-            },
-          },
+          runtime: createApplyRuntime(),
           ignoreUnsupported: true,
           planConfirmation: async () => true,
         }),
@@ -156,11 +163,13 @@ test("runApplyCommand refuses non-destructive unsupported diffs without flag", a
     await updateConfigModel({
       configPath: paths.configPath,
       update: (config) => {
-        config.users.push({
-          userName: "bob",
-          displayName: "Bob",
-          emails: ["bob@example.com"],
-        });
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (engineering == null) {
+          throw new Error("Expected Engineering OU.");
+        }
+        engineering.parentName = "Pending";
       },
     });
 
@@ -168,17 +177,14 @@ test("runApplyCommand refuses non-destructive unsupported diffs without flag", a
       () =>
         runApplyCommand({
           organizationsClient: createOrganizationsClientMock({}),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
           statePath: paths.statePath,
           contextPath: paths.contextPath,
-          runtime: {
-            createAccount: {
-              timeoutInMs: 5000,
-              pollIntervalInMs: 1,
-            },
-          },
+          runtime: createApplyRuntime(),
           ignoreUnsupported: false,
           planConfirmation: async () => true,
         }),
@@ -208,11 +214,6 @@ test("runApplyCommand proceeds with ignoreUnsupported for supported operations",
     await updateConfigModel({
       configPath: paths.configPath,
       update: (config) => {
-        config.users.push({
-          userName: "bob",
-          displayName: "Bob",
-          emails: ["bob@example.com"],
-        });
         const pending = config.organizationalUnits.find(
           (organizationalUnit) => organizationalUnit.name === "Pending",
         );
@@ -222,6 +223,7 @@ test("runApplyCommand proceeds with ignoreUnsupported for supported operations",
         if (pending == null || engineering == null) {
           throw new Error("Expected Pending and Engineering OUs.");
         }
+        engineering.parentName = "Pending";
         engineering.accounts = [...pending.accounts];
         pending.accounts = [];
       },
@@ -238,17 +240,14 @@ test("runApplyCommand proceeds with ignoreUnsupported for supported operations",
           seenMoveInputs.push(input);
         },
       }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
       logger: noopLogger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
       statePath: paths.statePath,
       contextPath: paths.contextPath,
-      runtime: {
-        createAccount: {
-          timeoutInMs: 5000,
-          pollIntervalInMs: 1,
-        },
-      },
+      runtime: createApplyRuntime(),
       ignoreUnsupported: true,
       planConfirmation: async () => true,
     });
@@ -301,17 +300,14 @@ test("runApplyCommand returns cancelled when confirmation is rejected", async ()
           moveCalls += 1;
         },
       }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
       logger: noopLogger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
       statePath: paths.statePath,
       contextPath: paths.contextPath,
-      runtime: {
-        createAccount: {
-          timeoutInMs: 5000,
-          pollIntervalInMs: 1,
-        },
-      },
+      runtime: createApplyRuntime(),
       ignoreUnsupported: false,
       planConfirmation: async () => false,
     });
@@ -359,17 +355,14 @@ test("runApplyCommand applies one move and writes next state", async () => {
 
     const result = await runApplyCommand({
       organizationsClient: createOrganizationsClientMock({}),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
       logger: noopLogger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
       statePath: paths.statePath,
       contextPath: paths.contextPath,
-      runtime: {
-        createAccount: {
-          timeoutInMs: 5000,
-          pollIntervalInMs: 1,
-        },
-      },
+      runtime: createApplyRuntime(),
       ignoreUnsupported: false,
       planConfirmation: async () => true,
     });
@@ -456,17 +449,14 @@ test("runApplyCommand applies createAccount using shared helper and persists rea
           movedToTargetOu = true;
         },
       }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
       logger: noopLogger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
       statePath: paths.statePath,
       contextPath: paths.contextPath,
-      runtime: {
-        createAccount: {
-          timeoutInMs: 5000,
-          pollIntervalInMs: 1,
-        },
-      },
+      runtime: createApplyRuntime(),
       ignoreUnsupported: false,
       planConfirmation: async () => true,
     });
@@ -535,17 +525,14 @@ test("runApplyCommand applies createOu and persists created OU with AWS id", asy
           assert.equal(input.Name, "Platform");
         },
       }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
       logger: noopLogger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
       statePath: paths.statePath,
       contextPath: paths.contextPath,
-      runtime: {
-        createAccount: {
-          timeoutInMs: 5000,
-          pollIntervalInMs: 1,
-        },
-      },
+      runtime: createApplyRuntime(),
       ignoreUnsupported: false,
       planConfirmation: async () => true,
     });
@@ -609,17 +596,14 @@ test("runApplyCommand applies renameOu and persists renamed OU in state", async 
           assert.equal(input.Name, "CoreEngineering");
         },
       }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
       logger: noopLogger,
       configPath: paths.configPath,
       typesPath: paths.typesPath,
       statePath: paths.statePath,
       contextPath: paths.contextPath,
-      runtime: {
-        createAccount: {
-          timeoutInMs: 5000,
-          pollIntervalInMs: 1,
-        },
-      },
+      runtime: createApplyRuntime(),
       ignoreUnsupported: false,
       planConfirmation: async () => true,
     });
@@ -707,17 +691,14 @@ test("runApplyCommand persists partial state on operation failure", async () => 
               }
             },
           }),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
           statePath: paths.statePath,
           contextPath: paths.contextPath,
-          runtime: {
-            createAccount: {
-              timeoutInMs: 5000,
-              pollIntervalInMs: 1,
-            },
-          },
+          runtime: createApplyRuntime(),
           ignoreUnsupported: false,
           planConfirmation: async () => true,
         }),
@@ -838,17 +819,14 @@ test("runApplyCommand persists mixed successful operations before later failure"
               }
             },
           }),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
           logger: noopLogger,
           configPath: paths.configPath,
           typesPath: paths.typesPath,
           statePath: paths.statePath,
           contextPath: paths.contextPath,
-          runtime: {
-            createAccount: {
-              timeoutInMs: 5000,
-              pollIntervalInMs: 1,
-            },
-          },
+          runtime: createApplyRuntime(),
           ignoreUnsupported: false,
           planConfirmation: async () => true,
         }),
@@ -891,6 +869,499 @@ test("runApplyCommand persists mixed successful operations before later failure"
   }
 });
 
+test("runApplyCommand applies IdC entity creation and persists state", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.users.push({
+          userName: "bob",
+          displayName: "Bob",
+          email: "bob@example.com",
+        });
+        config.groups.push({
+          displayName: "Operators",
+        });
+        config.permissionSets.push({
+          name: "ReadOnly",
+          description: "Read only",
+        });
+      },
+    });
+
+    let sawCreateUser = false;
+    let sawCreateGroup = false;
+    let sawCreatePermissionSet = false;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({}),
+      ssoAdminClient: createSsoAdminClientMock({
+        onCreatePermissionSet: async (input) => {
+          sawCreatePermissionSet = true;
+          assert.equal(input.InstanceArn, "arn:aws:sso:::instance/ssoins-123");
+          assert.equal(input.Name, "ReadOnly");
+          assert.equal(input.Description, "Read only");
+        },
+        createPermissionSetResponse: {
+          PermissionSet: {
+            PermissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-2",
+            Name: "ReadOnly",
+            Description: "Read only",
+          },
+        },
+      }),
+      identityStoreClient: createIdentityStoreClientMock({
+        onCreateUser: async (input) => {
+          sawCreateUser = true;
+          assert.equal(input.IdentityStoreId, "d-123");
+          assert.equal(input.UserName, "bob");
+          assert.equal(input.DisplayName, "Bob");
+          assert.equal(input.Emails?.[0]?.Value, "bob@example.com");
+        },
+        onCreateGroup: async (input) => {
+          sawCreateGroup = true;
+          assert.equal(input.IdentityStoreId, "d-123");
+          assert.equal(input.DisplayName, "Operators");
+        },
+        createUserResponse: {
+          UserId: "u-bob",
+          IdentityStoreId: "d-123",
+        },
+        createGroupResponse: {
+          GroupId: "g-ops",
+        },
+      }),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 3);
+    assert.equal(sawCreateUser, true);
+    assert.equal(sawCreateGroup, true);
+    assert.equal(sawCreatePermissionSet, true);
+
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        users: Array<{ userId: string; userName: string }>;
+        groups: Array<{ groupId: string; displayName: string }>;
+        permissionSets: Array<{ permissionSetArn: string; name: string }>;
+      };
+    };
+    assert.equal(
+      persisted.identityCenter.users.some(
+        (user) => user.userId === "u-bob" && user.userName === "bob",
+      ),
+      true,
+    );
+    assert.equal(
+      persisted.identityCenter.groups.some(
+        (group) => group.groupId === "g-ops" && group.displayName === "Operators",
+      ),
+      true,
+    );
+    assert.equal(
+      persisted.identityCenter.permissionSets.some(
+        (permissionSet) =>
+          permissionSet.permissionSetArn.endsWith("/ps-2") &&
+          permissionSet.name === "ReadOnly",
+      ),
+      true,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand resolves mixed dependency batches from working state", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (engineering == null) {
+          throw new Error("Expected Engineering OU.");
+        }
+        engineering.accounts = [
+          ...engineering.accounts,
+          { name: "BrandNew", email: "brandnew@example.com" },
+        ];
+        config.users.push({
+          userName: "bob",
+          displayName: "Bob",
+          email: "bob@example.com",
+        });
+        config.permissionSets.push({
+          name: "ReadOnly",
+          description: "Read only",
+        });
+      },
+    });
+    await regenerateAwsConfigTypes({
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.assignments.push({
+          permissionSet: "ReadOnly",
+          user: "bob",
+          accounts: ["BrandNew"],
+        });
+      },
+    });
+
+    let sawGrant = false;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        createAccountResponse: {
+          CreateAccountStatus: {
+            Id: "car-123",
+          },
+        },
+        describeStatuses: [
+          {
+            CreateAccountStatus: {
+              Id: "car-123",
+              State: "SUCCEEDED",
+              AccountId: "555555555555",
+            },
+          },
+        ],
+        listAccountsPages: [
+          {
+            Accounts: [
+              {
+                Id: "555555555555",
+                Arn: "arn:aws:organizations:::account/555555555555",
+                Name: "BrandNew",
+                Email: "brandnew@example.com",
+                Status: "ACTIVE",
+              },
+            ],
+          },
+        ],
+      }),
+      ssoAdminClient: createSsoAdminClientMock({
+        createPermissionSetResponse: {
+          PermissionSet: {
+            PermissionSetArn:
+              "arn:aws:sso:::permissionSet/ssoins-123/ps-readonly",
+            Name: "ReadOnly",
+            Description: "Read only",
+          },
+        },
+        onCreateAccountAssignment: async (input) => {
+          sawGrant = true;
+          assert.equal(input.TargetId, "555555555555");
+          assert.equal(
+            input.PermissionSetArn,
+            "arn:aws:sso:::permissionSet/ssoins-123/ps-readonly",
+          );
+          assert.equal(input.PrincipalType, "USER");
+          assert.equal(input.PrincipalId, "u-bob");
+        },
+      }),
+      identityStoreClient: createIdentityStoreClientMock({
+        createUserResponse: {
+          UserId: "u-bob",
+          IdentityStoreId: "d-123",
+        },
+      }),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 4);
+    assert.equal(sawGrant, true);
+
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        accounts: Array<{ id: string; name: string }>;
+      };
+      identityCenter: {
+        users: Array<{ userId: string; userName: string }>;
+        permissionSets: Array<{ permissionSetArn: string; name: string }>;
+        accountAssignments: Array<{
+          accountId: string;
+          permissionSetArn: string;
+          principalId: string;
+          principalType: string;
+        }>;
+      };
+    };
+    assert.equal(
+      persisted.organization.accounts.some(
+        (account) => account.id === "555555555555" && account.name === "BrandNew",
+      ),
+      true,
+    );
+    assert.equal(
+      persisted.identityCenter.users.some(
+        (user) => user.userId === "u-bob" && user.userName === "bob",
+      ),
+      true,
+    );
+    assert.equal(
+      persisted.identityCenter.permissionSets.some(
+        (permissionSet) =>
+          permissionSet.permissionSetArn.endsWith("/ps-readonly") &&
+          permissionSet.name === "ReadOnly",
+      ),
+      true,
+    );
+    assert.equal(
+      persisted.identityCenter.accountAssignments.some(
+        (accountAssignment) =>
+          accountAssignment.accountId === "555555555555" &&
+          accountAssignment.permissionSetArn.endsWith("/ps-readonly") &&
+          accountAssignment.principalId === "u-bob" &&
+          accountAssignment.principalType === "USER",
+      ),
+      true,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand revokes IdC assignments and persists state", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    const rawState = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        accountAssignments: Array<{
+          accountId: string;
+          permissionSetArn: string;
+          principalId: string;
+          principalType: "GROUP" | "USER";
+        }>;
+        accessRoles: Array<{
+          accountId: string;
+          permissionSetArn: string;
+          principalId: string;
+          principalType: "GROUP" | "USER";
+          roleName: string;
+        }>;
+      };
+    };
+    rawState.identityCenter.accountAssignments.push({
+      accountId: "111111111111",
+      permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+      principalId: "g-123",
+      principalType: "GROUP",
+    });
+    rawState.identityCenter.accessRoles.push({
+      accountId: "111111111111",
+      permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+      principalId: "g-123",
+      principalType: "GROUP",
+      roleName:
+        "AWSReservedSSO_ps-1_111111111111",
+    });
+    await writeFile(paths.statePath, `${JSON.stringify(rawState, null, 2)}\n`, "utf8");
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.assignments = [];
+      },
+    });
+
+    let sawRevoke = false;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({}),
+      ssoAdminClient: createSsoAdminClientMock({
+        onDeleteAccountAssignment: async (input) => {
+          sawRevoke = true;
+          assert.equal(input.TargetId, "111111111111");
+          assert.equal(
+            input.PermissionSetArn,
+            "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+          );
+          assert.equal(input.PrincipalId, "g-123");
+          assert.equal(input.PrincipalType, "GROUP");
+        },
+      }),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 1);
+    assert.equal(sawRevoke, true);
+
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        accountAssignments: unknown[];
+        accessRoles: unknown[];
+      };
+    };
+    assert.equal(persisted.identityCenter.accountAssignments.length, 0);
+    assert.equal(persisted.identityCenter.accessRoles.length, 0);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand persists successful IdC operations before later assignment failure", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.users.push({
+          userName: "bob",
+          displayName: "Bob",
+          email: "bob@example.com",
+        });
+      },
+    });
+    await regenerateAwsConfigTypes({
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.assignments.push({
+          permissionSet: "AdminAccess",
+          user: "bob",
+          accounts: ["AppAccount"],
+        });
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        runApplyCommand({
+          organizationsClient: createOrganizationsClientMock({}),
+          ssoAdminClient: createSsoAdminClientMock({
+            creationStatuses: [
+              {
+                AccountAssignmentCreationStatus: {
+                  Status: "FAILED",
+                  RequestId: "caa-1",
+                  FailureReason: "synthetic assignment failure",
+                },
+              },
+            ],
+          }),
+          identityStoreClient: createIdentityStoreClientMock({
+            createUserResponse: {
+              UserId: "u-bob",
+              IdentityStoreId: "d-123",
+            },
+          }),
+          logger: noopLogger,
+          configPath: paths.configPath,
+          typesPath: paths.typesPath,
+          statePath: paths.statePath,
+          contextPath: paths.contextPath,
+          runtime: createApplyRuntime(),
+          ignoreUnsupported: false,
+          planConfirmation: async () => true,
+        }),
+      /synthetic assignment failure/,
+    );
+
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        users: Array<{ userId: string; userName: string }>;
+        accountAssignments: unknown[];
+      };
+    };
+    assert.equal(
+      persisted.identityCenter.users.some(
+        (user) => user.userId === "u-bob" && user.userName === "bob",
+      ),
+      true,
+    );
+    assert.equal(persisted.identityCenter.accountAssignments.length, 0);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 function getFixturePaths(props: { workspacePath: string }): {
   statePath: string;
   contextPath: string;
@@ -902,6 +1373,22 @@ function getFixturePaths(props: { workspacePath: string }): {
     contextPath: join(props.workspacePath, "aws.context.json"),
     configPath: join(props.workspacePath, "aws.config.ts"),
     typesPath: join(props.workspacePath, "aws.config.types.ts"),
+  };
+}
+
+function createApplyRuntime(): {
+  createAccount: { timeoutInMs: number; pollIntervalInMs: number };
+  accountAssignment: { timeoutInMs: number; pollIntervalInMs: number };
+} {
+  return {
+    createAccount: {
+      timeoutInMs: 5000,
+      pollIntervalInMs: 1,
+    },
+    accountAssignment: {
+      timeoutInMs: 5000,
+      pollIntervalInMs: 1,
+    },
   };
 }
 
@@ -1011,6 +1498,198 @@ function createOrganizationsClientMock(props: {
   return mock as OrganizationsClient;
 }
 
+function createIdentityStoreClientMock(props: {
+  onCreateUser?: (input: {
+    IdentityStoreId?: string;
+    UserName?: string;
+    DisplayName?: string;
+    Emails?: Array<{ Value?: string; Type?: string; Primary?: boolean }>;
+  }) => Promise<void>;
+  onCreateGroup?: (input: {
+    IdentityStoreId?: string;
+    DisplayName?: string;
+  }) => Promise<void>;
+  createUserResponse?: { UserId?: string; IdentityStoreId?: string };
+  createGroupResponse?: { GroupId?: string };
+}): IdentitystoreClient {
+  const mock = {
+    async send(command: unknown): Promise<unknown> {
+      if (command instanceof CreateUserCommand) {
+        if (props.onCreateUser != null) {
+          await props.onCreateUser({
+            IdentityStoreId: command.input.IdentityStoreId,
+            UserName: command.input.UserName,
+            DisplayName: command.input.DisplayName,
+            Emails: command.input.Emails?.map((email) => ({
+              Value: email.Value,
+              Type: email.Type,
+              Primary: email.Primary,
+            })),
+          });
+        }
+        return props.createUserResponse ?? {
+          UserId: "u-created",
+          IdentityStoreId: command.input.IdentityStoreId,
+        };
+      }
+      if (command instanceof CreateGroupCommand) {
+        if (props.onCreateGroup != null) {
+          await props.onCreateGroup({
+            IdentityStoreId: command.input.IdentityStoreId,
+            DisplayName: command.input.DisplayName,
+          });
+        }
+        return props.createGroupResponse ?? {
+          GroupId: "g-created",
+        };
+      }
+      throw new Error("Unexpected Identity Store command in test.");
+    },
+  };
+  return mock as IdentitystoreClient;
+}
+
+function createSsoAdminClientMock(props: {
+  onCreatePermissionSet?: (input: {
+    InstanceArn?: string;
+    Name?: string;
+    Description?: string;
+  }) => Promise<void>;
+  onCreateAccountAssignment?: (input: {
+    InstanceArn?: string;
+    TargetId?: string;
+    TargetType?: string;
+    PermissionSetArn?: string;
+    PrincipalType?: string;
+    PrincipalId?: string;
+  }) => Promise<void>;
+  onDeleteAccountAssignment?: (input: {
+    InstanceArn?: string;
+    TargetId?: string;
+    TargetType?: string;
+    PermissionSetArn?: string;
+    PrincipalType?: string;
+    PrincipalId?: string;
+  }) => Promise<void>;
+  createPermissionSetResponse?: {
+    PermissionSet?: {
+      PermissionSetArn?: string;
+      Name?: string;
+      Description?: string;
+    };
+  };
+  createAccountAssignmentResponse?: {
+    AccountAssignmentCreationStatus?: { RequestId?: string };
+  };
+  deleteAccountAssignmentResponse?: {
+    AccountAssignmentDeletionStatus?: { RequestId?: string };
+  };
+  creationStatuses?: Array<{
+    AccountAssignmentCreationStatus?: {
+      Status?: string;
+      RequestId?: string;
+      FailureReason?: string;
+    };
+  }>;
+  deletionStatuses?: Array<{
+    AccountAssignmentDeletionStatus?: {
+      Status?: string;
+      RequestId?: string;
+      FailureReason?: string;
+    };
+  }>;
+}): SSOAdminClient {
+  const creationStatuses = props.creationStatuses ?? [];
+  const deletionStatuses = props.deletionStatuses ?? [];
+  let creationIndex = 0;
+  let deletionIndex = 0;
+  const mock = {
+    async send(command: unknown): Promise<unknown> {
+      if (command instanceof CreatePermissionSetCommand) {
+        if (props.onCreatePermissionSet != null) {
+          await props.onCreatePermissionSet({
+            InstanceArn: command.input.InstanceArn,
+            Name: command.input.Name,
+            Description: command.input.Description,
+          });
+        }
+        return (
+          props.createPermissionSetResponse ?? {
+            PermissionSet: {
+              PermissionSetArn:
+                "arn:aws:sso:::permissionSet/ssoins-123/ps-created",
+              Name: command.input.Name,
+              Description: command.input.Description,
+            },
+          }
+        );
+      }
+      if (command instanceof CreateAccountAssignmentCommand) {
+        if (props.onCreateAccountAssignment != null) {
+          await props.onCreateAccountAssignment({
+            InstanceArn: command.input.InstanceArn,
+            TargetId: command.input.TargetId,
+            TargetType: command.input.TargetType,
+            PermissionSetArn: command.input.PermissionSetArn,
+            PrincipalType: command.input.PrincipalType,
+            PrincipalId: command.input.PrincipalId,
+          });
+        }
+        return props.createAccountAssignmentResponse ?? {
+          AccountAssignmentCreationStatus: {
+            RequestId: "caa-1",
+          },
+        };
+      }
+      if (command instanceof DeleteAccountAssignmentCommand) {
+        if (props.onDeleteAccountAssignment != null) {
+          await props.onDeleteAccountAssignment({
+            InstanceArn: command.input.InstanceArn,
+            TargetId: command.input.TargetId,
+            TargetType: command.input.TargetType,
+            PermissionSetArn: command.input.PermissionSetArn,
+            PrincipalType: command.input.PrincipalType,
+            PrincipalId: command.input.PrincipalId,
+          });
+        }
+        return props.deleteAccountAssignmentResponse ?? {
+          AccountAssignmentDeletionStatus: {
+            RequestId: "daa-1",
+          },
+        };
+      }
+      if (command instanceof DescribeAccountAssignmentCreationStatusCommand) {
+        const response =
+          creationStatuses[
+            Math.min(creationIndex, creationStatuses.length - 1)
+          ] ?? {
+            AccountAssignmentCreationStatus: {
+              Status: "SUCCEEDED",
+              RequestId: command.input.AccountAssignmentCreationRequestId,
+            },
+          };
+        creationIndex += 1;
+        return response;
+      }
+      if (command instanceof DescribeAccountAssignmentDeletionStatusCommand) {
+        const response =
+          deletionStatuses[
+            Math.min(deletionIndex, deletionStatuses.length - 1)
+          ] ?? {
+            AccountAssignmentDeletionStatus: {
+              Status: "SUCCEEDED",
+              RequestId: command.input.AccountAssignmentDeletionRequestId,
+            },
+          };
+        deletionIndex += 1;
+        return response;
+      }
+      throw new Error("Unexpected SSO Admin command in test.");
+    },
+  };
+  return mock as SSOAdminClient;
+}
+
 async function updateConfigModel(props: {
   configPath: string;
   update: (config: {
@@ -1019,7 +1698,7 @@ async function updateConfigModel(props: {
       parentName: string | null;
       accounts: Array<{ name: string; email: string }>;
     }>;
-    users: Array<{ userName: string; displayName: string; emails: string[] }>;
+    users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
@@ -1043,7 +1722,7 @@ async function updateConfigModel(props: {
       parentName: string | null;
       accounts: Array<{ name: string; email: string }>;
     }>;
-    users: Array<{ userName: string; displayName: string; emails: string[] }>;
+    users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
@@ -1117,7 +1796,7 @@ async function writeFixtureFiles(props: {
           userId: "u-123",
           userName: "alice",
           displayName: "Alice",
-          emails: ["alice@example.com"],
+          email: "alice@example.com",
         },
       ],
       groups: [

@@ -34,11 +34,50 @@ const createAccountOperationSchema = v.strictObject({
   targetOuName: v.string(),
 });
 
+const createIdcUserOperationSchema = v.strictObject({
+  kind: v.literal("createIdcUser"),
+  userName: v.string(),
+  displayName: v.string(),
+  email: v.string(),
+});
+
+const createIdcGroupOperationSchema = v.strictObject({
+  kind: v.literal("createIdcGroup"),
+  groupDisplayName: v.string(),
+});
+
+const createIdcPermissionSetOperationSchema = v.strictObject({
+  kind: v.literal("createIdcPermissionSet"),
+  permissionSetName: v.string(),
+  description: v.string(),
+});
+
+const grantIdcAccountAssignmentOperationSchema = v.strictObject({
+  kind: v.literal("grantIdcAccountAssignment"),
+  accountName: v.string(),
+  permissionSetName: v.string(),
+  principalType: v.picklist(["GROUP", "USER"]),
+  principalName: v.string(),
+});
+
+const revokeIdcAccountAssignmentOperationSchema = v.strictObject({
+  kind: v.literal("revokeIdcAccountAssignment"),
+  accountName: v.string(),
+  permissionSetName: v.string(),
+  principalType: v.picklist(["GROUP", "USER"]),
+  principalName: v.string(),
+});
+
 export const operationSchema = v.variant("kind", [
   moveAccountOperationSchema,
   createOuOperationSchema,
   renameOuOperationSchema,
   createAccountOperationSchema,
+  createIdcUserOperationSchema,
+  createIdcGroupOperationSchema,
+  createIdcPermissionSetOperationSchema,
+  grantIdcAccountAssignmentOperationSchema,
+  revokeIdcAccountAssignmentOperationSchema,
 ]);
 
 const unsupportedDiffKindSchema = v.picklist([
@@ -47,10 +86,9 @@ const unsupportedDiffKindSchema = v.picklist([
   "newOuWithUnknownParent",
   "newAccountWithUnknownOu",
   "removedOu",
-  "idcUserAdded",
-  "idcGroupAdded",
-  "idcPermissionSetAdded",
-  "idcAssignmentChanged",
+  "idcUserRemoved",
+  "idcGroupRemoved",
+  "idcPermissionSetRemoved",
   "removedAccount",
 ]);
 
@@ -75,6 +113,21 @@ export type CreateOuOperation = v.InferOutput<typeof createOuOperationSchema>;
 export type RenameOuOperation = v.InferOutput<typeof renameOuOperationSchema>;
 export type CreateAccountOperation = v.InferOutput<
   typeof createAccountOperationSchema
+>;
+export type CreateIdcUserOperation = v.InferOutput<
+  typeof createIdcUserOperationSchema
+>;
+export type CreateIdcGroupOperation = v.InferOutput<
+  typeof createIdcGroupOperationSchema
+>;
+export type CreateIdcPermissionSetOperation = v.InferOutput<
+  typeof createIdcPermissionSetOperationSchema
+>;
+export type GrantIdcAccountAssignmentOperation = v.InferOutput<
+  typeof grantIdcAccountAssignmentOperationSchema
+>;
+export type RevokeIdcAccountAssignmentOperation = v.InferOutput<
+  typeof revokeIdcAccountAssignmentOperationSchema
 >;
 export type Operation = v.InferOutput<typeof operationSchema>;
 export type UnsupportedDiffKind = v.InferOutput<typeof unsupportedDiffKindSchema>;

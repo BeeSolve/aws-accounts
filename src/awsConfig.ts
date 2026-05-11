@@ -56,7 +56,7 @@ const awsConfigModelSchema = v.strictObject({
     v.strictObject({
       userName: v.string(),
       displayName: v.string(),
-      emails: v.array(v.string()),
+      email: v.string(),
     }),
   ),
   groups: v.array(
@@ -487,7 +487,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     users: props.state.identityCenter.users.map((user) => ({
       userName: user.userName,
       displayName: user.displayName,
-      emails: [...user.emails],
+      email: user.email,
     })),
     groups: props.state.identityCenter.groups.map((group) => ({
       displayName: group.displayName,
@@ -627,7 +627,7 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
         userId: matchedUser?.userId ?? pendingCreationId,
         userName: user.userName,
         displayName: user.displayName,
-        emails: [...user.emails],
+        email: user.email,
       };
     },
   );
@@ -906,7 +906,7 @@ export const awsConfigSchema = v.strictObject({
     v.strictObject({
       userName: v.string(),
       displayName: v.string(),
-      emails: v.array(v.string()),
+      email: v.string(),
     }),
   ),
   groups: v.array(

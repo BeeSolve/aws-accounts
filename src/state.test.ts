@@ -1,11 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  addAccountAssignmentToWorkingState,
   createWorkingState,
   materializeWorkingState,
   moveAccountInWorkingState,
   normalizeState,
+  removeAccountAssignmentFromWorkingState,
   renameOrganizationalUnitInWorkingState,
+  upsertIdcGroupInWorkingState,
+  upsertIdcPermissionSetInWorkingState,
+  upsertIdcUserInWorkingState,
   upsertAccountInWorkingState,
   upsertOrganizationalUnitInWorkingState,
   validateState
@@ -30,8 +35,8 @@ test("normalizeState sorts by ids/arns before names", () => {
       instanceArn: "arn:aws:sso:::instance/ssoins-123",
       identityStoreId: "d-123",
       users: [
-        { userId: "u-2", userName: "zeta", displayName: "Z", emails: [] },
-        { userId: "u-1", userName: "alpha", displayName: "A", emails: [] }
+        { userId: "u-2", userName: "zeta", displayName: "Z", email: "" },
+        { userId: "u-1", userName: "alpha", displayName: "A", email: "" }
       ],
       groups: [
         { groupId: "g-2", displayName: "B" },
@@ -185,6 +190,78 @@ test("working state helpers update organization records immutably", () => {
   assert.equal(materialized.organization.organizationalUnits.find((organizationalUnit) => organizationalUnit.id === "ou-a")?.name, "AlphaRenamed");
   assert.equal(materialized.organization.organizationalUnits.find((organizationalUnit) => organizationalUnit.id === "ou-c")?.name, "Gamma");
   assert.equal(materialized.organization.accounts.find((account) => account.id === "333333333333")?.parentId, "ou-c");
+});
+
+test("working state helpers update IdC records immutably and regenerate access roles", () => {
+  const input = createSampleState();
+
+  const workingState = createWorkingState({
+    state: input
+  });
+  const withUser = upsertIdcUserInWorkingState({
+    workingState: workingState,
+    user: {
+      userId: "u-1",
+      userName: "alice",
+      displayName: "Alice",
+      email: "alice@example.com",
+    },
+  });
+  const withGroup = upsertIdcGroupInWorkingState({
+    workingState: withUser,
+    group: {
+      groupId: "g-1",
+      displayName: "Admins",
+    },
+  });
+  const withPermissionSet = upsertIdcPermissionSetInWorkingState({
+    workingState: withGroup,
+    permissionSet: {
+      permissionSetArn: "arn:ps-1",
+      name: "AdminAccess",
+      description: "Admin",
+    },
+  });
+  const withAssignment = addAccountAssignmentToWorkingState({
+    workingState: withPermissionSet,
+    accountAssignment: {
+      accountId: "111111111111",
+      permissionSetArn: "arn:ps-1",
+      principalId: "g-1",
+      principalType: "GROUP",
+    },
+  });
+  const withoutAssignment = removeAccountAssignmentFromWorkingState({
+    workingState: withAssignment,
+    accountAssignment: {
+      accountId: "111111111111",
+      permissionSetArn: "arn:ps-1",
+      principalId: "g-1",
+      principalType: "GROUP",
+    },
+  });
+
+  const withAssignmentMaterialized = materializeWorkingState({
+    workingState: withAssignment,
+  });
+  const withoutAssignmentMaterialized = materializeWorkingState({
+    workingState: withoutAssignment,
+  });
+
+  assert.equal(input.identityCenter.users.length, 0);
+  assert.equal(withAssignmentMaterialized.identityCenter.users[0]?.userName, "alice");
+  assert.equal(withAssignmentMaterialized.identityCenter.groups[0]?.displayName, "Admins");
+  assert.equal(
+    withAssignmentMaterialized.identityCenter.permissionSets[0]?.name,
+    "AdminAccess",
+  );
+  assert.equal(
+    withAssignmentMaterialized.identityCenter.accountAssignments.length,
+    1,
+  );
+  assert.equal(withAssignmentMaterialized.identityCenter.accessRoles.length, 1);
+  assert.equal(withoutAssignmentMaterialized.identityCenter.accountAssignments.length, 0);
+  assert.equal(withoutAssignmentMaterialized.identityCenter.accessRoles.length, 0);
 });
 
 function createSampleState() {

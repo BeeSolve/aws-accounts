@@ -79,6 +79,38 @@ export async function runPlanCommand(
       );
       continue;
     }
+    if (operation.kind === "createIdcUser") {
+      props.logger.log(`  create IdC user "${operation.userName}"`);
+      continue;
+    }
+    if (operation.kind === "createIdcGroup") {
+      props.logger.log(`  create IdC group "${operation.groupDisplayName}"`);
+      continue;
+    }
+    if (operation.kind === "createIdcPermissionSet") {
+      props.logger.log(
+        `  create IdC permission set "${operation.permissionSetName}"`,
+      );
+      continue;
+    }
+    if (operation.kind === "grantIdcAccountAssignment") {
+      props.logger.log(
+        `  grant IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel({
+          principalType: operation.principalType,
+          principalName: operation.principalName,
+        })} on "${operation.accountName}"`,
+      );
+      continue;
+    }
+    if (operation.kind === "revokeIdcAccountAssignment") {
+      props.logger.log(
+        `  revoke IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel({
+          principalType: operation.principalType,
+          principalName: operation.principalName,
+        })} on "${operation.accountName}"`,
+      );
+      continue;
+    }
     assertUnreachable(
       operation,
       "Unsupported operation kind in human-readable plan output.",
@@ -94,4 +126,14 @@ export async function runPlanCommand(
   return {
     plan: plan,
   };
+}
+
+function formatPrincipalLabel(props: {
+  principalType: "GROUP" | "USER";
+  principalName: string;
+}): string {
+  if (props.principalType === "GROUP") {
+    return `group "${props.principalName}"`;
+  }
+  return `user "${props.principalName}"`;
 }

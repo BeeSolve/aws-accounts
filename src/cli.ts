@@ -44,6 +44,8 @@ const statePath = "state.json";
 const contextPath = "aws.context.json";
 const createAccountTimeoutInMs = 15 * 60 * 1000;
 const createAccountPollIntervalInMs = 5 * 1000;
+const accountAssignmentTimeoutInMs = 15 * 60 * 1000;
+const accountAssignmentPollIntervalInMs = 5 * 1000;
 const nonEmptyString = v.pipe(v.string(), v.trim(), v.nonEmpty());
 const emailSchema = v.pipe(nonEmptyString, v.email());
 
@@ -255,12 +257,14 @@ async function main(): Promise<void> {
         ignoreUnsupported: args.values["ignore-unsupported"],
       })}`,
     );
-    const planConfirmation = buildBootstrapPlanConfirmation({
+    const planConfirmation = buildApplyPlanConfirmation({
       yes: args.values.yes,
       isTty: process.stdin.isTTY,
     });
     const result = await runApplyCommand({
       organizationsClient,
+      ssoAdminClient,
+      identityStoreClient,
       logger,
       configPath,
       typesPath,
@@ -270,6 +274,10 @@ async function main(): Promise<void> {
         createAccount: {
           timeoutInMs: createAccountTimeoutInMs,
           pollIntervalInMs: createAccountPollIntervalInMs,
+        },
+        accountAssignment: {
+          timeoutInMs: accountAssignmentTimeoutInMs,
+          pollIntervalInMs: accountAssignmentPollIntervalInMs,
         },
       },
       ignoreUnsupported: args.values["ignore-unsupported"] ?? false,
@@ -545,6 +553,37 @@ function buildBootstrapPlanConfirmation(
     try {
       const answer = await readlineInterface.question(
         "Proceed with creating organizational units? [y/N] ",
+      );
+      const normalized = answer.trim().toLowerCase();
+      return normalized === "y" || normalized === "yes";
+    } finally {
+      readlineInterface.close();
+    }
+  };
+}
+
+function buildApplyPlanConfirmation(
+  props: BuildBootstrapPlanConfirmationProps,
+): (props: { planLines: string[] }) => Promise<boolean> {
+  return async (planProps: { planLines: string[] }): Promise<boolean> => {
+    if (planProps.planLines.length === 0) {
+      return true;
+    }
+    if (props.yes) {
+      return true;
+    }
+    if (props.isTty !== true) {
+      throw new Error(
+        "Refusing to apply changes in non-interactive mode without --yes.",
+      );
+    }
+    const readlineInterface = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    try {
+      const answer = await readlineInterface.question(
+        "Proceed with applying these changes? [y/N] ",
       );
       const normalized = answer.trim().toLowerCase();
       return normalized === "y" || normalized === "yes";

@@ -4,6 +4,19 @@ import {
   OrganizationsClient,
   UpdateOrganizationalUnitCommand,
 } from "@aws-sdk/client-organizations";
+import {
+  CreateGroupCommand,
+  CreateUserCommand,
+  IdentitystoreClient,
+} from "@aws-sdk/client-identitystore";
+import {
+  CreateAccountAssignmentCommand,
+  CreatePermissionSetCommand,
+  DeleteAccountAssignmentCommand,
+  DescribeAccountAssignmentCreationStatusCommand,
+  DescribeAccountAssignmentDeletionStatusCommand,
+  SSOAdminClient,
+} from "@aws-sdk/client-sso-admin";
 import { createAccountAndMoveToOu } from "../accountCreation.js";
 import {
   loadAwsConfigModelFromTsFile,
@@ -14,21 +27,28 @@ import { diffStates } from "../diff.js";
 import { assertUnreachable } from "../helpers.js";
 import type { Operation, Plan } from "../operations.js";
 import {
+  addAccountAssignmentToWorkingState,
   createWorkingState,
   materializeWorkingState,
   moveAccountInWorkingState,
+  removeAccountAssignmentFromWorkingState,
   readStateFile,
   renameOrganizationalUnitInWorkingState,
   type StateFile,
   type WorkingState,
+  upsertIdcGroupInWorkingState,
+  upsertIdcPermissionSetInWorkingState,
+  upsertIdcUserInWorkingState,
   upsertAccountInWorkingState,
   upsertOrganizationalUnitInWorkingState,
-  writeStateFile
+  writeStateFile,
 } from "../state.js";
 import type { Logger } from "../logger.js";
 
 type ApplyCommandInput = {
   organizationsClient: OrganizationsClient;
+  ssoAdminClient: SSOAdminClient;
+  identityStoreClient: IdentitystoreClient;
   logger: Logger;
   configPath: string;
   typesPath: string;
@@ -36,6 +56,10 @@ type ApplyCommandInput = {
   contextPath: string;
   runtime: {
     createAccount: {
+      timeoutInMs: number;
+      pollIntervalInMs: number;
+    };
+    accountAssignment: {
       timeoutInMs: number;
       pollIntervalInMs: number;
     };
@@ -134,7 +158,7 @@ export async function runApplyCommand(
   }
 
   let progressedState = createWorkingState({
-    state: currentState
+    state: currentState,
   });
   let appliedOperations = 0;
   try {
@@ -142,6 +166,8 @@ export async function runApplyCommand(
       progressedState = await applyOperation({
         state: progressedState,
         organizationsClient: props.organizationsClient,
+        ssoAdminClient: props.ssoAdminClient,
+        identityStoreClient: props.identityStoreClient,
         logger: props.logger,
         context: context,
         runtime: props.runtime,
@@ -151,7 +177,7 @@ export async function runApplyCommand(
     }
   } catch (error) {
     const progressedStateFile = materializeWorkingState({
-      workingState: progressedState
+      workingState: progressedState,
     });
     if (statesAreDifferent(currentState, progressedStateFile)) {
       await writeStateFile(props.statePath, progressedStateFile);
@@ -162,7 +188,7 @@ export async function runApplyCommand(
     );
   }
   const progressedStateFile = materializeWorkingState({
-    workingState: progressedState
+    workingState: progressedState,
   });
   if (statesAreDifferent(currentState, progressedStateFile)) {
     await writeStateFile(props.statePath, progressedStateFile);
@@ -182,6 +208,8 @@ export async function runApplyCommand(
 async function applyOperation(props: {
   state: WorkingState;
   organizationsClient: OrganizationsClient;
+  ssoAdminClient: SSOAdminClient;
+  identityStoreClient: IdentitystoreClient;
   logger: Logger;
   context: Awaited<ReturnType<typeof readAwsContextFromFile>>;
   runtime: ApplyCommandInput["runtime"];
@@ -203,7 +231,7 @@ async function applyOperation(props: {
     return moveAccountInWorkingState({
       workingState: props.state,
       accountId: operation.accountId,
-      parentId: operation.toOuId
+      parentId: operation.toOuId,
     });
   }
   if (operation.kind === "createOu") {
@@ -233,8 +261,8 @@ async function applyOperation(props: {
         id: createdOu.Id,
         parentId: operation.parentOuId,
         arn: createdOu.Arn,
-        name: createdOu.Name
-      }
+        name: createdOu.Name,
+      },
     });
   }
   if (operation.kind === "renameOu") {
@@ -251,7 +279,7 @@ async function applyOperation(props: {
     return renameOrganizationalUnitInWorkingState({
       workingState: props.state,
       organizationalUnitId: operation.ouId,
-      name: operation.toOuName
+      name: operation.toOuName,
     });
   }
   if (operation.kind === "createAccount") {
@@ -273,8 +301,203 @@ async function applyOperation(props: {
         name: result.account.name,
         email: result.account.email,
         status: result.account.status,
-        parentId: operation.targetOuId
-      }
+        parentId: operation.targetOuId,
+      },
+    });
+  }
+  if (operation.kind === "createIdcUser") {
+    props.logger.log(`Creating IdC user "${operation.userName}"...`);
+    const response = await props.identityStoreClient.send(
+      new CreateUserCommand({
+        IdentityStoreId: props.state.identityCenter.identityStoreId,
+        UserName: operation.userName,
+        DisplayName: operation.displayName,
+        Name: buildIdentityStoreUserName({
+          displayName: operation.displayName,
+        }),
+        Emails:
+          operation.email.length > 0
+            ? [
+                {
+                  Value: operation.email,
+                  Type: "Work",
+                  Primary: true,
+                },
+              ]
+            : undefined,
+      }),
+    );
+    if (response.UserId == null) {
+      throw new Error(
+        `CreateUser for "${operation.userName}" returned no user id.`,
+      );
+    }
+    props.logger.log(`Done: "${operation.userName}"`);
+    return upsertIdcUserInWorkingState({
+      workingState: props.state,
+      user: {
+        userId: response.UserId,
+        userName: operation.userName,
+        displayName: operation.displayName,
+        email: operation.email,
+      },
+    });
+  }
+  if (operation.kind === "createIdcGroup") {
+    props.logger.log(`Creating IdC group "${operation.groupDisplayName}"...`);
+    const response = await props.identityStoreClient.send(
+      new CreateGroupCommand({
+        IdentityStoreId: props.state.identityCenter.identityStoreId,
+        DisplayName: operation.groupDisplayName,
+      }),
+    );
+    if (response.GroupId == null) {
+      throw new Error(
+        `CreateGroup for "${operation.groupDisplayName}" returned no group id.`,
+      );
+    }
+    props.logger.log(`Done: "${operation.groupDisplayName}"`);
+    return upsertIdcGroupInWorkingState({
+      workingState: props.state,
+      group: {
+        groupId: response.GroupId,
+        displayName: operation.groupDisplayName,
+      },
+    });
+  }
+  if (operation.kind === "createIdcPermissionSet") {
+    props.logger.log(
+      `Creating IdC permission set "${operation.permissionSetName}"...`,
+    );
+    const response = await props.ssoAdminClient.send(
+      new CreatePermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        Name: operation.permissionSetName,
+        Description: operation.description,
+      }),
+    );
+    const permissionSetArn = response.PermissionSet?.PermissionSetArn;
+    if (permissionSetArn == null) {
+      throw new Error(
+        `CreatePermissionSet for "${operation.permissionSetName}" returned no permission set arn.`,
+      );
+    }
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertIdcPermissionSetInWorkingState({
+      workingState: props.state,
+      permissionSet: {
+        permissionSetArn: permissionSetArn,
+        name: operation.permissionSetName,
+        description: operation.description,
+      },
+    });
+  }
+  if (operation.kind === "grantIdcAccountAssignment") {
+    const resolvedAssignment = resolveAssignmentDependencies({
+      state: props.state,
+      accountName: operation.accountName,
+      permissionSetName: operation.permissionSetName,
+      principalType: operation.principalType,
+      principalName: operation.principalName,
+    });
+    props.logger.log(
+      `Granting IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel(
+        {
+          principalType: operation.principalType,
+          principalName: operation.principalName,
+        },
+      )} on "${operation.accountName}"...`,
+    );
+    const response = await props.ssoAdminClient.send(
+      new CreateAccountAssignmentCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        TargetId: resolvedAssignment.accountId,
+        TargetType: "AWS_ACCOUNT",
+        PermissionSetArn: resolvedAssignment.permissionSetArn,
+        PrincipalType: resolvedAssignment.principalType,
+        PrincipalId: resolvedAssignment.principalId,
+      }),
+    );
+    const requestId = response.AccountAssignmentCreationStatus?.RequestId;
+    if (requestId == null) {
+      throw new Error(
+        `CreateAccountAssignment for "${operation.permissionSetName}" on "${operation.accountName}" returned no request id.`,
+      );
+    }
+    await waitForAccountAssignmentCreationSuccess({
+      ssoAdminClient: props.ssoAdminClient,
+      logger: props.logger,
+      instanceArn: props.state.identityCenter.instanceArn,
+      requestId: requestId,
+      timeoutInMs: props.runtime.accountAssignment.timeoutInMs,
+      pollIntervalInMs: props.runtime.accountAssignment.pollIntervalInMs,
+      operationLabel: `"${operation.permissionSetName}" on "${operation.accountName}"`,
+    });
+    props.logger.log(
+      `Done: "${operation.permissionSetName}" -> "${operation.accountName}"`,
+    );
+    return addAccountAssignmentToWorkingState({
+      workingState: props.state,
+      accountAssignment: {
+        accountId: resolvedAssignment.accountId,
+        permissionSetArn: resolvedAssignment.permissionSetArn,
+        principalId: resolvedAssignment.principalId,
+        principalType: resolvedAssignment.principalType,
+      },
+    });
+  }
+  if (operation.kind === "revokeIdcAccountAssignment") {
+    const resolvedAssignment = resolveAssignmentDependencies({
+      state: props.state,
+      accountName: operation.accountName,
+      permissionSetName: operation.permissionSetName,
+      principalType: operation.principalType,
+      principalName: operation.principalName,
+    });
+    props.logger.log(
+      `Revoking IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel(
+        {
+          principalType: operation.principalType,
+          principalName: operation.principalName,
+        },
+      )} on "${operation.accountName}"...`,
+    );
+    const response = await props.ssoAdminClient.send(
+      new DeleteAccountAssignmentCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        TargetId: resolvedAssignment.accountId,
+        TargetType: "AWS_ACCOUNT",
+        PermissionSetArn: resolvedAssignment.permissionSetArn,
+        PrincipalType: resolvedAssignment.principalType,
+        PrincipalId: resolvedAssignment.principalId,
+      }),
+    );
+    const requestId = response.AccountAssignmentDeletionStatus?.RequestId;
+    if (requestId == null) {
+      throw new Error(
+        `DeleteAccountAssignment for "${operation.permissionSetName}" on "${operation.accountName}" returned no request id.`,
+      );
+    }
+    await waitForAccountAssignmentDeletionSuccess({
+      ssoAdminClient: props.ssoAdminClient,
+      logger: props.logger,
+      instanceArn: props.state.identityCenter.instanceArn,
+      requestId: requestId,
+      timeoutInMs: props.runtime.accountAssignment.timeoutInMs,
+      pollIntervalInMs: props.runtime.accountAssignment.pollIntervalInMs,
+      operationLabel: `"${operation.permissionSetName}" on "${operation.accountName}"`,
+    });
+    props.logger.log(
+      `Done: "${operation.permissionSetName}" x "${operation.accountName}"`,
+    );
+    return removeAccountAssignmentFromWorkingState({
+      workingState: props.state,
+      accountAssignment: {
+        accountId: resolvedAssignment.accountId,
+        permissionSetArn: resolvedAssignment.permissionSetArn,
+        principalId: resolvedAssignment.principalId,
+        principalType: resolvedAssignment.principalType,
+      },
     });
   }
   assertUnreachable(operation, "Unsupported operation kind in apply.");
@@ -313,6 +536,42 @@ function buildApplyPlanLines(props: { plan: Plan }): string[] {
       );
       continue;
     }
+    if (operation.kind === "createIdcUser") {
+      lines.push(`  create IdC user "${operation.userName}"`);
+      continue;
+    }
+    if (operation.kind === "createIdcGroup") {
+      lines.push(`  create IdC group "${operation.groupDisplayName}"`);
+      continue;
+    }
+    if (operation.kind === "createIdcPermissionSet") {
+      lines.push(
+        `  create IdC permission set "${operation.permissionSetName}"`,
+      );
+      continue;
+    }
+    if (operation.kind === "grantIdcAccountAssignment") {
+      lines.push(
+        `  grant IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel(
+          {
+            principalType: operation.principalType,
+            principalName: operation.principalName,
+          },
+        )} on "${operation.accountName}"`,
+      );
+      continue;
+    }
+    if (operation.kind === "revokeIdcAccountAssignment") {
+      lines.push(
+        `  revoke IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel(
+          {
+            principalType: operation.principalType,
+            principalName: operation.principalName,
+          },
+        )} on "${operation.accountName}"`,
+      );
+      continue;
+    }
     assertUnreachable(
       operation,
       "Unsupported operation kind in apply plan lines.",
@@ -327,4 +586,162 @@ function buildApplyPlanLines(props: { plan: Plan }): string[] {
     }
   }
   return lines;
+}
+
+function resolveAssignmentDependencies(props: {
+  state: WorkingState;
+  accountName: string;
+  permissionSetName: string;
+  principalType: "GROUP" | "USER";
+  principalName: string;
+}): {
+  accountId: string;
+  permissionSetArn: string;
+  principalId: string;
+  principalType: "GROUP" | "USER";
+} {
+  const account = props.state.organization.accountsByName[props.accountName];
+  if (account == null) {
+    throw new Error(
+      `Could not resolve account "${props.accountName}" in working state.`,
+    );
+  }
+  const permissionSet =
+    props.state.identityCenter.permissionSetsByName[props.permissionSetName];
+  if (permissionSet == null) {
+    throw new Error(
+      `Could not resolve permission set "${props.permissionSetName}" in working state.`,
+    );
+  }
+  if (props.principalType === "GROUP") {
+    const group =
+      props.state.identityCenter.groupsByDisplayName[props.principalName];
+    if (group == null) {
+      throw new Error(
+        `Could not resolve group "${props.principalName}" in working state.`,
+      );
+    }
+    return {
+      accountId: account.id,
+      permissionSetArn: permissionSet.permissionSetArn,
+      principalId: group.groupId,
+      principalType: props.principalType,
+    };
+  }
+  const user = props.state.identityCenter.usersByUserName[props.principalName];
+  if (user == null) {
+    throw new Error(
+      `Could not resolve user "${props.principalName}" in working state.`,
+    );
+  }
+  return {
+    accountId: account.id,
+    permissionSetArn: permissionSet.permissionSetArn,
+    principalId: user.userId,
+    principalType: props.principalType,
+  };
+}
+
+function buildIdentityStoreUserName(props: { displayName: string }): {
+  Formatted: string;
+  GivenName: string;
+} {
+  return {
+    Formatted: props.displayName,
+    GivenName: props.displayName,
+  };
+}
+
+async function waitForAccountAssignmentCreationSuccess(props: {
+  ssoAdminClient: SSOAdminClient;
+  logger: Logger;
+  instanceArn: string;
+  requestId: string;
+  timeoutInMs: number;
+  pollIntervalInMs: number;
+  operationLabel: string;
+}): Promise<void> {
+  const startedAt = Date.now();
+  let lastStatus: string | undefined;
+  while (Date.now() - startedAt < props.timeoutInMs) {
+    const response = await props.ssoAdminClient.send(
+      new DescribeAccountAssignmentCreationStatusCommand({
+        InstanceArn: props.instanceArn,
+        AccountAssignmentCreationRequestId: props.requestId,
+      }),
+    );
+    const status = response.AccountAssignmentCreationStatus;
+    const state = status?.Status ?? "UNKNOWN";
+    if (state !== lastStatus) {
+      props.logger.log(`CreateAccountAssignment status: ${state}`);
+      lastStatus = state;
+    }
+    if (state === "SUCCEEDED") {
+      return;
+    }
+    if (state === "FAILED") {
+      throw new Error(
+        `CreateAccountAssignment failed for ${props.operationLabel}: ${status?.FailureReason ?? "unknown reason"}.`,
+      );
+    }
+    await delay(props.pollIntervalInMs);
+  }
+  throw new Error(
+    `CreateAccountAssignment timed out after ${props.timeoutInMs}ms for ${props.operationLabel}.`,
+  );
+}
+
+async function waitForAccountAssignmentDeletionSuccess(props: {
+  ssoAdminClient: SSOAdminClient;
+  logger: Logger;
+  instanceArn: string;
+  requestId: string;
+  timeoutInMs: number;
+  pollIntervalInMs: number;
+  operationLabel: string;
+}): Promise<void> {
+  const startedAt = Date.now();
+  let lastStatus: string | undefined;
+  while (Date.now() - startedAt < props.timeoutInMs) {
+    const response = await props.ssoAdminClient.send(
+      new DescribeAccountAssignmentDeletionStatusCommand({
+        InstanceArn: props.instanceArn,
+        AccountAssignmentDeletionRequestId: props.requestId,
+      }),
+    );
+    const status = response.AccountAssignmentDeletionStatus;
+    const state = status?.Status ?? "UNKNOWN";
+    if (state !== lastStatus) {
+      props.logger.log(`DeleteAccountAssignment status: ${state}`);
+      lastStatus = state;
+    }
+    if (state === "SUCCEEDED") {
+      return;
+    }
+    if (state === "FAILED") {
+      throw new Error(
+        `DeleteAccountAssignment failed for ${props.operationLabel}: ${status?.FailureReason ?? "unknown reason"}.`,
+      );
+    }
+    await delay(props.pollIntervalInMs);
+  }
+  throw new Error(
+    `DeleteAccountAssignment timed out after ${props.timeoutInMs}ms for ${props.operationLabel}.`,
+  );
+}
+
+function formatPrincipalLabel(props: {
+  principalType: "GROUP" | "USER";
+  principalName: string;
+}): string {
+  if (props.principalType === "GROUP") {
+    return `group "${props.principalName}"`;
+  }
+  return `user "${props.principalName}"`;
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }

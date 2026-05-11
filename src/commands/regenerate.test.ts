@@ -125,7 +125,7 @@ async function writeFixtureFiles(props: {
           userId: "u-123",
           userName: "alice",
           displayName: "Alice",
-          emails: ["alice@example.com"],
+          email: "alice@example.com",
         },
       ],
       groups: [
