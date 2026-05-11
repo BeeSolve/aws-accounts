@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import * as v from "valibot";
+import { toRecordByProperty } from "./helpers.js";
 
 const nonEmptyString = v.pipe(v.string(), v.minLength(1));
 const principalTypeSchema = v.picklist(["GROUP", "USER"]);
@@ -80,6 +81,16 @@ export type PermissionSetState = v.InferOutput<typeof permissionSetSchema>;
 export type AccountAssignmentState = v.InferOutput<typeof accountAssignmentSchema>;
 export type AccessRoleState = v.InferOutput<typeof accessRoleSchema>;
 export type StateFile = v.InferOutput<typeof stateSchema>;
+export type WorkingState = {
+  version: StateFile["version"];
+  generatedAt: StateFile["generatedAt"];
+  organization: {
+    rootId: StateFile["organization"]["rootId"];
+    organizationalUnitsById: Record<string, OrganizationalUnitState>;
+    accountsById: Record<string, AccountState>;
+  };
+  identityCenter: StateFile["identityCenter"];
+};
 
 export function validateState(value: unknown): StateFile {
   return v.parse(stateSchema, value);
@@ -132,6 +143,139 @@ export function normalizeState(state: StateFile): StateFile {
           b.roleName
         )
       )
+    }
+  };
+}
+
+export function createWorkingState(props: { state: StateFile }): WorkingState {
+  return {
+    version: props.state.version,
+    generatedAt: props.state.generatedAt,
+    organization: {
+      rootId: props.state.organization.rootId,
+      organizationalUnitsById: toRecordByProperty(
+        props.state.organization.organizationalUnits,
+        "id"
+      ),
+      accountsById: toRecordByProperty(props.state.organization.accounts, "id")
+    },
+    identityCenter: structuredClone(props.state.identityCenter)
+  };
+}
+
+export function materializeWorkingState(props: { workingState: WorkingState }): StateFile {
+  return {
+    version: props.workingState.version,
+    generatedAt: props.workingState.generatedAt,
+    organization: {
+      rootId: props.workingState.organization.rootId,
+      organizationalUnits: Object.values(props.workingState.organization.organizationalUnitsById),
+      accounts: Object.values(props.workingState.organization.accountsById)
+    },
+    identityCenter: structuredClone(props.workingState.identityCenter)
+  };
+}
+
+export function moveAccountInWorkingState(props: {
+  workingState: WorkingState;
+  accountId: string;
+  parentId: string;
+}): WorkingState {
+  const currentAccount = props.workingState.organization.accountsById[props.accountId];
+  if (currentAccount == null || currentAccount.parentId === props.parentId) {
+    return props.workingState;
+  }
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      accountsById: {
+        ...props.workingState.organization.accountsById,
+        [props.accountId]: {
+          ...currentAccount,
+          parentId: props.parentId
+        }
+      }
+    }
+  };
+}
+
+export function upsertAccountInWorkingState(props: {
+  workingState: WorkingState;
+  account: AccountState;
+}): WorkingState {
+  const currentAccount = props.workingState.organization.accountsById[props.account.id];
+  if (
+    currentAccount != null &&
+    currentAccount.id === props.account.id &&
+    currentAccount.arn === props.account.arn &&
+    currentAccount.name === props.account.name &&
+    currentAccount.email === props.account.email &&
+    currentAccount.status === props.account.status &&
+    currentAccount.parentId === props.account.parentId
+  ) {
+    return props.workingState;
+  }
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      accountsById: {
+        ...props.workingState.organization.accountsById,
+        [props.account.id]: props.account
+      }
+    }
+  };
+}
+
+export function upsertOrganizationalUnitInWorkingState(props: {
+  workingState: WorkingState;
+  organizationalUnit: OrganizationalUnitState;
+}): WorkingState {
+  const currentOrganizationalUnit =
+    props.workingState.organization.organizationalUnitsById[props.organizationalUnit.id];
+  if (
+    currentOrganizationalUnit != null &&
+    currentOrganizationalUnit.id === props.organizationalUnit.id &&
+    currentOrganizationalUnit.parentId === props.organizationalUnit.parentId &&
+    currentOrganizationalUnit.arn === props.organizationalUnit.arn &&
+    currentOrganizationalUnit.name === props.organizationalUnit.name
+  ) {
+    return props.workingState;
+  }
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      organizationalUnitsById: {
+        ...props.workingState.organization.organizationalUnitsById,
+        [props.organizationalUnit.id]: props.organizationalUnit
+      }
+    }
+  };
+}
+
+export function renameOrganizationalUnitInWorkingState(props: {
+  workingState: WorkingState;
+  organizationalUnitId: string;
+  name: string;
+}): WorkingState {
+  const currentOrganizationalUnit =
+    props.workingState.organization.organizationalUnitsById[props.organizationalUnitId];
+  if (currentOrganizationalUnit == null || currentOrganizationalUnit.name === props.name) {
+    return props.workingState;
+  }
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      organizationalUnitsById: {
+        ...props.workingState.organization.organizationalUnitsById,
+        [props.organizationalUnitId]: {
+          ...currentOrganizationalUnit,
+          name: props.name
+        }
+      }
     }
   };
 }

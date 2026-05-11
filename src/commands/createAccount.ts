@@ -13,7 +13,13 @@ import {
   writeAwsConfigModelToFile,
 } from "../awsConfig.js";
 import type { Logger } from "../logger.js";
-import { readStateFile, writeStateFile } from "../state.js";
+import {
+  createWorkingState,
+  materializeWorkingState,
+  readStateFile,
+  upsertAccountInWorkingState,
+  writeStateFile
+} from "../state.js";
 
 type CreateAccountCommandInput = {
   organizationsClient: OrganizationsClient;
@@ -183,40 +189,28 @@ async function upsertCreatedAccountInState(props: {
   account: CreatedAccountRecord;
 }): Promise<{ changed: boolean }> {
   const currentState = await readStateFile(props.statePath);
-  const existingIndex = currentState.organization.accounts.findIndex(
-    (item) => item.id === props.account.id,
-  );
-  const nextAccount = {
-    id: props.account.id,
-    arn: props.account.arn,
-    name: props.account.name,
-    email: props.account.email,
-    status: props.account.status,
-    parentId: props.account.parentId,
-  };
-  const nextAccounts = [...currentState.organization.accounts];
-  if (existingIndex >= 0) {
-    const existing = nextAccounts[existingIndex];
-    if (
-      existing.id === nextAccount.id &&
-      existing.arn === nextAccount.arn &&
-      existing.name === nextAccount.name &&
-      existing.email === nextAccount.email &&
-      existing.status === nextAccount.status &&
-      existing.parentId === nextAccount.parentId
-    ) {
-      return { changed: false };
+  const currentWorkingState = createWorkingState({
+    state: currentState
+  });
+  const nextWorkingState = upsertAccountInWorkingState({
+    workingState: currentWorkingState,
+    account: {
+      id: props.account.id,
+      arn: props.account.arn,
+      name: props.account.name,
+      email: props.account.email,
+      status: props.account.status,
+      parentId: props.account.parentId
     }
-    nextAccounts[existingIndex] = nextAccount;
-  } else {
-    nextAccounts.push(nextAccount);
+  });
+  if (nextWorkingState === currentWorkingState) {
+    return { changed: false };
   }
+  const nextState = materializeWorkingState({
+    workingState: nextWorkingState
+  });
   await writeStateFile(props.statePath, {
-    ...currentState,
-    organization: {
-      ...currentState.organization,
-      accounts: nextAccounts,
-    },
+    ...nextState
   });
   return { changed: true };
 }

@@ -217,7 +217,7 @@ If Wave 3 is attempted:
 ### Phase 6.3: Apply executor (Wave 1) (`src/commands/apply.ts`)
 
 - [x] Add `createOu` execution via Organizations API.
-- [ ] Add `renameOu` execution via Organizations API.
+- [x] Add `renameOu` execution via Organizations API.
 - [x] Add `createAccount` execution path (shared helper approach).
 - [ ] Update in-memory state mutation logic for each new operation.
 - [ ] Ensure partial-failure persistence works with mixed old/new operations.

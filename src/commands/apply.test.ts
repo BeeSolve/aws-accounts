@@ -8,6 +8,7 @@ import {
   DescribeCreateAccountStatusCommand,
   ListAccountsCommand,
   MoveAccountCommand,
+  UpdateOrganizationalUnitCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import { writeAwsConfigFromState } from "../awsConfig.js";
@@ -503,6 +504,78 @@ test("runApplyCommand applies createOu and persists created OU with AWS id", asy
   }
 });
 
+test("runApplyCommand applies renameOu and persists renamed OU in state", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (engineering == null) {
+          throw new Error("Expected Engineering OU.");
+        }
+        engineering.name = "CoreEngineering";
+      },
+    });
+
+    let renameCalls = 0;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        onRenameOu: async (input) => {
+          renameCalls += 1;
+          assert.equal(input.OrganizationalUnitId, "ou-engineering");
+          assert.equal(input.Name, "CoreEngineering");
+        },
+      }),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: {
+        createAccount: {
+          timeoutInMs: 5000,
+          pollIntervalInMs: 1,
+        },
+      },
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 1);
+    assert.equal(renameCalls, 1);
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        organizationalUnits: Array<{
+          id: string;
+          name: string;
+        }>;
+      };
+    };
+    const renamedOu = persisted.organization.organizationalUnits.find(
+      (organizationalUnit) => organizationalUnit.id === "ou-engineering",
+    );
+    assert.equal(renamedOu?.name, "CoreEngineering");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand persists partial state on operation failure", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
@@ -622,6 +695,10 @@ function createOrganizationsClientMock(props: {
   }) => Promise<void>;
   onCreateAccount?: (input: { AccountName?: string; Email?: string }) => Promise<void>;
   onCreateOu?: (input: { ParentId?: string; Name?: string }) => Promise<void>;
+  onRenameOu?: (input: {
+    OrganizationalUnitId?: string;
+    Name?: string;
+  }) => Promise<void>;
   createAccountResponse?: { CreateAccountStatus?: { Id?: string } };
   createOuResponse?: {
     OrganizationalUnit?: { Id?: string; Arn?: string; Name?: string };
@@ -682,6 +759,15 @@ function createOrganizationsClientMock(props: {
             },
           }
         );
+      }
+      if (command instanceof UpdateOrganizationalUnitCommand) {
+        if (props.onRenameOu != null) {
+          await props.onRenameOu({
+            OrganizationalUnitId: command.input.OrganizationalUnitId,
+            Name: command.input.Name,
+          });
+        }
+        return {};
       }
       if (command instanceof DescribeCreateAccountStatusCommand) {
         const response =

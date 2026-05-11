@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeState, validateState } from "./state.js";
+import {
+  createWorkingState,
+  materializeWorkingState,
+  moveAccountInWorkingState,
+  normalizeState,
+  renameOrganizationalUnitInWorkingState,
+  upsertAccountInWorkingState,
+  upsertOrganizationalUnitInWorkingState,
+  validateState
+} from "./state.js";
 
 test("normalizeState sorts by ids/arns before names", () => {
   const input = {
@@ -116,3 +125,91 @@ test("validateState rejects invalid principalType", () => {
 
   assert.throws(() => validateState(invalid));
 });
+
+test("working state materializes back to the original state", () => {
+  const input = createSampleState();
+
+  const workingState = createWorkingState({
+    state: input
+  });
+  const materialized = materializeWorkingState({
+    workingState: workingState
+  });
+
+  assert.deepEqual(materialized, input);
+});
+
+test("working state helpers update organization records immutably", () => {
+  const input = createSampleState();
+
+  const workingState = createWorkingState({
+    state: input
+  });
+  const movedState = moveAccountInWorkingState({
+    workingState: workingState,
+    accountId: "111111111111",
+    parentId: "ou-b"
+  });
+  const renamedState = renameOrganizationalUnitInWorkingState({
+    workingState: movedState,
+    organizationalUnitId: "ou-a",
+    name: "AlphaRenamed"
+  });
+  const withCreatedOu = upsertOrganizationalUnitInWorkingState({
+    workingState: renamedState,
+    organizationalUnit: {
+      id: "ou-c",
+      parentId: "r-root",
+      arn: "arn:3",
+      name: "Gamma"
+    }
+  });
+  const withCreatedAccount = upsertAccountInWorkingState({
+    workingState: withCreatedOu,
+    account: {
+      id: "333333333333",
+      arn: "arn:3",
+      name: "C",
+      email: "c@example.com",
+      status: "ACTIVE",
+      parentId: "ou-c"
+    }
+  });
+  const materialized = materializeWorkingState({
+    workingState: withCreatedAccount
+  });
+
+  assert.equal(input.organization.accounts[0]?.parentId, "ou-a");
+  assert.equal(input.organization.organizationalUnits[0]?.name, "Alpha");
+  assert.equal(materialized.organization.accounts.find((account) => account.id === "111111111111")?.parentId, "ou-b");
+  assert.equal(materialized.organization.organizationalUnits.find((organizationalUnit) => organizationalUnit.id === "ou-a")?.name, "AlphaRenamed");
+  assert.equal(materialized.organization.organizationalUnits.find((organizationalUnit) => organizationalUnit.id === "ou-c")?.name, "Gamma");
+  assert.equal(materialized.organization.accounts.find((account) => account.id === "333333333333")?.parentId, "ou-c");
+});
+
+function createSampleState() {
+  return {
+    version: "1",
+    generatedAt: "2026-05-06T00:00:00.000Z",
+    organization: {
+      rootId: "r-root",
+      organizationalUnits: [
+        { id: "ou-a", parentId: "r-root", arn: "arn:1", name: "Alpha" },
+        { id: "ou-b", parentId: "r-root", arn: "arn:2", name: "Beta" }
+      ],
+      accounts: [
+        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", status: "ACTIVE", parentId: "ou-a" },
+        { id: "222222222222", arn: "arn:2", name: "B", email: "b@example.com", status: "ACTIVE", parentId: "ou-b" }
+      ]
+    },
+    identityCenter: {
+      instanceArn: "arn:aws:sso:::instance/ssoins-123",
+      identityStoreId: "d-123",
+      users: [],
+      groups: [],
+      permissionSets: [],
+      accountAssignments: [],
+      accessRoles: []
+    }
+  };
+}

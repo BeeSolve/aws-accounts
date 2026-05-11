@@ -175,7 +175,7 @@ export function diffStates(props: DiffStatesProps): Plan {
       });
       operations.push({
         kind: "renameOu",
-        ouId: added.id,
+        ouId: removed.id,
         fromOuName: removed.name,
         toOuName: added.name,
         parentOuId: parentId,

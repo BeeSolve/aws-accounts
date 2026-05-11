@@ -163,7 +163,7 @@ test("diffStates emits createOu and renameOu operations", () => {
   assert.deepEqual(renamePlan.operations, [
     {
       kind: "renameOu",
-      ouId: "ou-data-platform",
+      ouId: "ou-data",
       fromOuName: "Data",
       toOuName: "DataPlatform",
       parentOuId: "r-root",

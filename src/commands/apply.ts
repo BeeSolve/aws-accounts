@@ -2,6 +2,7 @@ import {
   CreateOrganizationalUnitCommand,
   MoveAccountCommand,
   OrganizationsClient,
+  UpdateOrganizationalUnitCommand,
 } from "@aws-sdk/client-organizations";
 import { createAccountAndMoveToOu } from "../accountCreation.js";
 import {
@@ -12,7 +13,18 @@ import {
 import { diffStates } from "../diff.js";
 import { assertUnreachable } from "../helpers.js";
 import type { Operation, Plan } from "../operations.js";
-import { readStateFile, type StateFile, writeStateFile } from "../state.js";
+import {
+  createWorkingState,
+  materializeWorkingState,
+  moveAccountInWorkingState,
+  readStateFile,
+  renameOrganizationalUnitInWorkingState,
+  type StateFile,
+  type WorkingState,
+  upsertAccountInWorkingState,
+  upsertOrganizationalUnitInWorkingState,
+  writeStateFile
+} from "../state.js";
 import type { Logger } from "../logger.js";
 
 type ApplyCommandInput = {
@@ -121,7 +133,9 @@ export async function runApplyCommand(
     };
   }
 
-  let progressedState = structuredClone(currentState);
+  let progressedState = createWorkingState({
+    state: currentState
+  });
   let appliedOperations = 0;
   try {
     for (const operation of plan.operations) {
@@ -136,16 +150,22 @@ export async function runApplyCommand(
       appliedOperations += 1;
     }
   } catch (error) {
-    if (statesAreDifferent(currentState, progressedState)) {
-      await writeStateFile(props.statePath, progressedState);
+    const progressedStateFile = materializeWorkingState({
+      workingState: progressedState
+    });
+    if (statesAreDifferent(currentState, progressedStateFile)) {
+      await writeStateFile(props.statePath, progressedStateFile);
     }
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
       `Aborted after ${appliedOperations} of ${plan.operations.length} operations. state.json updated for successful operations. Run 'npm run cli -- scan' to verify, then re-run apply. Original error: ${message}`,
     );
   }
-  if (statesAreDifferent(currentState, progressedState)) {
-    await writeStateFile(props.statePath, progressedState);
+  const progressedStateFile = materializeWorkingState({
+    workingState: progressedState
+  });
+  if (statesAreDifferent(currentState, progressedStateFile)) {
+    await writeStateFile(props.statePath, progressedStateFile);
   }
 
   props.logger.log(
@@ -160,13 +180,13 @@ export async function runApplyCommand(
 }
 
 async function applyOperation(props: {
-  state: StateFile;
+  state: WorkingState;
   organizationsClient: OrganizationsClient;
   logger: Logger;
   context: Awaited<ReturnType<typeof readAwsContextFromFile>>;
   runtime: ApplyCommandInput["runtime"];
   operation: Operation;
-}): Promise<StateFile> {
+}): Promise<WorkingState> {
   const operation = props.operation;
   if (operation.kind === "moveAccount") {
     props.logger.log(
@@ -180,22 +200,11 @@ async function applyOperation(props: {
       }),
     );
     props.logger.log(`Done: "${operation.accountName}"`);
-    const nextAccounts = props.state.organization.accounts.map((currentAccount) => {
-      if (currentAccount.id !== operation.accountId) {
-        return currentAccount;
-      }
-      return {
-        ...currentAccount,
-        parentId: operation.toOuId,
-      };
+    return moveAccountInWorkingState({
+      workingState: props.state,
+      accountId: operation.accountId,
+      parentId: operation.toOuId
     });
-    return {
-      ...props.state,
-      organization: {
-        ...props.state.organization,
-        accounts: nextAccounts,
-      },
-    };
   }
   if (operation.kind === "createOu") {
     props.logger.log(
@@ -218,26 +227,32 @@ async function applyOperation(props: {
       );
     }
     props.logger.log(`Done: "${createdOu.Name}"`);
-    return {
-      ...props.state,
-      organization: {
-        ...props.state.organization,
-        organizationalUnits: [
-          ...props.state.organization.organizationalUnits,
-          {
-            id: createdOu.Id,
-            parentId: operation.parentOuId,
-            arn: createdOu.Arn,
-            name: createdOu.Name,
-          },
-        ],
-      },
-    };
+    return upsertOrganizationalUnitInWorkingState({
+      workingState: props.state,
+      organizationalUnit: {
+        id: createdOu.Id,
+        parentId: operation.parentOuId,
+        arn: createdOu.Arn,
+        name: createdOu.Name
+      }
+    });
   }
   if (operation.kind === "renameOu") {
-    throw new Error(
-      `Operation kind "${operation.kind}" is not executable yet in apply.`,
+    props.logger.log(
+      `Renaming OU "${operation.fromOuName}" -> "${operation.toOuName}"...`,
     );
+    await props.organizationsClient.send(
+      new UpdateOrganizationalUnitCommand({
+        OrganizationalUnitId: operation.ouId,
+        Name: operation.toOuName,
+      }),
+    );
+    props.logger.log(`Done: "${operation.toOuName}"`);
+    return renameOrganizationalUnitInWorkingState({
+      workingState: props.state,
+      organizationalUnitId: operation.ouId,
+      name: operation.toOuName
+    });
   }
   if (operation.kind === "createAccount") {
     const result = await createAccountAndMoveToOu({
@@ -250,30 +265,17 @@ async function applyOperation(props: {
       timeoutInMs: props.runtime.createAccount.timeoutInMs,
       pollIntervalInMs: props.runtime.createAccount.pollIntervalInMs,
     });
-    const existingIndex = props.state.organization.accounts.findIndex(
-      (currentAccount) => currentAccount.id === result.account.id,
-    );
-    const nextAccount = {
-      id: result.account.id,
-      arn: result.account.arn,
-      name: result.account.name,
-      email: result.account.email,
-      status: result.account.status,
-      parentId: operation.targetOuId,
-    };
-    const nextAccounts = [...props.state.organization.accounts];
-    if (existingIndex >= 0) {
-      nextAccounts[existingIndex] = nextAccount;
-    } else {
-      nextAccounts.push(nextAccount);
-    }
-    return {
-      ...props.state,
-      organization: {
-        ...props.state.organization,
-        accounts: nextAccounts,
-      },
-    };
+    return upsertAccountInWorkingState({
+      workingState: props.state,
+      account: {
+        id: result.account.id,
+        arn: result.account.arn,
+        name: result.account.name,
+        email: result.account.email,
+        status: result.account.status,
+        parentId: operation.targetOuId
+      }
+    });
   }
   assertUnreachable(operation, "Unsupported operation kind in apply.");
 }

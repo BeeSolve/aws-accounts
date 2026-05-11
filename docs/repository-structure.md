@@ -56,7 +56,7 @@ Agreed structure for implementation, with phase 1 emphasis.
 - Prefer `value != null` checks over generic falsy checks when testing presence; avoid `Boolean(value)` for nullish checks.
 - Colocate tests as `*.test.ts` next to the module under test (for example `src/state.test.ts`).
 - Keep scan logic in one file: `src/commands/scan.ts`.
-- Keep state model + validation + normalization + read/write in one file: `src/state.ts`.
+- Keep state model + validation + normalization + read/write in one file: `src/state.ts`. Repeated keyed state transformations should use a working-state abstraction there: convert persisted arrays to record maps once, apply lookups/updates against the working state, then materialize back to arrays once before persistence.
 - Keep `aws.config.ts` schema, picklist generation, state→config transform, codegen, and the loader in one file: `src/awsConfig.ts`. Phase 5's `aws.config.ts` → `state.json` transform also lives here when added.
 - Keep `init` orchestration in `src/commands/init.ts` — it calls existing `runBootstrapCommand` / `runScanCommand` rather than reimplementing them.
 - Keep shared reusable helpers in `src/` root (not under `shared/`).
