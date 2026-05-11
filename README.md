@@ -8,7 +8,7 @@ The tool's lifecycle has three phases:
 
 1. **Init (one-time).** `init` runs `bootstrap` + `scan` and writes `aws.config.ts` + `aws.config.types.ts` from the resulting `state.json`. After this, AWS state is mirrored locally and `aws.config.ts` is your editable source of truth.
 2. **Edit (steady state).** Edit `aws.config.ts` to model the desired state. Run `regenerate` to refresh `aws.config.types.ts` (picklists / IDE autocomplete) after manual edits. A future `watch` command will run `regenerate` automatically.
-3. **Sync (phase 5).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
+3. **Sync (phase 5/6 Wave 1).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
 
 `bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged in increment 1; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
 
@@ -20,6 +20,21 @@ The tool's lifecycle has three phases:
 - `apply --ignore-unsupported` proceeds only when unsupported diffs are non-destructive (`unsupportedMutation`).
 - Destructive unsupported diffs always block `apply` (no override).
 - If `apply` fails mid-run, the CLI persists partial `state.json`; recovery flow is: run `scan`, verify state, then re-run `apply`.
+
+## Supported Wave 1 mutations
+
+`plan` and `apply` currently support these AWS Organizations mutations:
+
+- move account between known OUs
+- create OU under a known parent OU
+- rename OU when the diff resolves to a strict one-to-one same-parent rename
+- create account in a known target OU
+
+Still out of scope in increment 1:
+
+- destructive mutations (OU/account removals)
+- IAM Identity Center mutations
+- account metadata reconciliation after creation (tags, alternate contacts, account-name drift)
 
 ## FAQ
 
@@ -126,7 +141,12 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
       "Sid": "ApplyCommand",
       "Effect": "Allow",
       "Action": [
-        "organizations:MoveAccount"
+        "organizations:ListAccounts",
+        "organizations:MoveAccount",
+        "organizations:CreateOrganizationalUnit",
+        "organizations:UpdateOrganizationalUnit",
+        "organizations:CreateAccount",
+        "organizations:DescribeCreateAccountStatus"
       ],
       "Resource": "*"
     }

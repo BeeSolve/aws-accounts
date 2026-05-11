@@ -68,6 +68,125 @@ test("runPlanCommand prints human-readable move operations", async () => {
   }
 });
 
+test("runPlanCommand prints human-readable createOu and createAccount operations", async () => {
+  const workspace = await createTestWorkspace({ prefix: "plan-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        config.organizationalUnits.push({
+          name: "Platform",
+          parentName: "Engineering",
+          accounts: [],
+        });
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (engineering == null) {
+          throw new Error("Expected Engineering OU in test config.");
+        }
+        engineering.accounts = [
+          ...engineering.accounts,
+          { name: "BrandNew", email: "brandnew@example.com" },
+        ];
+      },
+    });
+
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
+      output: "human",
+    });
+    assert.equal(result.plan.operations.length, 2);
+    assert.equal(result.plan.unsupported.length, 0);
+    assert.ok(
+      logger.logs.some((line) => line.includes('create OU "Platform" under Engineering')),
+    );
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes(
+          'create account "BrandNew" (brandnew@example.com) in Engineering',
+        ),
+      ),
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runPlanCommand prints human-readable renameOu operations", async () => {
+  const workspace = await createTestWorkspace({ prefix: "plan-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        if (engineering == null) {
+          throw new Error("Expected Engineering OU in test config.");
+        }
+        engineering.name = "CoreEngineering";
+      },
+    });
+
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
+      output: "human",
+    });
+    assert.equal(result.plan.operations.length, 1);
+    assert.equal(result.plan.unsupported.length, 0);
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes('rename OU "Engineering" -> "CoreEngineering"'),
+      ),
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runPlanCommand prints machine-readable JSON with --json output", async () => {
   const workspace = await createTestWorkspace({ prefix: "plan-test-" });
   try {

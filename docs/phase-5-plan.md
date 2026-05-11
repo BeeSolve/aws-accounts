@@ -6,7 +6,9 @@ This is the working implementation plan. Design decisions live in `docs/phase-5-
 
 Phase 5 introduces config-driven reconciliation: user edits `aws.config.ts`, runs `plan` to see the diff vs current `state.json`, then `apply` to execute supported mutations against AWS. After successful apply, `state.json` is rewritten from the planned-next-state (no re-scan in the normal loop).
 
-Increment 1 supported mutations: **moving accounts between OUs**. Account metadata reconciliation (tags, alternate contacts, account-name drift) is deferred — see `docs/phase-5-decisions.md`.
+This document captures the original Phase 5 scope and shipped baseline. Wave 1 support was later expanded under `docs/phase-6-plan.md`.
+
+Phase 5 shipped with **moving accounts between OUs**. Expanded Wave 1 support now also covers **OU creation**, **OU rename**, and **account creation via apply**. Account metadata reconciliation (tags, alternate contacts, account-name drift) remains deferred — see `docs/phase-5-decisions.md`.
 
 ## Resolved decisions (summary)
 

@@ -102,6 +102,9 @@ Scope for this increment:
 - [x] Implement state-vs-state diff engine producing human-readable and machine-readable plan.
 - [x] Define operation model for supported mutations in increment 1:
   - [x] move account between OUs
+  - [x] create OU under a known parent OU
+  - [x] rename OU via strict same-parent one-to-one heuristic
+  - [x] create account directly in a known target OU
 - [x] Exclude IAM Identity Center assignment mutations from increment 1 apply scope.
 - [x] Exclude account metadata reconciliation (tags, alternate contacts, account-name drift) from increment 1 apply scope; deferred to a later increment.
 - [x] Implement safety policy:

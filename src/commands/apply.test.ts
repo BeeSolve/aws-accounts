@@ -70,6 +70,73 @@ test("runApplyCommand refuses destructive unsupported diffs regardless of flag",
   }
 });
 
+test("runApplyCommand refuses destructive unsupported diffs before createOu execution", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.organizationalUnits.push({
+          name: "Platform",
+          parentName: "Engineering",
+          accounts: [],
+        });
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        if (pending == null) {
+          throw new Error("Expected Pending OU.");
+        }
+        pending.accounts = pending.accounts.filter(
+          (account) => account.name !== "AppAccount",
+        );
+      },
+    });
+
+    let createOuCalls = 0;
+    await assert.rejects(
+      () =>
+        runApplyCommand({
+          organizationsClient: createOrganizationsClientMock({
+            onCreateOu: async () => {
+              createOuCalls += 1;
+            },
+          }),
+          logger: noopLogger,
+          configPath: paths.configPath,
+          typesPath: paths.typesPath,
+          statePath: paths.statePath,
+          contextPath: paths.contextPath,
+          runtime: {
+            createAccount: {
+              timeoutInMs: 5000,
+              pollIntervalInMs: 1,
+            },
+          },
+          ignoreUnsupported: true,
+          planConfirmation: async () => true,
+        }),
+      /destructive unsupported diffs/,
+    );
+    assert.equal(createOuCalls, 0);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand refuses non-destructive unsupported diffs without flag", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
@@ -668,6 +735,157 @@ test("runApplyCommand persists partial state on operation failure", async () => 
     );
     assert.equal(appAccount?.parentId, "ou-engineering");
     assert.equal(dataAccount?.parentId, "ou-pending");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand persists mixed successful operations before later failure", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.organizationalUnits.push({
+          name: "Platform",
+          parentName: "Engineering",
+          accounts: [],
+        });
+
+        const engineering = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Engineering",
+        );
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        const graveyard = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Graveyard",
+        );
+        if (engineering == null || pending == null || graveyard == null) {
+          throw new Error("Expected Engineering, Pending, and Graveyard OUs.");
+        }
+
+        engineering.accounts = [
+          ...engineering.accounts,
+          { name: "BrandNew", email: "brandnew@example.com" },
+        ];
+        graveyard.accounts = [
+          ...graveyard.accounts,
+          ...pending.accounts.filter((account) => account.name === "AppAccount"),
+        ];
+        pending.accounts = pending.accounts.filter(
+          (account) => account.name !== "AppAccount",
+        );
+      },
+    });
+
+    let moveCallCount = 0;
+    await assert.rejects(
+      () =>
+        runApplyCommand({
+          organizationsClient: createOrganizationsClientMock({
+            createAccountResponse: {
+              CreateAccountStatus: {
+                Id: "car-123",
+              },
+            },
+            describeStatuses: [
+              {
+                CreateAccountStatus: {
+                  Id: "car-123",
+                  State: "SUCCEEDED",
+                  AccountId: "555555555555",
+                },
+              },
+            ],
+            listAccountsPages: [
+              {
+                Accounts: [
+                  {
+                    Id: "555555555555",
+                    Arn: "arn:aws:organizations:::account/555555555555",
+                    Name: "BrandNew",
+                    Email: "brandnew@example.com",
+                    Status: "ACTIVE",
+                  },
+                ],
+              },
+            ],
+            createOuResponse: {
+              OrganizationalUnit: {
+                Id: "ou-platform",
+                Arn: "arn:aws:organizations:::ou/platform",
+                Name: "Platform",
+              },
+            },
+            onMoveAccount: async (input) => {
+              moveCallCount += 1;
+              if (input.AccountId === "111111111111") {
+                throw new Error("synthetic mixed failure");
+              }
+            },
+          }),
+          logger: noopLogger,
+          configPath: paths.configPath,
+          typesPath: paths.typesPath,
+          statePath: paths.statePath,
+          contextPath: paths.contextPath,
+          runtime: {
+            createAccount: {
+              timeoutInMs: 5000,
+              pollIntervalInMs: 1,
+            },
+          },
+          ignoreUnsupported: false,
+          planConfirmation: async () => true,
+        }),
+      /synthetic mixed failure/,
+    );
+    assert.equal(moveCallCount, 2);
+
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        organizationalUnits: Array<{
+          id: string;
+          name: string;
+          parentId: string;
+        }>;
+        accounts: Array<{
+          id: string;
+          name: string;
+          parentId: string;
+        }>;
+      };
+    };
+
+    const createdOu = persisted.organization.organizationalUnits.find(
+      (organizationalUnit) => organizationalUnit.id === "ou-platform",
+    );
+    const createdAccount = persisted.organization.accounts.find(
+      (account) => account.id === "555555555555",
+    );
+    const appAccount = persisted.organization.accounts.find(
+      (account) => account.id === "111111111111",
+    );
+
+    assert.equal(createdOu?.name, "Platform");
+    assert.equal(createdOu?.parentId, "ou-engineering");
+    assert.equal(createdAccount?.name, "BrandNew");
+    assert.equal(createdAccount?.parentId, "ou-engineering");
+    assert.equal(appAccount?.parentId, "ou-pending");
   } finally {
     await workspace.cleanup();
   }

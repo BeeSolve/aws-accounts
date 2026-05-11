@@ -4,6 +4,7 @@ import {
   readAwsContextFromFile,
 } from "../awsConfig.js";
 import { diffStates } from "../diff.js";
+import { assertUnreachable } from "../helpers.js";
 import { readStateFile } from "../state.js";
 import type { Plan } from "../operations.js";
 import type { Logger } from "../logger.js";
@@ -58,7 +59,30 @@ export async function runPlanCommand(
       props.logger.log(
         `  move account "${operation.accountName}" (${operation.accountId}) from ${operation.fromOuName} -> ${operation.toOuName}`,
       );
+      continue;
     }
+    if (operation.kind === "createOu") {
+      props.logger.log(
+        `  create OU "${operation.ouName}" under ${operation.parentOuName}`,
+      );
+      continue;
+    }
+    if (operation.kind === "renameOu") {
+      props.logger.log(
+        `  rename OU "${operation.fromOuName}" -> "${operation.toOuName}"`,
+      );
+      continue;
+    }
+    if (operation.kind === "createAccount") {
+      props.logger.log(
+        `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`,
+      );
+      continue;
+    }
+    assertUnreachable(
+      operation,
+      "Unsupported operation kind in human-readable plan output.",
+    );
   }
   if (plan.unsupported.length > 0) {
     props.logger.log("Unsupported diffs:");

@@ -219,41 +219,41 @@ If Wave 3 is attempted:
 - [x] Add `createOu` execution via Organizations API.
 - [x] Add `renameOu` execution via Organizations API.
 - [x] Add `createAccount` execution path (shared helper approach).
-- [ ] Update in-memory state mutation logic for each new operation.
-- [ ] Ensure partial-failure persistence works with mixed old/new operations.
-- [ ] Keep unsupported/destructive gates unchanged for remaining unsupported diffs.
-- [ ] Add apply tests for each Wave 1 operation kind.
+- [x] Update in-memory state mutation logic for each new operation.
+- [x] Ensure partial-failure persistence works with mixed old/new operations.
+- [x] Keep unsupported/destructive gates unchanged for remaining unsupported diffs.
+- [x] Add apply tests for each Wave 1 operation kind.
 
 ### Phase 6.4: Shared account create flow extraction
 
 - [x] Extract reusable account-create orchestration helper from `create-account` command.
 - [x] Reuse helper from `create-account` CLI command without behavior regression.
 - [x] Reuse helper from apply `createAccount` operation.
-- [ ] Preserve logging clarity in both command and apply contexts.
-- [ ] Add regression tests for `create-account` command behavior.
+- [x] Preserve logging clarity in both command and apply contexts.
+- [x] Add regression tests for `create-account` command behavior.
 
 ### Phase 6.5: Plan command output updates (`src/commands/plan.ts`)
 
-- [ ] Add human-readable plan lines for `createOu`.
-- [ ] Add human-readable plan lines for `renameOu`.
-- [ ] Add human-readable plan lines for `createAccount`.
-- [ ] Keep `--json` output schema compatibility and deterministic ordering.
-- [ ] Update plan tests for new operation rendering.
+- [x] Add human-readable plan lines for `createOu`.
+- [x] Add human-readable plan lines for `renameOu`.
+- [x] Add human-readable plan lines for `createAccount`.
+- [x] Keep `--json` output schema compatibility and deterministic ordering.
+- [x] Update plan tests for new operation rendering.
 
 ### Phase 6.6: CLI wiring and client inputs
 
-- [ ] Ensure apply input includes all clients required by supported operations.
-- [ ] Keep `--ignore-unsupported` behavior unchanged.
-- [ ] Keep confirmation prompt behavior unchanged.
-- [ ] Verify replay command output remains correct for plan/apply.
+- [x] Ensure apply input includes all clients required by supported operations.
+- [x] Keep `--ignore-unsupported` behavior unchanged.
+- [x] Keep confirmation prompt behavior unchanged.
+- [x] Verify replay command output remains correct for plan/apply.
 
 ### Phase 6.7: Docs and policy (Wave 1)
 
 - [x] Update `docs/phase-6-plan.md` checkboxes as implementation lands.
-- [ ] Update `docs/phase-5-plan.md` with superseding Phase 6 status note.
-- [ ] Update `plan.md` with new phase/checkboxes for expanded apply scope.
-- [ ] Update README supported actions for `plan/apply`.
-- [ ] Update README IAM permissions for any newly required Organizations APIs.
+- [x] Update `docs/phase-5-plan.md` with superseding Phase 6 status note.
+- [x] Update `plan.md` with new phase/checkboxes for expanded apply scope.
+- [x] Update README supported actions for `plan/apply`.
+- [x] Update README IAM permissions for any newly required Organizations APIs.
 
 ### Phase 6.8: Wave 2 (IdC) readiness decision gate
 
@@ -265,8 +265,8 @@ If Wave 3 is attempted:
 
 ### Phase 6.9: Validation and release checklist
 
-- [ ] Run `npm run typecheck`.
-- [ ] Run `npm test`.
-- [ ] Verify no unintended file rewrites in working tree.
+- [x] Run `npm run typecheck`.
+- [x] Run `npm test`.
+- [x] Verify no unintended file rewrites in working tree.
 - [ ] Execute manual smoke tests for Wave 1 supported operations.
 - [ ] Update this checklist to fully reflect final shipped behavior.
