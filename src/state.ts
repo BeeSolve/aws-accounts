@@ -486,6 +486,39 @@ export function upsertIdcUserInWorkingState(props: {
   };
 }
 
+export function removeIdcUserFromWorkingState(props: {
+  workingState: WorkingState;
+  userName: string;
+}): WorkingState {
+  const user =
+    props.workingState.identityCenter.usersByUserName[props.userName];
+  if (user == null) {
+    return props.workingState;
+  }
+  return {
+    ...props.workingState,
+    identityCenter: createWorkingIdentityCenterState({
+      identityCenter: {
+        ...materializeWorkingIdentityCenterState({
+          identityCenter: props.workingState.identityCenter,
+        }),
+        users: props.workingState.identityCenter.users.filter(
+          (currentUser) => currentUser.userName !== props.userName,
+        ),
+        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
+          (groupMembership) => groupMembership.userId !== user.userId,
+        ),
+        accountAssignments:
+          props.workingState.identityCenter.accountAssignments.filter(
+            (accountAssignment) =>
+              accountAssignment.principalType !== "USER" ||
+              accountAssignment.principalId !== user.userId,
+          ),
+      },
+    }),
+  };
+}
+
 export function upsertIdcGroupInWorkingState(props: {
   workingState: WorkingState;
   group: GroupState;
@@ -512,6 +545,42 @@ export function upsertIdcGroupInWorkingState(props: {
           identityCenter: props.workingState.identityCenter,
         }),
         groups: [...remainingGroups, props.group],
+      },
+    }),
+  };
+}
+
+export function removeIdcGroupFromWorkingState(props: {
+  workingState: WorkingState;
+  groupDisplayName: string;
+}): WorkingState {
+  const group =
+    props.workingState.identityCenter.groupsByDisplayName[
+      props.groupDisplayName
+    ];
+  if (group == null) {
+    return props.workingState;
+  }
+  return {
+    ...props.workingState,
+    identityCenter: createWorkingIdentityCenterState({
+      identityCenter: {
+        ...materializeWorkingIdentityCenterState({
+          identityCenter: props.workingState.identityCenter,
+        }),
+        groups: props.workingState.identityCenter.groups.filter(
+          (currentGroup) =>
+            currentGroup.displayName !== props.groupDisplayName,
+        ),
+        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
+          (groupMembership) => groupMembership.groupId !== group.groupId,
+        ),
+        accountAssignments:
+          props.workingState.identityCenter.accountAssignments.filter(
+            (accountAssignment) =>
+              accountAssignment.principalType !== "GROUP" ||
+              accountAssignment.principalId !== group.groupId,
+          ),
       },
     }),
   };
@@ -551,6 +620,39 @@ export function upsertIdcPermissionSetInWorkingState(props: {
           identityCenter: props.workingState.identityCenter,
         }),
         permissionSets: [...remainingPermissionSets, props.permissionSet],
+      },
+    }),
+  };
+}
+
+export function removeIdcPermissionSetFromWorkingState(props: {
+  workingState: WorkingState;
+  permissionSetName: string;
+}): WorkingState {
+  const permissionSet =
+    props.workingState.identityCenter.permissionSetsByName[
+      props.permissionSetName
+    ];
+  if (permissionSet == null) {
+    return props.workingState;
+  }
+  return {
+    ...props.workingState,
+    identityCenter: createWorkingIdentityCenterState({
+      identityCenter: {
+        ...materializeWorkingIdentityCenterState({
+          identityCenter: props.workingState.identityCenter,
+        }),
+        permissionSets: props.workingState.identityCenter.permissionSets.filter(
+          (currentPermissionSet) =>
+            currentPermissionSet.name !== props.permissionSetName,
+        ),
+        accountAssignments:
+          props.workingState.identityCenter.accountAssignments.filter(
+            (accountAssignment) =>
+              accountAssignment.permissionSetArn !==
+              permissionSet.permissionSetArn,
+          ),
       },
     }),
   };

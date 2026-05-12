@@ -19,7 +19,15 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       email: "alice@example.com",
     },
     {
+      kind: "deleteIdcUser",
+      userName: "alice",
+    },
+    {
       kind: "createIdcGroup",
+      groupDisplayName: "Admins",
+    },
+    {
+      kind: "deleteIdcGroup",
       groupDisplayName: "Admins",
     },
     {
@@ -36,6 +44,10 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       kind: "createIdcPermissionSet",
       permissionSetName: "AdminAccess",
       description: "Admin",
+    },
+    {
+      kind: "deleteIdcPermissionSet",
+      permissionSetName: "AdminAccess",
     },
     {
       kind: "putIdcPermissionSetInlinePolicy",
@@ -94,22 +106,22 @@ test("operationSchema accepts supported organization and IdC operations", () => 
   }
 });
 
-test("unsupportedDiffSchema accepts Wave 2 IdC removal kinds", () => {
+test("unsupportedDiffSchema accepts remaining unsupported diff kinds", () => {
   const unsupportedDiffs = [
     {
-      kind: "idcUserRemoved",
-      category: "destructive",
-      description: 'removed IdC user "alice"',
+      kind: "ambiguousOuRename",
+      category: "unsupportedMutation",
+      description: 'ambiguous OU rename under "root" (added: Platform; removed: Engineering)',
     },
     {
-      kind: "idcGroupRemoved",
-      category: "destructive",
-      description: 'removed IdC group "Admins"',
+      kind: "newOuWithUnknownParent",
+      category: "unsupportedMutation",
+      description: 'new OU "Platform" has unresolved parent "unknown" (__pending_creation__)',
     },
     {
-      kind: "idcPermissionSetRemoved",
+      kind: "removedAccount",
       category: "destructive",
-      description: 'removed IdC permission set "AdminAccess"',
+      description: 'removed account "AppAccount"',
     },
   ];
 

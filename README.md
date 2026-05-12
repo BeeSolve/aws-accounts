@@ -8,7 +8,7 @@ The tool's lifecycle has three phases:
 
 1. **Init (one-time).** `init` runs `bootstrap` + `scan` and writes `aws.config.ts` + `aws.config.types.ts` from the resulting `state.json`. After this, AWS state is mirrored locally and `aws.config.ts` is your editable source of truth.
 2. **Edit (steady state).** Edit `aws.config.ts` to model the desired state. Run `regenerate` to refresh `aws.config.types.ts` (picklists / IDE autocomplete) after manual edits. A future `watch` command will run `regenerate` automatically.
-3. **Sync (phase 6 Wave 4).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
+3. **Sync (phase 6 Wave 5).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
 
 `bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged in increment 1; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
 
@@ -41,6 +41,9 @@ The tool's lifecycle has three phases:
 - add missing group memberships
 - remove stale group memberships
 - create missing permission sets
+- delete removed users with `apply --allow-destructive`
+- delete removed groups with `apply --allow-destructive`
+- delete removed permission sets with `apply --allow-destructive`
 - put or delete permission set inline policies
 - attach or detach permission set AWS managed policies
 - attach or detach permission set customer-managed policy references
@@ -92,13 +95,31 @@ WARNING: this apply includes destructive operations. Review carefully before con
   [destructive] delete OU "Engineering" from root
 ```
 
+If you remove IAM Identity Center entities from `aws.config.ts`, the same
+destructive gate applies:
+
+```bash
+npm run cli -- plan
+npm run cli -- apply --allow-destructive
+```
+
+For example, if you remove a group that still has memberships and assignments,
+the preview should show the prerequisite cleanup before the final delete:
+
+```text
+Plan: 3 operation(s), 0 unsupported diff(s)
+Destructive operations detected: 1. Apply requires --allow-destructive.
+  remove user "alice" from IdC group "Admins"
+  revoke IdC assignment "AdminAccess" from group "Admins" on "AppAccount"
+  [destructive] delete IdC group "Admins"
+```
+
 Still out of scope in the current increment:
 
 - account removals
 - deleting an OU that still has child OUs or accounts
 - deleting an OU subtree when any descendant is unresolved or unsafe to delete
 - deleting the reserved `Pending` or `Graveyard` OUs (do that manually outside this tool)
-- removing IAM Identity Center users, groups, or permission sets
 - editing IAM Identity Center user metadata after creation
 - editing IAM Identity Center group metadata after creation
 - editing IAM Identity Center permission set metadata after creation
@@ -244,9 +265,12 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "identitystore:CreateUser",
         "identitystore:CreateGroup",
         "identitystore:CreateGroupMembership",
+        "identitystore:DeleteUser",
+        "identitystore:DeleteGroup",
         "identitystore:DeleteGroupMembership",
         "identitystore:GetGroupMembershipId",
         "sso:CreatePermissionSet",
+        "sso:DeletePermissionSet",
         "sso:PutInlinePolicyToPermissionSet",
         "sso:DeleteInlinePolicyFromPermissionSet",
         "sso:AttachManagedPolicyToPermissionSet",

@@ -11,7 +11,9 @@ import {
   CreateGroupMembershipCommand,
   CreateGroupCommand,
   CreateUserCommand,
+  DeleteGroupCommand,
   DeleteGroupMembershipCommand,
+  DeleteUserCommand,
   GetGroupMembershipIdCommand,
   IdentitystoreClient,
 } from "@aws-sdk/client-identitystore";
@@ -22,6 +24,7 @@ import {
   CreatePermissionSetCommand,
   DeleteAccountAssignmentCommand,
   DeleteInlinePolicyFromPermissionSetCommand,
+  DeletePermissionSetCommand,
   DescribeAccountAssignmentCreationStatusCommand,
   DescribeAccountAssignmentDeletionStatusCommand,
   DescribePermissionSetProvisioningStatusCommand,
@@ -50,6 +53,9 @@ import {
   moveAccountInWorkingState,
   removeAccountAssignmentFromWorkingState,
   removeGroupMembershipFromWorkingState,
+  removeIdcGroupFromWorkingState,
+  removeIdcPermissionSetFromWorkingState,
+  removeIdcUserFromWorkingState,
   removeOrganizationalUnitFromWorkingState,
   readStateFile,
   renameOrganizationalUnitInWorkingState,
@@ -383,6 +389,7 @@ async function applyOperation(props: {
         UserName: operation.userName,
         DisplayName: operation.displayName,
         Name: buildIdentityStoreUserName({
+          userName: operation.userName,
           displayName: operation.displayName,
         }),
         Emails:
@@ -413,6 +420,24 @@ async function applyOperation(props: {
       },
     });
   }
+  if (operation.kind === "deleteIdcUser") {
+    const user = resolveUserByName({
+      state: props.state,
+      userName: operation.userName,
+    });
+    props.logger.log(`Deleting IdC user "${operation.userName}"...`);
+    await props.identityStoreClient.send(
+      new DeleteUserCommand({
+        IdentityStoreId: props.state.identityCenter.identityStoreId,
+        UserId: user.userId,
+      }),
+    );
+    props.logger.log(`Done: "${operation.userName}"`);
+    return removeIdcUserFromWorkingState({
+      workingState: props.state,
+      userName: operation.userName,
+    });
+  }
   if (operation.kind === "createIdcGroup") {
     props.logger.log(`Creating IdC group "${operation.groupDisplayName}"...`);
     const response = await props.identityStoreClient.send(
@@ -433,6 +458,24 @@ async function applyOperation(props: {
         groupId: response.GroupId,
         displayName: operation.groupDisplayName,
       },
+    });
+  }
+  if (operation.kind === "deleteIdcGroup") {
+    const group = resolveGroupByDisplayName({
+      state: props.state,
+      groupDisplayName: operation.groupDisplayName,
+    });
+    props.logger.log(`Deleting IdC group "${operation.groupDisplayName}"...`);
+    await props.identityStoreClient.send(
+      new DeleteGroupCommand({
+        IdentityStoreId: props.state.identityCenter.identityStoreId,
+        GroupId: group.groupId,
+      }),
+    );
+    props.logger.log(`Done: "${operation.groupDisplayName}"`);
+    return removeIdcGroupFromWorkingState({
+      workingState: props.state,
+      groupDisplayName: operation.groupDisplayName,
     });
   }
   if (operation.kind === "addIdcGroupMembership") {
@@ -478,7 +521,8 @@ async function applyOperation(props: {
       new CreatePermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         Name: operation.permissionSetName,
-        Description: operation.description,
+        Description:
+          operation.description.length > 0 ? operation.description : undefined,
       }),
     );
     const permissionSetArn = response.PermissionSet?.PermissionSetArn;
@@ -498,6 +542,26 @@ async function applyOperation(props: {
         awsManagedPolicies: [],
         customerManagedPolicies: [],
       },
+    });
+  }
+  if (operation.kind === "deleteIdcPermissionSet") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Deleting IdC permission set "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new DeletePermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return removeIdcPermissionSetFromWorkingState({
+      workingState: props.state,
+      permissionSetName: operation.permissionSetName,
     });
   }
   if (operation.kind === "putIdcPermissionSetInlinePolicy") {
@@ -883,13 +947,39 @@ function buildApplyPlanLines(props: {
 
 function isDestructiveOperation(
   operation: Operation,
-): operation is Extract<Operation, { kind: "deleteOu" }> {
-  return operation.kind === "deleteOu";
+): operation is Extract<
+  Operation,
+  | { kind: "deleteOu" }
+  | { kind: "deleteIdcUser" }
+  | { kind: "deleteIdcGroup" }
+  | { kind: "deleteIdcPermissionSet" }
+> {
+  return (
+    operation.kind === "deleteOu" ||
+    operation.kind === "deleteIdcUser" ||
+    operation.kind === "deleteIdcGroup" ||
+    operation.kind === "deleteIdcPermissionSet"
+  );
 }
 
 function describeDestructiveOperation(
-  operation: Extract<Operation, { kind: "deleteOu" }>,
+  operation: Extract<
+    Operation,
+    | { kind: "deleteOu" }
+    | { kind: "deleteIdcUser" }
+    | { kind: "deleteIdcGroup" }
+    | { kind: "deleteIdcPermissionSet" }
+  >,
 ): string {
+  if (operation.kind === "deleteIdcUser") {
+    return `delete IdC user "${operation.userName}"`;
+  }
+  if (operation.kind === "deleteIdcGroup") {
+    return `delete IdC group "${operation.groupDisplayName}"`;
+  }
+  if (operation.kind === "deleteIdcPermissionSet") {
+    return `delete IdC permission set "${operation.permissionSetName}"`;
+  }
   return `delete OU "${operation.ouName}"`;
 }
 
@@ -912,14 +1002,23 @@ function formatApplyOperationLine(operation: Operation): string {
   if (operation.kind === "createIdcUser") {
     return `  create IdC user "${operation.userName}"`;
   }
+  if (operation.kind === "deleteIdcUser") {
+    return `  [destructive] delete IdC user "${operation.userName}"`;
+  }
   if (operation.kind === "createIdcGroup") {
     return `  create IdC group "${operation.groupDisplayName}"`;
+  }
+  if (operation.kind === "deleteIdcGroup") {
+    return `  [destructive] delete IdC group "${operation.groupDisplayName}"`;
   }
   if (operation.kind === "addIdcGroupMembership") {
     return `  add user "${operation.userName}" to IdC group "${operation.groupDisplayName}"`;
   }
   if (operation.kind === "createIdcPermissionSet") {
     return `  create IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "deleteIdcPermissionSet") {
+    return `  [destructive] delete IdC permission set "${operation.permissionSetName}"`;
   }
   if (operation.kind === "putIdcPermissionSetInlinePolicy") {
     return `  put inline policy on IdC permission set "${operation.permissionSetName}"`;
@@ -1022,6 +1121,33 @@ function resolveAssignmentDependencies(props: {
   };
 }
 
+function resolveUserByName(props: {
+  state: WorkingState;
+  userName: string;
+}) {
+  const user = props.state.identityCenter.usersByUserName[props.userName];
+  if (user == null) {
+    throw new Error(
+      `Could not resolve user "${props.userName}" in working state.`,
+    );
+  }
+  return user;
+}
+
+function resolveGroupByDisplayName(props: {
+  state: WorkingState;
+  groupDisplayName: string;
+}) {
+  const group =
+    props.state.identityCenter.groupsByDisplayName[props.groupDisplayName];
+  if (group == null) {
+    throw new Error(
+      `Could not resolve group "${props.groupDisplayName}" in working state.`,
+    );
+  }
+  return group;
+}
+
 function resolvePermissionSetByName(props: {
   state: WorkingState;
   permissionSetName: string;
@@ -1068,13 +1194,26 @@ function upsertPermissionSetPolicyState(props: {
   });
 }
 
-function buildIdentityStoreUserName(props: { displayName: string }): {
+function buildIdentityStoreUserName(props: {
+  userName: string;
+  displayName: string;
+}): {
   Formatted: string;
   GivenName: string;
+  FamilyName: string;
 } {
+  const normalizedDisplayName = props.displayName.trim();
+  const fallbackName =
+    normalizedDisplayName.length > 0 ? normalizedDisplayName : props.userName;
+  const [givenName, ...familyNameParts] = fallbackName
+    .split(/\s+/)
+    .filter((part) => part.length > 0);
+  const familyName = familyNameParts.join(" ");
+
   return {
-    Formatted: props.displayName,
-    GivenName: props.displayName,
+    Formatted: fallbackName,
+    GivenName: givenName ?? fallbackName,
+    FamilyName: familyName.length > 0 ? familyName : fallbackName,
   };
 }
 

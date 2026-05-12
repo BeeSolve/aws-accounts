@@ -619,7 +619,7 @@ test("runPlanCommand prints human-readable permission set policy operations", as
   }
 });
 
-test("runPlanCommand human output includes unsupported removal categories", async () => {
+test("runPlanCommand prints destructive IdC delete operations", async () => {
   const workspace = await createTestWorkspace({ prefix: "plan-test-" });
   try {
     const statePath = join(workspace.workspacePath, "state.json");
@@ -654,12 +654,16 @@ test("runPlanCommand human output includes unsupported removal categories", asyn
       contextPath,
       output: "human",
     });
-    assert.equal(result.plan.operations.length, 0);
-    assert.equal(result.plan.unsupported.length, 1);
-    assert.ok(logger.logs.some((line) => line.includes("Unsupported diffs:")));
+    assert.equal(result.plan.operations.length, 1);
+    assert.equal(result.plan.unsupported.length, 0);
     assert.ok(
       logger.logs.some((line) =>
-        line.includes('removed IdC user "alice" [destructive]'),
+        line.includes("Destructive operations detected: 1"),
+      ),
+    );
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes('[destructive] delete IdC user "alice"'),
       ),
     );
   } finally {

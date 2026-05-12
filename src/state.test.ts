@@ -9,6 +9,9 @@ import {
   normalizeState,
   removeAccountAssignmentFromWorkingState,
   removeGroupMembershipFromWorkingState,
+  removeIdcGroupFromWorkingState,
+  removeIdcPermissionSetFromWorkingState,
+  removeIdcUserFromWorkingState,
   removeOrganizationalUnitFromWorkingState,
   renameOrganizationalUnitInWorkingState,
   upsertIdcGroupInWorkingState,
@@ -16,7 +19,7 @@ import {
   upsertIdcUserInWorkingState,
   upsertAccountInWorkingState,
   upsertOrganizationalUnitInWorkingState,
-  validateState
+  validateState,
 } from "./state.js";
 
 test("normalizeState sorts by ids/arns before names", () => {
@@ -292,12 +295,33 @@ test("working state helpers update IdC records immutably and regenerate access r
       principalType: "GROUP",
     },
   });
+  const withoutUser = removeIdcUserFromWorkingState({
+    workingState: withAssignment,
+    userName: "alice",
+  });
+  const withoutGroup = removeIdcGroupFromWorkingState({
+    workingState: withAssignment,
+    groupDisplayName: "Admins",
+  });
+  const withoutPermissionSet = removeIdcPermissionSetFromWorkingState({
+    workingState: withAssignment,
+    permissionSetName: "AdminAccess",
+  });
 
   const withAssignmentMaterialized = materializeWorkingState({
     workingState: withAssignment,
   });
   const withoutAssignmentMaterialized = materializeWorkingState({
     workingState: withoutAssignment,
+  });
+  const withoutUserMaterialized = materializeWorkingState({
+    workingState: withoutUser,
+  });
+  const withoutGroupMaterialized = materializeWorkingState({
+    workingState: withoutGroup,
+  });
+  const withoutPermissionSetMaterialized = materializeWorkingState({
+    workingState: withoutPermissionSet,
   });
 
   assert.equal(input.identityCenter.users.length, 0);
@@ -316,6 +340,19 @@ test("working state helpers update IdC records immutably and regenerate access r
   assert.equal(withoutAssignmentMaterialized.identityCenter.groupMemberships.length, 0);
   assert.equal(withoutAssignmentMaterialized.identityCenter.accountAssignments.length, 0);
   assert.equal(withoutAssignmentMaterialized.identityCenter.accessRoles.length, 0);
+  assert.equal(withoutUserMaterialized.identityCenter.users.length, 0);
+  assert.equal(withoutUserMaterialized.identityCenter.groupMemberships.length, 0);
+  assert.equal(withoutUserMaterialized.identityCenter.accountAssignments.length, 1);
+  assert.equal(withoutGroupMaterialized.identityCenter.groups.length, 0);
+  assert.equal(withoutGroupMaterialized.identityCenter.groupMemberships.length, 0);
+  assert.equal(withoutGroupMaterialized.identityCenter.accountAssignments.length, 0);
+  assert.equal(withoutGroupMaterialized.identityCenter.accessRoles.length, 0);
+  assert.equal(withoutPermissionSetMaterialized.identityCenter.permissionSets.length, 0);
+  assert.equal(
+    withoutPermissionSetMaterialized.identityCenter.accountAssignments.length,
+    0,
+  );
+  assert.equal(withoutPermissionSetMaterialized.identityCenter.accessRoles.length, 0);
 });
 
 function createSampleState() {

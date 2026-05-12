@@ -27,7 +27,10 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   grantIdcAccountAssignment: 16,
   removeIdcGroupMembership: 17,
   revokeIdcAccountAssignment: 18,
-  deleteOu: 19,
+  deleteIdcUser: 19,
+  deleteIdcGroup: 20,
+  deleteIdcPermissionSet: 21,
+  deleteOu: 22,
 };
 
 type DiffStatesProps = {
@@ -388,16 +391,6 @@ export function diffStates(props: DiffStatesProps): Plan {
       email: nextUser.email,
     });
   }
-  for (const currentUser of props.current.identityCenter.users) {
-    if (nextIdcView.usersByUserName.has(currentUser.userName)) {
-      continue;
-    }
-    unsupported.push({
-      kind: "idcUserRemoved",
-      category: "destructive",
-      description: `removed IdC user "${currentUser.userName}"`,
-    });
-  }
 
   for (const nextGroup of props.next.identityCenter.groups) {
     if (currentIdcView.groupsByDisplayName.has(nextGroup.displayName)) {
@@ -406,16 +399,6 @@ export function diffStates(props: DiffStatesProps): Plan {
     operations.push({
       kind: "createIdcGroup",
       groupDisplayName: nextGroup.displayName,
-    });
-  }
-  for (const currentGroup of props.current.identityCenter.groups) {
-    if (nextIdcView.groupsByDisplayName.has(currentGroup.displayName)) {
-      continue;
-    }
-    unsupported.push({
-      kind: "idcGroupRemoved",
-      category: "destructive",
-      description: `removed IdC group "${currentGroup.displayName}"`,
     });
   }
 
@@ -433,6 +416,14 @@ export function diffStates(props: DiffStatesProps): Plan {
           nextIdcView.groupsByDisplayName.has(group.displayName) === false,
       )
       .map((group) => group.displayName),
+  );
+  const removedPermissionSetNames = new Set(
+    props.current.identityCenter.permissionSets
+      .filter(
+        (permissionSet) =>
+          nextIdcView.permissionSetsByName.has(permissionSet.name) === false,
+      )
+      .map((permissionSet) => permissionSet.name),
   );
   const permissionSetNamesWithDesiredAssignments = new Set(
     [...nextIdcView.assignmentsByKey.values()].map(
@@ -457,15 +448,10 @@ export function diffStates(props: DiffStatesProps): Plan {
     const membershipKey = createNormalizedIdcMembershipKey({
       membership: currentMembership,
     });
-    if (nextIdcView.membershipsByKey.has(membershipKey)) {
-      continue;
-    }
     if (
-      shouldSuppressDerivativeGroupMembershipRemoval({
-        membership: currentMembership,
-        removedUserNames,
-        removedGroupDisplayNames,
-      })
+      nextIdcView.membershipsByKey.has(membershipKey) &&
+      removedUserNames.has(currentMembership.userName) === false &&
+      removedGroupDisplayNames.has(currentMembership.groupDisplayName) === false
     ) {
       continue;
     }
@@ -580,26 +566,6 @@ export function diffStates(props: DiffStatesProps): Plan {
       });
     }
   }
-  for (const currentPermissionSet of props.current.identityCenter
-    .permissionSets) {
-    if (nextIdcView.permissionSetsByName.has(currentPermissionSet.name)) {
-      continue;
-    }
-    unsupported.push({
-      kind: "idcPermissionSetRemoved",
-      category: "destructive",
-      description: `removed IdC permission set "${currentPermissionSet.name}"`,
-    });
-  }
-
-  const removedPermissionSetNames = new Set(
-    props.current.identityCenter.permissionSets
-      .filter(
-        (permissionSet) =>
-          nextIdcView.permissionSetsByName.has(permissionSet.name) === false,
-      )
-      .map((permissionSet) => permissionSet.name),
-  );
 
   for (const nextAssignment of nextIdcView.assignmentsByKey.values()) {
     const assignmentKey = createNormalizedIdcAssignmentKey({
@@ -620,16 +586,14 @@ export function diffStates(props: DiffStatesProps): Plan {
     const assignmentKey = createNormalizedIdcAssignmentKey({
       assignment: currentAssignment,
     });
-    if (nextIdcView.assignmentsByKey.has(assignmentKey)) {
-      continue;
-    }
     if (
-      shouldSuppressDerivativeAssignmentRevoke({
-        assignment: currentAssignment,
-        removedUserNames,
-        removedGroupDisplayNames,
-        removedPermissionSetNames,
-      })
+      nextIdcView.assignmentsByKey.has(assignmentKey) &&
+      removedPermissionSetNames.has(currentAssignment.permissionSetName) ===
+        false &&
+      (currentAssignment.principalType === "USER"
+        ? removedUserNames.has(currentAssignment.principalName) === false
+        : removedGroupDisplayNames.has(currentAssignment.principalName) ===
+          false)
     ) {
       continue;
     }
@@ -639,6 +603,24 @@ export function diffStates(props: DiffStatesProps): Plan {
       permissionSetName: currentAssignment.permissionSetName,
       principalType: currentAssignment.principalType,
       principalName: currentAssignment.principalName,
+    });
+  }
+  for (const removedUserName of removedUserNames) {
+    operations.push({
+      kind: "deleteIdcUser",
+      userName: removedUserName,
+    });
+  }
+  for (const removedGroupDisplayName of removedGroupDisplayNames) {
+    operations.push({
+      kind: "deleteIdcGroup",
+      groupDisplayName: removedGroupDisplayName,
+    });
+  }
+  for (const removedPermissionSetName of removedPermissionSetNames) {
+    operations.push({
+      kind: "deleteIdcPermissionSet",
+      permissionSetName: removedPermissionSetName,
     });
   }
 
@@ -871,7 +853,13 @@ function getOperationSortKey(operation: Operation): string {
   if (operation.kind === "createIdcUser") {
     return `${operation.kind}|${operation.userName}`;
   }
+  if (operation.kind === "deleteIdcUser") {
+    return `${operation.kind}|${operation.userName}`;
+  }
   if (operation.kind === "createIdcGroup") {
+    return `${operation.kind}|${operation.groupDisplayName}`;
+  }
+  if (operation.kind === "deleteIdcGroup") {
     return `${operation.kind}|${operation.groupDisplayName}`;
   }
   if (
@@ -881,6 +869,9 @@ function getOperationSortKey(operation: Operation): string {
     return `${operation.kind}|${operation.groupDisplayName}|${operation.userName}`;
   }
   if (operation.kind === "createIdcPermissionSet") {
+    return `${operation.kind}|${operation.permissionSetName}`;
+  }
+  if (operation.kind === "deleteIdcPermissionSet") {
     return `${operation.kind}|${operation.permissionSetName}`;
   }
   if (
@@ -1109,32 +1100,6 @@ function sortJsonValue(value: unknown): unknown {
     );
   }
   return value;
-}
-
-function shouldSuppressDerivativeGroupMembershipRemoval(props: {
-  membership: NormalizedIdcMembership;
-  removedUserNames: Set<string>;
-  removedGroupDisplayNames: Set<string>;
-}): boolean {
-  return (
-    props.removedUserNames.has(props.membership.userName) ||
-    props.removedGroupDisplayNames.has(props.membership.groupDisplayName)
-  );
-}
-
-function shouldSuppressDerivativeAssignmentRevoke(props: {
-  assignment: NormalizedIdcAssignment;
-  removedUserNames: Set<string>;
-  removedGroupDisplayNames: Set<string>;
-  removedPermissionSetNames: Set<string>;
-}): boolean {
-  if (props.removedPermissionSetNames.has(props.assignment.permissionSetName)) {
-    return true;
-  }
-  if (props.assignment.principalType === "USER") {
-    return props.removedUserNames.has(props.assignment.principalName);
-  }
-  return props.removedGroupDisplayNames.has(props.assignment.principalName);
 }
 
 function resolveOrganizationalUnitName(props: {

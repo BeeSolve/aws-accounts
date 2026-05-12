@@ -49,6 +49,9 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
     const typesRaw = await readFile(typesPath, "utf8");
     assert.match(configRaw, /const awsConfig:/);
     assert.match(typesRaw, /export const awsConfigSchema/);
+    assert.match(typesRaw, /iamPolicyDocumentSchema/);
+    assert.match(typesRaw, /isIamPolicyDocument/);
+    assert.match(typesRaw, /type IamPolicyDocument/);
     assert.match(configRaw, /"name": "root"/);
     assert.match(configRaw, /"members": \[/);
     assert.match(configRaw, /"alice"/);
@@ -606,6 +609,61 @@ test("permission set policy state round-trips between state and config", async (
   }
 });
 
+test("loadAwsConfigModelFromTsFile validates inline policy documents against IAM schema", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        const adminAccess = config.permissionSets.find(
+          (permissionSet) => permissionSet.name === "AdminAccess",
+        );
+        if (adminAccess == null) {
+          throw new Error('Expected "AdminAccess" permission set.');
+        }
+        adminAccess.inlinePolicy = {
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Permit",
+              Action: "s3:GetObject",
+              Resource: "*",
+            },
+          ],
+        };
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        loadAwsConfigModelFromTsFile({
+          configPath,
+          typesPath,
+        }),
+      /aws\.config\.ts validation failed/,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 async function writeFixtureFiles(props: {
   statePath: string;
   contextPath: string;
@@ -713,4 +771,68 @@ async function writeFixtureFiles(props: {
       "utf8",
     ),
   ]);
+}
+
+async function updateConfigModel(props: {
+  configPath: string;
+  update: (config: {
+    organizationalUnits: Array<{
+      name: string;
+      parentName: string | null;
+      accounts: Array<{ name: string; email: string }>;
+    }>;
+    users: Array<{ userName: string; displayName: string; email: string }>;
+    groups: Array<{ displayName: string; members: string[] }>;
+    permissionSets: Array<{
+      name: string;
+      description: string;
+      inlinePolicy?: Record<string, unknown>;
+      awsManagedPolicies: string[];
+      customerManagedPolicies: Array<{ name: string; path: string }>;
+    }>;
+    assignments: Array<{
+      permissionSet: string;
+      group?: string;
+      user?: string;
+      accounts: string[];
+    }>;
+  }) => void;
+}): Promise<void> {
+  const rawConfig = await readFile(props.configPath, "utf8");
+  const matched = rawConfig.match(
+    /v\.parse\(awsConfigSchema,\s*([\s\S]*?)\s*satisfies AwsConfig\);/,
+  );
+  if (matched == null || matched[1] == null) {
+    throw new Error(
+      "Could not extract awsConfig JSON payload from aws.config.ts.",
+    );
+  }
+  const parsedConfig = JSON.parse(matched[1]) as {
+    organizationalUnits: Array<{
+      name: string;
+      parentName: string | null;
+      accounts: Array<{ name: string; email: string }>;
+    }>;
+    users: Array<{ userName: string; displayName: string; email: string }>;
+    groups: Array<{ displayName: string; members: string[] }>;
+    permissionSets: Array<{
+      name: string;
+      description: string;
+      inlinePolicy?: Record<string, unknown>;
+      awsManagedPolicies: string[];
+      customerManagedPolicies: Array<{ name: string; path: string }>;
+    }>;
+    assignments: Array<{
+      permissionSet: string;
+      group?: string;
+      user?: string;
+      accounts: string[];
+    }>;
+  };
+  props.update(parsedConfig);
+  const nextConfig = rawConfig.replace(
+    matched[1],
+    JSON.stringify(parsedConfig, null, 2),
+  );
+  await writeFile(props.configPath, nextConfig, "utf8");
 }

@@ -718,7 +718,7 @@ test("diffStates emits IdC assignment revokes when entities remain supported", (
   assert.deepEqual(plan.unsupported, []);
 });
 
-test("diffStates keeps IdC removals unsupported and suppresses derivative revokes", () => {
+test("diffStates emits IdC removal operations with prerequisite cleanup", () => {
   const current = createBaseState();
   const next = cloneState(current);
   current.identityCenter.groupMemberships.push({
@@ -736,24 +736,34 @@ test("diffStates keeps IdC removals unsupported and suppresses derivative revoke
     current,
     next,
   });
-  assert.deepEqual(plan.operations, []);
-  assert.deepEqual(plan.unsupported, [
+
+  assert.deepEqual(plan.operations, [
     {
-      kind: "idcGroupRemoved",
-      category: "destructive",
-      description: 'removed IdC group "Platform"',
+      kind: "removeIdcGroupMembership",
+      groupDisplayName: "Platform",
+      userName: "alice",
     },
     {
-      kind: "idcPermissionSetRemoved",
-      category: "destructive",
-      description: 'removed IdC permission set "Admin"',
+      kind: "revokeIdcAccountAssignment",
+      accountName: "app-a",
+      permissionSetName: "Admin",
+      principalType: "GROUP",
+      principalName: "Platform",
     },
     {
-      kind: "idcUserRemoved",
-      category: "destructive",
-      description: 'removed IdC user "alice"',
+      kind: "deleteIdcUser",
+      userName: "alice",
+    },
+    {
+      kind: "deleteIdcGroup",
+      groupDisplayName: "Platform",
+    },
+    {
+      kind: "deleteIdcPermissionSet",
+      permissionSetName: "Admin",
     },
   ]);
+  assert.deepEqual(plan.unsupported, []);
 });
 
 test("diffStates emits IdC group membership removals when entities remain", () => {

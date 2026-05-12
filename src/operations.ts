@@ -49,8 +49,18 @@ const createIdcUserOperationSchema = v.strictObject({
   email: v.string(),
 });
 
+const deleteIdcUserOperationSchema = v.strictObject({
+  kind: v.literal("deleteIdcUser"),
+  userName: v.string(),
+});
+
 const createIdcGroupOperationSchema = v.strictObject({
   kind: v.literal("createIdcGroup"),
+  groupDisplayName: v.string(),
+});
+
+const deleteIdcGroupOperationSchema = v.strictObject({
+  kind: v.literal("deleteIdcGroup"),
   groupDisplayName: v.string(),
 });
 
@@ -70,6 +80,11 @@ const createIdcPermissionSetOperationSchema = v.strictObject({
   kind: v.literal("createIdcPermissionSet"),
   permissionSetName: v.string(),
   description: v.string(),
+});
+
+const deleteIdcPermissionSetOperationSchema = v.strictObject({
+  kind: v.literal("deleteIdcPermissionSet"),
+  permissionSetName: v.string(),
 });
 
 const putIdcPermissionSetInlinePolicyOperationSchema = v.strictObject({
@@ -140,10 +155,13 @@ export const operationSchema = v.variant("kind", [
   deleteOuOperationSchema,
   createAccountOperationSchema,
   createIdcUserOperationSchema,
+  deleteIdcUserOperationSchema,
   createIdcGroupOperationSchema,
+  deleteIdcGroupOperationSchema,
   addIdcGroupMembershipOperationSchema,
   removeIdcGroupMembershipOperationSchema,
   createIdcPermissionSetOperationSchema,
+  deleteIdcPermissionSetOperationSchema,
   putIdcPermissionSetInlinePolicyOperationSchema,
   deleteIdcPermissionSetInlinePolicyOperationSchema,
   attachIdcManagedPolicyToPermissionSetOperationSchema,
@@ -161,9 +179,6 @@ const unsupportedDiffKindSchema = v.picklist([
   "newOuWithUnknownParent",
   "newAccountWithUnknownOu",
   "removedOu",
-  "idcUserRemoved",
-  "idcGroupRemoved",
-  "idcPermissionSetRemoved",
   "removedAccount",
 ]);
 
@@ -183,7 +198,9 @@ export const planSchema = v.strictObject({
   unsupported: v.array(unsupportedDiffSchema),
 });
 
-export type MoveAccountOperation = v.InferOutput<typeof moveAccountOperationSchema>;
+export type MoveAccountOperation = v.InferOutput<
+  typeof moveAccountOperationSchema
+>;
 export type CreateOuOperation = v.InferOutput<typeof createOuOperationSchema>;
 export type RenameOuOperation = v.InferOutput<typeof renameOuOperationSchema>;
 export type DeleteOuOperation = v.InferOutput<typeof deleteOuOperationSchema>;
@@ -193,8 +210,14 @@ export type CreateAccountOperation = v.InferOutput<
 export type CreateIdcUserOperation = v.InferOutput<
   typeof createIdcUserOperationSchema
 >;
+export type DeleteIdcUserOperation = v.InferOutput<
+  typeof deleteIdcUserOperationSchema
+>;
 export type CreateIdcGroupOperation = v.InferOutput<
   typeof createIdcGroupOperationSchema
+>;
+export type DeleteIdcGroupOperation = v.InferOutput<
+  typeof deleteIdcGroupOperationSchema
 >;
 export type AddIdcGroupMembershipOperation = v.InferOutput<
   typeof addIdcGroupMembershipOperationSchema
@@ -204,6 +227,9 @@ export type RemoveIdcGroupMembershipOperation = v.InferOutput<
 >;
 export type CreateIdcPermissionSetOperation = v.InferOutput<
   typeof createIdcPermissionSetOperationSchema
+>;
+export type DeleteIdcPermissionSetOperation = v.InferOutput<
+  typeof deleteIdcPermissionSetOperationSchema
 >;
 export type PutIdcPermissionSetInlinePolicyOperation = v.InferOutput<
   typeof putIdcPermissionSetInlinePolicyOperationSchema
@@ -235,6 +261,8 @@ export type RevokeIdcAccountAssignmentOperation = v.InferOutput<
   typeof revokeIdcAccountAssignmentOperationSchema
 >;
 export type Operation = v.InferOutput<typeof operationSchema>;
-export type UnsupportedDiffKind = v.InferOutput<typeof unsupportedDiffKindSchema>;
+export type UnsupportedDiffKind = v.InferOutput<
+  typeof unsupportedDiffKindSchema
+>;
 export type UnsupportedDiff = v.InferOutput<typeof unsupportedDiffSchema>;
 export type Plan = v.InferOutput<typeof planSchema>;

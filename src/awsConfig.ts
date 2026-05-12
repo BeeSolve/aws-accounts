@@ -5,6 +5,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build as esbuildBuild } from "esbuild";
 import * as v from "valibot";
 import {
+  assertIamPolicyDocument,
+  iamPolicyDocumentSchema,
+  type IamPolicyDocument,
+} from "./iamPolicy.js";
+import {
   createAccessRoleName,
   readStateFile,
   type StateFile,
@@ -69,7 +74,7 @@ const awsConfigModelSchema = v.strictObject({
     v.strictObject({
       name: v.string(),
       description: v.string(),
-      inlinePolicy: v.optional(v.record(v.string(), v.unknown())),
+      inlinePolicy: v.optional(iamPolicyDocumentSchema),
       awsManagedPolicies: v.array(v.string()),
       customerManagedPolicies: v.array(
         v.strictObject({
@@ -1028,6 +1033,7 @@ const accountNameSchema = ${accountNameSchema};
 const permissionSetNameSchema = ${permissionSetNameSchema};
 const groupNameSchema = ${groupNameSchema};
 const userNameSchema = ${userNameSchema};
+${renderIamPolicySupportTs()}
 
 export const awsConfigSchema = v.strictObject({
   organizationalUnits: v.array(
@@ -1059,7 +1065,7 @@ export const awsConfigSchema = v.strictObject({
     v.strictObject({
       name: v.string(),
       description: v.string(),
-      inlinePolicy: v.optional(v.record(v.string(), v.unknown())),
+      inlinePolicy: v.optional(iamPolicyDocumentSchema),
       awsManagedPolicies: v.array(v.string()),
       customerManagedPolicies: v.array(
         v.strictObject({
@@ -1081,6 +1087,70 @@ export const awsConfigSchema = v.strictObject({
 
 export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;
 `;
+}
+
+function renderIamPolicySupportTs(): string {
+  return `const nonEmptyPolicyStringSchema = v.pipe(v.string(), v.nonEmpty());
+const iamPolicyStringListSchema = v.union([
+  nonEmptyPolicyStringSchema,
+  v.pipe(v.array(nonEmptyPolicyStringSchema), v.minLength(1)),
+]);
+const iamPolicyScalarSchema = v.union([v.string(), v.number(), v.boolean()]);
+const iamPolicyScalarListSchema = v.union([
+  iamPolicyScalarSchema,
+  v.pipe(v.array(iamPolicyScalarSchema), v.minLength(1)),
+]);
+const iamPolicyPrincipalMapSchema = v.record(
+  nonEmptyPolicyStringSchema,
+  iamPolicyStringListSchema,
+);
+const iamPolicyPrincipalSchema = v.union([
+  v.literal("*"),
+  iamPolicyPrincipalMapSchema,
+]);
+const iamPolicyConditionBlockSchema = v.record(
+  nonEmptyPolicyStringSchema,
+  v.record(nonEmptyPolicyStringSchema, iamPolicyScalarListSchema),
+);
+
+export const iamPolicyStatementSchema = v.strictObject({
+  Sid: v.optional(nonEmptyPolicyStringSchema),
+  Effect: v.picklist(["Allow", "Deny"]),
+  Action: v.optional(iamPolicyStringListSchema),
+  NotAction: v.optional(iamPolicyStringListSchema),
+  Resource: v.optional(iamPolicyStringListSchema),
+  NotResource: v.optional(iamPolicyStringListSchema),
+  Principal: v.optional(iamPolicyPrincipalSchema),
+  NotPrincipal: v.optional(iamPolicyPrincipalSchema),
+  Condition: v.optional(iamPolicyConditionBlockSchema),
+});
+
+export const iamPolicyDocumentSchema = v.strictObject({
+  Version: v.optional(v.picklist(["2008-10-17", "2012-10-17"])),
+  Id: v.optional(nonEmptyPolicyStringSchema),
+  Statement: v.union([
+    iamPolicyStatementSchema,
+    v.pipe(v.array(iamPolicyStatementSchema), v.minLength(1)),
+  ]),
+});
+
+export type IamPolicyVersion = v.InferOutput<typeof iamPolicyDocumentSchema>["Version"];
+export type IamPolicyScalar = v.InferOutput<typeof iamPolicyScalarSchema>;
+export type IamPolicyScalarList = v.InferOutput<typeof iamPolicyScalarListSchema>;
+export type IamPolicyStringList = v.InferOutput<typeof iamPolicyStringListSchema>;
+export type IamPolicyPrincipalMap = v.InferOutput<typeof iamPolicyPrincipalMapSchema>;
+export type IamPolicyPrincipal = v.InferOutput<typeof iamPolicyPrincipalSchema>;
+export type IamPolicyConditionBlock = v.InferOutput<typeof iamPolicyConditionBlockSchema>;
+export type IamPolicyStatement = v.InferOutput<typeof iamPolicyStatementSchema>;
+export type IamPolicyDocument = v.InferOutput<typeof iamPolicyDocumentSchema>;
+
+export function isIamPolicyDocument(value: unknown): value is IamPolicyDocument {
+  return v.safeParse(iamPolicyDocumentSchema, value).success;
+}
+
+export function assertIamPolicyDocument(value: unknown): IamPolicyDocument {
+  return v.parse(iamPolicyDocumentSchema, value);
+}`;
 }
 
 function assertStateMatchesContext(props: {
@@ -1195,7 +1265,7 @@ function createGroupMembershipNameKey(props: {
 function parseInlinePolicyForConfig(props: {
   permissionSetName: string;
   inlinePolicy: string;
-}): Record<string, unknown> {
+}): IamPolicyDocument {
   let parsed: unknown;
   try {
     parsed = JSON.parse(props.inlinePolicy) as unknown;
@@ -1210,24 +1280,24 @@ function parseInlinePolicyForConfig(props: {
       `Inline policy for permission set "${props.permissionSetName}" must be a JSON object.`,
     );
   }
-  return sortJsonRecord(parsed);
+  return sortJsonRecord(assertIamPolicyDocument(parsed));
 }
 
 function stableStringifyInlinePolicy(
-  inlinePolicy: Record<string, unknown> | undefined,
+  inlinePolicy: IamPolicyDocument | undefined,
 ): string | null {
   if (inlinePolicy == null) {
     return null;
   }
-  return JSON.stringify(sortJsonRecord(inlinePolicy));
+  return JSON.stringify(sortJsonRecord(assertIamPolicyDocument(inlinePolicy)));
 }
 
-function sortJsonRecord(input: Record<string, unknown>): Record<string, unknown> {
+function sortJsonRecord<T extends Record<string, unknown>>(input: T): T {
   return Object.fromEntries(
     Object.entries(input)
       .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
       .map(([key, value]) => [key, sortJsonValue(value)]),
-  );
+  ) as T;
 }
 
 function sortJsonValue(value: unknown): unknown {
@@ -1341,9 +1411,19 @@ async function loadAwsConfigFromTsFile(props: {
   configPath: string;
   schema: v.GenericSchema;
 }): Promise<AwsConfigModel> {
-  const loadedModule = await loadTsModule({
-    modulePath: props.configPath,
-  });
+  let loadedModule: unknown;
+  try {
+    loadedModule = await loadTsModule({
+      modulePath: props.configPath,
+    });
+  } catch (error) {
+    if (isValiErrorLike(error)) {
+      throw new Error(
+        `aws.config.ts validation failed: ${error instanceof Error ? error.message : String(error)}. If you recently edited names/references, re-run regenerate after fixing the config.`,
+      );
+    }
+    throw error;
+  }
   if (
     loadedModule == null ||
     typeof loadedModule !== "object" ||
@@ -1363,9 +1443,9 @@ async function loadAwsConfigFromTsFile(props: {
     const validatedConfig = v.parse(props.schema, moduleWithDefault.default);
     return v.parse(awsConfigModelSchema, validatedConfig);
   } catch (error) {
-    if (error instanceof v.ValiError) {
+    if (isValiErrorLike(error)) {
       throw new Error(
-        `aws.config.ts validation failed: ${error.message}. If you recently edited names/references, re-run regenerate after fixing the config.`,
+        `aws.config.ts validation failed: ${error instanceof Error ? error.message : String(error)}. If you recently edited names/references, re-run regenerate after fixing the config.`,
       );
     }
     throw error;
@@ -1420,4 +1500,11 @@ async function safeUnlink(path: string): Promise<void> {
     }
     throw error;
   }
+}
+
+function isValiErrorLike(error: unknown): error is Error {
+  return (
+    error instanceof v.ValiError ||
+    (error instanceof Error && error.name === "ValiError")
+  );
 }

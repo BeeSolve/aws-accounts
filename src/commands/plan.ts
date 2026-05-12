@@ -100,14 +100,23 @@ function formatHumanOperationLine(operation: Plan["operations"][number]): string
   if (operation.kind === "createIdcUser") {
     return `  create IdC user "${operation.userName}"`;
   }
+  if (operation.kind === "deleteIdcUser") {
+    return `  [destructive] delete IdC user "${operation.userName}"`;
+  }
   if (operation.kind === "createIdcGroup") {
     return `  create IdC group "${operation.groupDisplayName}"`;
+  }
+  if (operation.kind === "deleteIdcGroup") {
+    return `  [destructive] delete IdC group "${operation.groupDisplayName}"`;
   }
   if (operation.kind === "addIdcGroupMembership") {
     return `  add user "${operation.userName}" to IdC group "${operation.groupDisplayName}"`;
   }
   if (operation.kind === "createIdcPermissionSet") {
     return `  create IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "deleteIdcPermissionSet") {
+    return `  [destructive] delete IdC permission set "${operation.permissionSetName}"`;
   }
   if (operation.kind === "putIdcPermissionSetInlinePolicy") {
     return `  put inline policy on IdC permission set "${operation.permissionSetName}"`;
@@ -157,8 +166,19 @@ function formatHumanOperationLine(operation: Plan["operations"][number]): string
 
 function isDestructiveOperation(
   operation: Plan["operations"][number],
-): operation is Extract<Plan["operations"][number], { kind: "deleteOu" }> {
-  return operation.kind === "deleteOu";
+): operation is Extract<
+  Plan["operations"][number],
+  | { kind: "deleteOu" }
+  | { kind: "deleteIdcUser" }
+  | { kind: "deleteIdcGroup" }
+  | { kind: "deleteIdcPermissionSet" }
+> {
+  return (
+    operation.kind === "deleteOu" ||
+    operation.kind === "deleteIdcUser" ||
+    operation.kind === "deleteIdcGroup" ||
+    operation.kind === "deleteIdcPermissionSet"
+  );
 }
 
 function formatPrincipalLabel(props: {

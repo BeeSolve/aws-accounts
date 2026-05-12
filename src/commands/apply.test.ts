@@ -6,6 +6,10 @@ import {
   CreateGroupMembershipCommand,
   CreateGroupCommand,
   CreateUserCommand,
+  DeleteGroupCommand,
+  DeleteGroupMembershipCommand,
+  DeleteUserCommand,
+  GetGroupMembershipIdCommand,
   type IdentitystoreClient,
 } from "@aws-sdk/client-identitystore";
 import {
@@ -15,6 +19,7 @@ import {
   CreatePermissionSetCommand,
   DeleteAccountAssignmentCommand,
   DeleteInlinePolicyFromPermissionSetCommand,
+  DeletePermissionSetCommand,
   DescribeAccountAssignmentCreationStatusCommand,
   DescribeAccountAssignmentDeletionStatusCommand,
   DescribePermissionSetProvisioningStatusCommand,
@@ -1486,6 +1491,11 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
           assert.equal(input.IdentityStoreId, "d-123");
           assert.equal(input.UserName, "bob");
           assert.equal(input.DisplayName, "Bob");
+          assert.deepEqual(input.Name, {
+            Formatted: "Bob",
+            GivenName: "Bob",
+            FamilyName: "Bob",
+          });
           assert.equal(input.Emails?.[0]?.Value, "bob@example.com");
         },
         onCreateGroup: async (input) => {
@@ -1566,6 +1576,90 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
         (permissionSet) =>
           permissionSet.permissionSetArn.endsWith("/ps-2") &&
           permissionSet.name === "ReadOnly",
+      ),
+      true,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand omits empty permission set description on create", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.permissionSets.push({
+          name: "EmptyDescriptionSet",
+          description: "",
+          awsManagedPolicies: [],
+          customerManagedPolicies: [],
+        });
+      },
+    });
+
+    let sawCreatePermissionSet = false;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({}),
+      ssoAdminClient: createSsoAdminClientMock({
+        onCreatePermissionSet: async (input) => {
+          sawCreatePermissionSet = true;
+          assert.equal(input.Name, "EmptyDescriptionSet");
+          assert.equal(input.Description, undefined);
+        },
+        createPermissionSetResponse: {
+          PermissionSet: {
+            PermissionSetArn:
+              "arn:aws:sso:::permissionSet/ssoins-123/ps-empty-description",
+            Name: "EmptyDescriptionSet",
+            Description: undefined,
+          },
+        },
+      }),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 1);
+    assert.equal(sawCreatePermissionSet, true);
+
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        permissionSets: Array<{
+          permissionSetArn: string;
+          name: string;
+          description: string;
+        }>;
+      };
+    };
+    assert.equal(
+      persisted.identityCenter.permissionSets.some(
+        (permissionSet) =>
+          permissionSet.permissionSetArn.endsWith("/ps-empty-description") &&
+          permissionSet.name === "EmptyDescriptionSet" &&
+          permissionSet.description === "",
       ),
       true,
     );
@@ -2042,6 +2136,185 @@ test("runApplyCommand revokes IdC assignments and persists state", async () => {
   }
 });
 
+test("runApplyCommand refuses destructive IdC delete operations without flag", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.users = [];
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        runApplyCommand({
+          organizationsClient: createOrganizationsClientMock({}),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
+          logger: noopLogger,
+          configPath: paths.configPath,
+          typesPath: paths.typesPath,
+          statePath: paths.statePath,
+          contextPath: paths.contextPath,
+          runtime: createApplyRuntime(),
+          ignoreUnsupported: false,
+          planConfirmation: async () => true,
+        }),
+      /--allow-destructive/,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand applies IdC entity removals with prerequisite cleanup", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    const rawState = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        users: Array<{ userId: string; userName: string }>;
+        groups: Array<{ groupId: string; displayName: string }>;
+        groupMemberships: Array<{
+          membershipId: string;
+          groupId: string;
+          userId: string;
+        }>;
+        permissionSets: Array<{ permissionSetArn: string; name: string }>;
+        accountAssignments: Array<{
+          accountId: string;
+          permissionSetArn: string;
+          principalId: string;
+          principalType: "GROUP" | "USER";
+        }>;
+      };
+    };
+    rawState.identityCenter.groupMemberships.push({
+      membershipId: "gm-1",
+      groupId: "g-123",
+      userId: "u-123",
+    });
+    rawState.identityCenter.accountAssignments.push({
+      accountId: "111111111111",
+      permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+      principalId: "g-123",
+      principalType: "GROUP",
+    });
+    await writeFile(paths.statePath, `${JSON.stringify(rawState, null, 2)}\n`, "utf8");
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.users = [];
+        config.groups = [];
+        config.permissionSets = [];
+        config.assignments = [];
+      },
+    });
+
+    const callOrder: string[] = [];
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({}),
+      ssoAdminClient: createSsoAdminClientMock({
+        onDeleteAccountAssignment: async (input) => {
+          callOrder.push("delete-assignment");
+          assert.equal(input.TargetId, "111111111111");
+          assert.equal(
+            input.PermissionSetArn,
+            "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+          );
+          assert.equal(input.PrincipalId, "g-123");
+          assert.equal(input.PrincipalType, "GROUP");
+        },
+        onDeletePermissionSet: async (input) => {
+          callOrder.push("delete-permission-set");
+          assert.equal(
+            input.PermissionSetArn,
+            "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+          );
+        },
+      }),
+      identityStoreClient: createIdentityStoreClientMock({
+        onDeleteGroupMembership: async (input) => {
+          callOrder.push("delete-membership");
+          assert.equal(input.MembershipId, "gm-1");
+        },
+        onDeleteUser: async (input) => {
+          callOrder.push("delete-user");
+          assert.equal(input.UserId, "u-123");
+        },
+        onDeleteGroup: async (input) => {
+          callOrder.push("delete-group");
+          assert.equal(input.GroupId, "g-123");
+        },
+      }),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      allowDestructive: true,
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 5);
+    assert.deepEqual(callOrder, [
+      "delete-membership",
+      "delete-assignment",
+      "delete-user",
+      "delete-group",
+      "delete-permission-set",
+    ]);
+
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        users: unknown[];
+        groups: unknown[];
+        groupMemberships: unknown[];
+        permissionSets: unknown[];
+        accountAssignments: unknown[];
+        accessRoles: unknown[];
+      };
+    };
+    assert.equal(persisted.identityCenter.users.length, 0);
+    assert.equal(persisted.identityCenter.groups.length, 0);
+    assert.equal(persisted.identityCenter.groupMemberships.length, 0);
+    assert.equal(persisted.identityCenter.permissionSets.length, 0);
+    assert.equal(persisted.identityCenter.accountAssignments.length, 0);
+    assert.equal(persisted.identityCenter.accessRoles.length, 0);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand persists successful IdC operations before later assignment failure", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
@@ -2344,6 +2617,11 @@ function createIdentityStoreClientMock(props: {
     IdentityStoreId?: string;
     UserName?: string;
     DisplayName?: string;
+    Name?: {
+      Formatted?: string;
+      GivenName?: string;
+      FamilyName?: string;
+    };
     Emails?: Array<{ Value?: string; Type?: string; Primary?: boolean }>;
   }) => Promise<void>;
   onCreateGroup?: (input: {
@@ -2355,6 +2633,19 @@ function createIdentityStoreClientMock(props: {
     GroupId?: string;
     MemberId?: { UserId?: string };
   }) => Promise<void>;
+  onDeleteUser?: (input: {
+    IdentityStoreId?: string;
+    UserId?: string;
+  }) => Promise<void>;
+  onDeleteGroup?: (input: {
+    IdentityStoreId?: string;
+    GroupId?: string;
+  }) => Promise<void>;
+  onDeleteGroupMembership?: (input: {
+    IdentityStoreId?: string;
+    MembershipId?: string;
+  }) => Promise<void>;
+  getGroupMembershipIdResponse?: { MembershipId?: string };
   createUserResponse?: { UserId?: string; IdentityStoreId?: string };
   createGroupResponse?: { GroupId?: string };
   createGroupMembershipResponse?: { MembershipId?: string };
@@ -2367,6 +2658,14 @@ function createIdentityStoreClientMock(props: {
             IdentityStoreId: command.input.IdentityStoreId,
             UserName: command.input.UserName,
             DisplayName: command.input.DisplayName,
+            Name:
+              command.input.Name != null
+                ? {
+                    Formatted: command.input.Name.Formatted,
+                    GivenName: command.input.Name.GivenName,
+                    FamilyName: command.input.Name.FamilyName,
+                  }
+                : undefined,
             Emails: command.input.Emails?.map((email) => ({
               Value: email.Value,
               Type: email.Type,
@@ -2408,6 +2707,36 @@ function createIdentityStoreClientMock(props: {
         return (
           props.createGroupMembershipResponse ?? { MembershipId: "gm-created" }
         );
+      }
+      if (command instanceof DeleteUserCommand) {
+        if (props.onDeleteUser != null) {
+          await props.onDeleteUser({
+            IdentityStoreId: command.input.IdentityStoreId,
+            UserId: command.input.UserId,
+          });
+        }
+        return {};
+      }
+      if (command instanceof DeleteGroupCommand) {
+        if (props.onDeleteGroup != null) {
+          await props.onDeleteGroup({
+            IdentityStoreId: command.input.IdentityStoreId,
+            GroupId: command.input.GroupId,
+          });
+        }
+        return {};
+      }
+      if (command instanceof GetGroupMembershipIdCommand) {
+        return props.getGroupMembershipIdResponse ?? { MembershipId: "gm-created" };
+      }
+      if (command instanceof DeleteGroupMembershipCommand) {
+        if (props.onDeleteGroupMembership != null) {
+          await props.onDeleteGroupMembership({
+            IdentityStoreId: command.input.IdentityStoreId,
+            MembershipId: command.input.MembershipId,
+          });
+        }
+        return {};
       }
       throw new Error("Unexpected Identity Store command in test.");
     },
@@ -2470,6 +2799,10 @@ function createSsoAdminClientMock(props: {
     PermissionSetArn?: string;
     PrincipalType?: string;
     PrincipalId?: string;
+  }) => Promise<void>;
+  onDeletePermissionSet?: (input: {
+    InstanceArn?: string;
+    PermissionSetArn?: string;
   }) => Promise<void>;
   createPermissionSetResponse?: {
     PermissionSet?: {
@@ -2666,6 +2999,15 @@ function createSsoAdminClientMock(props: {
             },
           }
         );
+      }
+      if (command instanceof DeletePermissionSetCommand) {
+        if (props.onDeletePermissionSet != null) {
+          await props.onDeletePermissionSet({
+            InstanceArn: command.input.InstanceArn,
+            PermissionSetArn: command.input.PermissionSetArn,
+          });
+        }
+        return {};
       }
       if (command instanceof DescribeAccountAssignmentCreationStatusCommand) {
         const response = creationStatuses[

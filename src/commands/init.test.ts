@@ -73,6 +73,8 @@ test("runInitCommand writes context/state/config/types in sequence", async () =>
     assert.match(stateRaw, /"rootId": "r-root"/);
     assert.match(configRaw, /const awsConfig:/);
     assert.match(typesRaw, /export const awsConfigSchema/);
+    assert.match(typesRaw, /iamPolicyDocumentSchema/);
+    assert.match(typesRaw, /isIamPolicyDocument/);
   } finally {
     await workspace.cleanup();
   }
