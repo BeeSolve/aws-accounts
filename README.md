@@ -24,6 +24,8 @@ Action: [iam.s3("GetObject"), iam.identitystore("CreateGroupMembership")];
 When `init` rewrites `aws.config.ts`, it now emits those helper expressions for
 recognized IAM actions inside inline policies. `scan` still updates only
 `state.json`.
+Those policy helpers and schemas are provided by the installed
+`@beesolve/iam-policy-ts` package and re-exported through `aws.config.types.ts`.
 
 ## Plan/apply safety
 
@@ -175,15 +177,9 @@ When possible, the generated inline policy actions are rendered back as
 `regenerate` refreshes only `aws.config.types.ts` from the current `aws.config.ts`.  
 It does not rewrite `aws.config.ts`, so stale config remains stale.
 
-Maintainers can refresh the IAM action hint snapshot with:
-
-```bash
-npm run update:iam-actions
-```
-
-That command normalizes the upstream AWS Policy Generator data into a checked-in
-cache file and only rewrites it when the upstream content actually changes.
-`npm publish` runs the same refresh automatically via `prepublishOnly`.
+IAM action hint data and policy schemas come from the installed
+`@beesolve/iam-policy-ts` package rather than a repository-local generated
+catalog.
 
 ## Project docs
 

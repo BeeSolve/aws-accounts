@@ -75,10 +75,9 @@ test("runInitCommand writes context/state/config/types in sequence", async () =>
     assert.match(configRaw, /iam\.s3\("GetObject"\)/);
     assert.match(configRaw, /iam\["sso-directory"\]\("SearchUsers"\)/);
     assert.match(typesRaw, /export const awsConfigSchema/);
-    assert.match(typesRaw, /iamPolicyDocumentSchema/);
-    assert.match(typesRaw, /isIamPolicyDocument/);
-    assert.match(typesRaw, /export function iamAction/);
-    assert.match(typesRaw, /export const iam = \{/);
+    assert.match(typesRaw, /@beesolve\/iam-policy-ts/);
+    assert.match(typesRaw, /export \{\s*iam,/s);
+    assert.match(typesRaw, /export type \{\s*IamActionCatalog,/s);
   } finally {
     await workspace.cleanup();
   }

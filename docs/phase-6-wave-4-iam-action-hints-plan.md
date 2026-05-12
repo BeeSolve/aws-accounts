@@ -19,27 +19,19 @@ That means:
 
 - generate service-scoped IAM action helpers in `aws.config.types.ts`
 - source those helpers from upstream AWS policy metadata rather than manual lists
-- make the metadata refreshable both on demand and automatically before publish
-- keep a checked-in cache so normal CLI commands stay offline and deterministic
+- consume that functionality through `@beesolve/iam-policy-ts` instead of
+  keeping a second in-repo catalog/schema implementation
 - teach `init` to emit helper-shaped code in `aws.config.ts` where possible
 
 ## Shipped action hinting design
 
-The currently shipped implementation uses:
+The currently shipped implementation uses the published
+`@beesolve/iam-policy-ts` package for:
 
-- upstream source: `https://awspolicygen.s3.amazonaws.com/js/policies.js`
-- maintainer refresh command: `npm run update:iam-actions`
-- checked-in cache file: `src/iamActionCatalog.ts`
-- publish hook: `prepublishOnly`
-
-The refresh script should:
-
-1. download `policies.js`
-2. extract `app.PolicyEditorConfig.serviceMap`
-3. normalize to `{ [servicePrefix]: string[] }`
-4. sort prefixes and action lists deterministically
-5. persist source metadata (URL + SHA256)
-6. skip rewriting the cache file when generated content is unchanged
+- IAM policy schemas and guards
+- the IAM action catalog
+- `iamAction(service, action)` and `iam.<service>(action)` helpers
+- source metadata about the upstream AWS action dataset
 
 The generated `aws.config.types.ts` surface should expose:
 
@@ -103,7 +95,8 @@ The repository head now:
 
 1. Uses a policy-aware TypeScript renderer in `src/awsConfig.ts` instead of a
    raw `JSON.stringify()` dump for generated config files.
-2. Reuses the checked-in `iamActionCatalog` for helper rendering decisions.
+2. Reuses the installed `@beesolve/iam-policy-ts` action catalog for helper
+   rendering decisions.
 3. Renders helper calls only for recognized `Action` / `NotAction` strings and
    leaves the rest of the policy document in plain JSON-like TypeScript.
 4. Covers the behavior with tests for:
@@ -120,9 +113,3 @@ The repository head now:
 - generated config must stay valid TypeScript and valid under `AwsConfig`
 - the render step must be deterministic so repeated `init` / `regenerate`
   produce stable diffs
-
-## Future improvements
-
-If AWS's newer Service Authorization Reference JSON becomes a better long-term
-source than `policies.js`, the cache refresh script can switch inputs without
-changing the user-facing helper API.

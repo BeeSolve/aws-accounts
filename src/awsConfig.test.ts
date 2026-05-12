@@ -49,11 +49,9 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
     const typesRaw = await readFile(typesPath, "utf8");
     assert.match(configRaw, /const awsConfig:/);
     assert.match(typesRaw, /export const awsConfigSchema/);
-    assert.match(typesRaw, /iamPolicyDocumentSchema/);
-    assert.match(typesRaw, /isIamPolicyDocument/);
-    assert.match(typesRaw, /type IamPolicyDocument/);
-    assert.match(typesRaw, /export function iamAction/);
-    assert.match(typesRaw, /export const iam = \{/);
+    assert.match(typesRaw, /@beesolve\/iam-policy-ts/);
+    assert.match(typesRaw, /export \{\s*iam,/s);
+    assert.match(typesRaw, /export type \{\s*IamActionCatalog,/s);
     assert.match(configRaw, /\bname: "root"/);
     assert.match(configRaw, /\bmembers: \[/);
     assert.match(configRaw, /"alice"/);
