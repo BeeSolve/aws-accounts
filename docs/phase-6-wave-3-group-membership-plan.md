@@ -1,6 +1,10 @@
 # Phase 6 Wave 3: IAM Identity Center Group Membership Management Plan
 
-This document captures the proposed next v1 feature after Wave 2 IdC additive reconciliation.
+This document captures the implemented Wave 3 follow-up after Wave 2 IdC
+additive reconciliation.
+
+Status: implemented in repository head. This document now serves as the design
+record for the shipped group-membership wave.
 
 Cloud-backed execution (`Lambda` / `S3` / saved remote plans) is treated as **v2**. This wave stays in the current local-first v1 model:
 
@@ -300,6 +304,7 @@ Update after implementation:
 
 - [`README.md`](../README.md)
 - [`docs/phase-6-wave-2-idc-plan.md`](./phase-6-wave-2-idc-plan.md) or a follow-up status note
+- [`docs/phase-6-wave-4-permission-set-policy-plan.md`](./phase-6-wave-4-permission-set-policy-plan.md) as the next planned follow-up
 
 IAM permissions for `apply` / `scan` will need Identity Store membership APIs added, expected at minimum:
 

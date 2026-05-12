@@ -3,6 +3,10 @@
 This document captures the agreed broader Wave 2 scope for replacing the current
 `idcAssignmentChanged` unsupported diff with real `plan` / `apply` support.
 
+Status note: repository head has since shipped the follow-up Wave 3 group
+membership work. This document still records the Wave 2 boundary as originally
+planned.
+
 ## Goal
 
 Support config-driven IAM Identity Center reconciliation for:

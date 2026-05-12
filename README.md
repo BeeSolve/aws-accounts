@@ -8,7 +8,7 @@ The tool's lifecycle has three phases:
 
 1. **Init (one-time).** `init` runs `bootstrap` + `scan` and writes `aws.config.ts` + `aws.config.types.ts` from the resulting `state.json`. After this, AWS state is mirrored locally and `aws.config.ts` is your editable source of truth.
 2. **Edit (steady state).** Edit `aws.config.ts` to model the desired state. Run `regenerate` to refresh `aws.config.types.ts` (picklists / IDE autocomplete) after manual edits. A future `watch` command will run `regenerate` automatically.
-3. **Sync (phase 6 Wave 2).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
+3. **Sync (phase 6 Wave 3).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
 
 `bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged in increment 1; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
 
@@ -38,6 +38,8 @@ The tool's lifecycle has three phases:
 
 - create missing users
 - create missing groups
+- add missing group memberships
+- remove stale group memberships
 - create missing permission sets
 - grant account assignments
 - revoke account assignments
@@ -94,9 +96,9 @@ Still out of scope in the current increment:
 - deleting the reserved `Pending` or `Graveyard` OUs (do that manually outside this tool)
 - removing IAM Identity Center users, groups, or permission sets
 - editing IAM Identity Center user metadata after creation
+- editing IAM Identity Center group metadata after creation
 - editing IAM Identity Center permission set metadata after creation
 - permission set policy / attachment management
-- group membership management
 - account metadata reconciliation after creation (tags, alternate contacts, account-name drift)
 
 ## Recovery after failed destructive apply
@@ -139,6 +141,8 @@ It does not rewrite `aws.config.ts`, so stale config remains stale.
 - Decision log for phase 1 scan: `docs/phase-1-decisions.md`
 - Decision log for phase 2 bootstrap: `docs/phase-2-decisions.md`
 - Decision log for phase 3 init / regenerate: `docs/phase-3-decisions.md`
+- Wave 4 permission set policy plan: `docs/phase-6-wave-4-permission-set-policy-plan.md`
+- Current v1 backlog priority: `docs/v1-backlog-priority.md`
 - Agreed repository structure: `docs/repository-structure.md`
 
 Tests compile with esbuild to `dist/*.test.js` and run with `node --test` (`npm test`).
@@ -165,7 +169,8 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "sso:ListAccountsForProvisionedPermissionSet",
         "sso:ListAccountAssignments",
         "identitystore:ListUsers",
-        "identitystore:ListGroups"
+        "identitystore:ListGroups",
+        "identitystore:ListGroupMemberships"
       ],
       "Resource": "*"
     },
@@ -197,7 +202,8 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "sso:ListAccountsForProvisionedPermissionSet",
         "sso:ListAccountAssignments",
         "identitystore:ListUsers",
-        "identitystore:ListGroups"
+        "identitystore:ListGroups",
+        "identitystore:ListGroupMemberships"
       ],
       "Resource": "*"
     },
@@ -227,6 +233,9 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "organizations:DescribeCreateAccountStatus",
         "identitystore:CreateUser",
         "identitystore:CreateGroup",
+        "identitystore:CreateGroupMembership",
+        "identitystore:DeleteGroupMembership",
+        "identitystore:GetGroupMembershipId",
         "sso:CreatePermissionSet",
         "sso:CreateAccountAssignment",
         "sso:DeleteAccountAssignment",
@@ -245,5 +254,5 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
 
 ## Notes
 
-- The scan output in increment 1 includes IAM Identity Center users, groups, permission sets, account assignments, and IAM role metadata from account assignment principals when available.
+- The scan output in the current increment includes IAM Identity Center users, groups, group memberships, permission sets, account assignments, and IAM role metadata from account assignment principals when available.
 - If multiple IAM Identity Center instances are present, CLI should fail and require `--instance-arn`.
