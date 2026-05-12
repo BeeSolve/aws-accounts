@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  addGroupMembershipToWorkingState,
   addAccountAssignmentToWorkingState,
   createWorkingState,
   materializeWorkingState,
   moveAccountInWorkingState,
   normalizeState,
   removeAccountAssignmentFromWorkingState,
+  removeGroupMembershipFromWorkingState,
   removeOrganizationalUnitFromWorkingState,
   renameOrganizationalUnitInWorkingState,
   upsertIdcGroupInWorkingState,
@@ -43,6 +45,10 @@ test("normalizeState sorts by ids/arns before names", () => {
         { groupId: "g-2", displayName: "B" },
         { groupId: "g-1", displayName: "A" }
       ],
+      groupMemberships: [
+        { membershipId: "m-2", groupId: "g-2", userId: "u-2" },
+        { membershipId: "m-1", groupId: "g-1", userId: "u-1" }
+      ],
       permissionSets: [
         { permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-1/ps-2", name: "PS2", description: "" },
         { permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-1/ps-1", name: "PS1", description: "" }
@@ -75,6 +81,7 @@ test("normalizeState sorts by ids/arns before names", () => {
   assert.equal(normalized.organization.accounts[0].id, "111111111111");
   assert.equal(normalized.identityCenter.users[0].userId, "u-1");
   assert.equal(normalized.identityCenter.groups[0].groupId, "g-1");
+  assert.equal(normalized.identityCenter.groupMemberships[0].membershipId, "m-1");
   assert.equal(normalized.identityCenter.permissionSets[0].permissionSetArn.endsWith("ps-1"), true);
 });
 
@@ -92,6 +99,7 @@ test("validateState rejects unknown fields", () => {
       identityStoreId: "d-123",
       users: [],
       groups: [],
+      groupMemberships: [],
       permissionSets: [],
       accountAssignments: [],
       accessRoles: []
@@ -116,6 +124,7 @@ test("validateState rejects invalid principalType", () => {
       identityStoreId: "d-123",
       users: [],
       groups: [],
+      groupMemberships: [],
       permissionSets: [],
       accountAssignments: [
         {
@@ -233,8 +242,16 @@ test("working state helpers update IdC records immutably and regenerate access r
       description: "Admin",
     },
   });
-  const withAssignment = addAccountAssignmentToWorkingState({
+  const withMembership = addGroupMembershipToWorkingState({
     workingState: withPermissionSet,
+    groupMembership: {
+      membershipId: "gm-1",
+      groupId: "g-1",
+      userId: "u-1",
+    },
+  });
+  const withAssignment = addAccountAssignmentToWorkingState({
+    workingState: withMembership,
     accountAssignment: {
       accountId: "111111111111",
       permissionSetArn: "arn:ps-1",
@@ -242,8 +259,15 @@ test("working state helpers update IdC records immutably and regenerate access r
       principalType: "GROUP",
     },
   });
-  const withoutAssignment = removeAccountAssignmentFromWorkingState({
+  const withoutMembership = removeGroupMembershipFromWorkingState({
     workingState: withAssignment,
+    groupMembership: {
+      groupId: "g-1",
+      userId: "u-1",
+    },
+  });
+  const withoutAssignment = removeAccountAssignmentFromWorkingState({
+    workingState: withoutMembership,
     accountAssignment: {
       accountId: "111111111111",
       permissionSetArn: "arn:ps-1",
@@ -270,7 +294,9 @@ test("working state helpers update IdC records immutably and regenerate access r
     withAssignmentMaterialized.identityCenter.accountAssignments.length,
     1,
   );
+  assert.equal(withAssignmentMaterialized.identityCenter.groupMemberships.length, 1);
   assert.equal(withAssignmentMaterialized.identityCenter.accessRoles.length, 1);
+  assert.equal(withoutAssignmentMaterialized.identityCenter.groupMemberships.length, 0);
   assert.equal(withoutAssignmentMaterialized.identityCenter.accountAssignments.length, 0);
   assert.equal(withoutAssignmentMaterialized.identityCenter.accessRoles.length, 0);
 });
@@ -295,6 +321,7 @@ function createSampleState() {
       identityStoreId: "d-123",
       users: [],
       groups: [],
+      groupMemberships: [],
       permissionSets: [],
       accountAssignments: [],
       accessRoles: []

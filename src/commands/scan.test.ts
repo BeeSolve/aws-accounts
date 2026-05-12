@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ListGroupsCommand,
+  ListGroupMembershipsCommand,
   ListUsersCommand,
   type IdentitystoreClient,
 } from "@aws-sdk/client-identitystore";
@@ -55,6 +56,7 @@ test(
       assert.equal(result.state.organization.accounts.length, 1);
       assert.equal(result.state.identityCenter.users.length, 1);
       assert.equal(result.state.identityCenter.groups.length, 1);
+      assert.equal(result.state.identityCenter.groupMemberships.length, 1);
       assert.equal(result.state.identityCenter.permissionSets.length, 1);
       assert.equal(result.state.identityCenter.accountAssignments.length, 1);
       assert.equal(result.state.identityCenter.accessRoles.length, 1);
@@ -235,6 +237,19 @@ function createIdentityStoreClientMock(): IdentitystoreClient {
             {
               GroupId: "g-123",
               DisplayName: "Admins",
+            },
+          ],
+        };
+      }
+      if (command instanceof ListGroupMembershipsCommand) {
+        return {
+          GroupMemberships: [
+            {
+              MembershipId: "gm-123",
+              GroupId: command.input.GroupId,
+              MemberId: {
+                UserId: "u-123",
+              },
             },
           ],
         };

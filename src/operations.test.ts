@@ -23,6 +23,16 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       groupDisplayName: "Admins",
     },
     {
+      kind: "addIdcGroupMembership",
+      groupDisplayName: "Admins",
+      userName: "alice",
+    },
+    {
+      kind: "removeIdcGroupMembership",
+      groupDisplayName: "Admins",
+      userName: "alice",
+    },
+    {
       kind: "createIdcPermissionSet",
       permissionSetName: "AdminAccess",
       description: "Admin",

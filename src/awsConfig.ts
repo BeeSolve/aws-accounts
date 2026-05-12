@@ -10,7 +10,7 @@ import {
   type StateFile,
   validateState,
 } from "./state.js";
-import { assertUnreachable } from "./helpers.js";
+import { assertUnreachable, toRecordByProperty } from "./helpers.js";
 import type { Logger } from "./logger.js";
 
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
@@ -62,6 +62,7 @@ const awsConfigModelSchema = v.strictObject({
   groups: v.array(
     v.strictObject({
       displayName: v.string(),
+      members: v.array(v.string()),
     }),
   ),
   permissionSets: v.array(
@@ -226,7 +227,9 @@ export async function writeAwsConfigFromState(
   for (const fileSummary of fileSummaries) {
     props.logger.log(fileSummary);
   }
-  props.logger.log(`Review with: git diff ${props.configPath} ${props.typesPath}`);
+  props.logger.log(
+    `Review with: git diff ${props.configPath} ${props.typesPath}`,
+  );
 
   const shouldWrite = await props.overwriteConfirmation({
     fileSummaries,
@@ -370,15 +373,16 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       accounts: [],
     },
   ];
-  const organizationalUnitById = new Map(
-    props.state.organization.organizationalUnits.map((ou) => [ou.id, ou]),
+  const organizationalUnitById = toRecordByProperty(
+    props.state.organization.organizationalUnits,
+    "id",
   );
   for (const organizationalUnit of props.state.organization
     .organizationalUnits) {
     const parentName =
       organizationalUnit.parentId === props.state.organization.rootId
         ? "root"
-        : organizationalUnitById.get(organizationalUnit.parentId)?.name;
+        : organizationalUnitById[organizationalUnit.parentId]?.name;
     if (parentName == null) {
       throw new Error(
         `Organizational unit "${organizationalUnit.name}" has unknown parentId "${organizationalUnit.parentId}".`,
@@ -391,20 +395,21 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     });
   }
 
-  const organizationalUnitByName = new Map(
-    organizationalUnits.map((ou) => [ou.name, ou]),
+  const organizationalUnitByName = toRecordByProperty(
+    organizationalUnits,
+    "name",
   );
   for (const account of props.state.organization.accounts) {
     const ownerOuName =
       account.parentId === props.state.organization.rootId
         ? "root"
-        : organizationalUnitById.get(account.parentId)?.name;
+        : organizationalUnitById[account.parentId]?.name;
     if (ownerOuName == null) {
       throw new Error(
         `Account "${account.name}" has unknown parentId "${account.parentId}".`,
       );
     }
-    const ownerOu = organizationalUnitByName.get(ownerOuName);
+    const ownerOu = organizationalUnitByName[ownerOuName];
     if (ownerOu == null) {
       throw new Error(
         `Could not map account "${account.name}" to organizational unit "${ownerOuName}".`,
@@ -416,28 +421,26 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     });
   }
 
-  const permissionSetNameByArn = new Map(
-    props.state.identityCenter.permissionSets.map((permissionSet) => [
-      permissionSet.permissionSetArn,
-      permissionSet.name,
-    ]),
+  const permissionSetByArn = toRecordByProperty(
+    props.state.identityCenter.permissionSets,
+    "permissionSetArn",
   );
-  const groupDisplayNameById = new Map(
+  const groupById = toRecordByProperty(
+    props.state.identityCenter.groups,
+    "groupId",
+  );
+  const userById = toRecordByProperty(
+    props.state.identityCenter.users,
+    "userId",
+  );
+  const accountById = toRecordByProperty(
+    props.state.organization.accounts,
+    "id",
+  );
+  const membersByGroupDisplayName = new Map(
     props.state.identityCenter.groups.map((group) => [
-      group.groupId,
       group.displayName,
-    ]),
-  );
-  const userNameById = new Map(
-    props.state.identityCenter.users.map((user) => [
-      user.userId,
-      user.userName,
-    ]),
-  );
-  const accountNameById = new Map(
-    props.state.organization.accounts.map((account) => [
-      account.id,
-      account.name,
+      [] as string[],
     ]),
   );
 
@@ -446,15 +449,13 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     AwsConfigModel["assignments"][number]
   >();
   for (const assignment of props.state.identityCenter.accountAssignments) {
-    const permissionSetName = permissionSetNameByArn.get(
-      assignment.permissionSetArn,
-    );
+    const permissionSetName = permissionSetByArn[assignment.permissionSetArn]?.name;
     if (permissionSetName == null) {
       throw new Error(
         `Could not resolve permission set name for assignment permissionSetArn "${assignment.permissionSetArn}".`,
       );
     }
-    const accountName = accountNameById.get(assignment.accountId);
+    const accountName = accountById[assignment.accountId]?.name;
     if (accountName == null) {
       throw new Error(
         `Could not resolve account name for assignment accountId "${assignment.accountId}".`,
@@ -462,8 +463,8 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     }
     const principal = mapAssignmentPrincipal({
       assignment,
-      groupDisplayNameById,
-      userNameById,
+      groupById,
+      userById,
     });
 
     const assignmentKey = `${principal.kind}:${principal.value}|${permissionSetName}`;
@@ -481,6 +482,29 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       existingAssignment.accounts.push(accountName);
     }
   }
+  for (const groupMembership of props.state.identityCenter.groupMemberships) {
+    const groupDisplayName = groupById[groupMembership.groupId]?.displayName;
+    if (groupDisplayName == null) {
+      throw new Error(
+        `Could not resolve group display name for membership groupId "${groupMembership.groupId}".`,
+      );
+    }
+    const userName = userById[groupMembership.userId]?.userName;
+    if (userName == null) {
+      throw new Error(
+        `Could not resolve user name for membership userId "${groupMembership.userId}".`,
+      );
+    }
+    const members = membersByGroupDisplayName.get(groupDisplayName);
+    if (members == null) {
+      throw new Error(
+        `Could not map membership for group "${groupDisplayName}".`,
+      );
+    }
+    if (members.includes(userName) === false) {
+      members.push(userName);
+    }
+  }
 
   const mapped: AwsConfigModel = {
     organizationalUnits,
@@ -491,6 +515,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     })),
     groups: props.state.identityCenter.groups.map((group) => ({
       displayName: group.displayName,
+      members: membersByGroupDisplayName.get(group.displayName) ?? [],
     })),
     permissionSets: props.state.identityCenter.permissionSets.map(
       (permissionSet) => ({
@@ -527,27 +552,62 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
   return v.parse(awsConfigModelSchema, mapped);
 }
 
-export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile {
-  const organizationalUnitByName = new Map(
-    props.currentState.organization.organizationalUnits.map((ou) => [ou.name, ou]),
+export function mapAwsConfigToState(
+  props: MapAwsConfigToStateProps,
+): StateFile {
+  const organizationalUnitByName = toRecordByProperty(
+    props.currentState.organization.organizationalUnits,
+    "name",
   );
-  const accountByName = new Map(
-    props.currentState.organization.accounts.map((account) => [account.name, account]),
+  const accountByName = toRecordByProperty(
+    props.currentState.organization.accounts,
+    "name",
   );
-  const userByUserName = new Map(
-    props.currentState.identityCenter.users.map((user) => [user.userName, user]),
+  const userByUserName = toRecordByProperty(
+    props.currentState.identityCenter.users,
+    "userName",
   );
-  const groupByDisplayName = new Map(
-    props.currentState.identityCenter.groups.map((group) => [group.displayName, group]),
+  const userById = toRecordByProperty(
+    props.currentState.identityCenter.users,
+    "userId",
   );
-  const permissionSetByName = new Map(
-    props.currentState.identityCenter.permissionSets.map((permissionSet) => [
-      permissionSet.name,
-      permissionSet,
-    ]),
+  const groupByDisplayName = toRecordByProperty(
+    props.currentState.identityCenter.groups,
+    "displayName",
+  );
+  const groupById = toRecordByProperty(
+    props.currentState.identityCenter.groups,
+    "groupId",
+  );
+  const groupMembershipByNameKey = toRecordByProperty(
+    props.currentState.identityCenter.groupMemberships,
+    (groupMembership) => {
+      const currentGroup = groupById[groupMembership.groupId];
+      if (currentGroup == null) {
+        throw new Error(
+          `Could not resolve current group for membership groupId "${groupMembership.groupId}".`,
+        );
+      }
+      const currentUser = userById[groupMembership.userId];
+      if (currentUser == null) {
+        throw new Error(
+          `Could not resolve current user for membership userId "${groupMembership.userId}".`,
+        );
+      }
+      return createGroupMembershipNameKey({
+        groupDisplayName: currentGroup.displayName,
+        userName: currentUser.userName,
+      });
+    },
+  );
+  const permissionSetByName = toRecordByProperty(
+    props.currentState.identityCenter.permissionSets,
+    "name",
   );
   const configOrganizationalUnitNameSet = new Set(
-    props.config.organizationalUnits.map((organizationalUnit) => organizationalUnit.name),
+    props.config.organizationalUnits.map(
+      (organizationalUnit) => organizationalUnit.name,
+    ),
   );
   const mappedOrganizationalUnitIdByName = new Map<string, string>();
 
@@ -555,7 +615,8 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
     if (
       organizationalUnit.name !== "root" &&
       organizationalUnit.parentName != null &&
-      configOrganizationalUnitNameSet.has(organizationalUnit.parentName) === false
+      configOrganizationalUnitNameSet.has(organizationalUnit.parentName) ===
+        false
     ) {
       throw new Error(
         `Organizational unit "${organizationalUnit.name}" references unknown parentName "${organizationalUnit.parentName}".`,
@@ -563,18 +624,21 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
     }
     const mappedId = resolveOrganizationalUnitId({
       organizationalUnitName: organizationalUnit.name,
-      matchedOrganizationalUnit: organizationalUnitByName.get(organizationalUnit.name),
+      matchedOrganizationalUnit: organizationalUnitByName[organizationalUnit.name],
       context: props.context,
     });
     mappedOrganizationalUnitIdByName.set(organizationalUnit.name, mappedId);
   }
 
-  const mappedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] = [];
+  const mappedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] =
+    [];
   for (const organizationalUnit of props.config.organizationalUnits) {
     if (organizationalUnit.name === "root") {
       continue;
     }
-    const mappedId = mappedOrganizationalUnitIdByName.get(organizationalUnit.name);
+    const mappedId = mappedOrganizationalUnitIdByName.get(
+      organizationalUnit.name,
+    );
     if (mappedId == null) {
       throw new Error(
         `Could not resolve mapped id for organizational unit "${organizationalUnit.name}".`,
@@ -583,11 +647,11 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
     const parentId =
       organizationalUnit.parentName == null
         ? props.context.organization.rootId
-        : (mappedOrganizationalUnitIdByName.get(organizationalUnit.parentName) ??
-          pendingCreationId);
-    const matchedOrganizationalUnit = organizationalUnitByName.get(
-      organizationalUnit.name,
-    );
+        : (mappedOrganizationalUnitIdByName.get(
+            organizationalUnit.parentName,
+          ) ?? pendingCreationId);
+    const matchedOrganizationalUnit =
+      organizationalUnitByName[organizationalUnit.name];
     mappedOrganizationalUnits.push({
       id: mappedId,
       parentId,
@@ -599,14 +663,16 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
   const mappedAccountIdByName = new Map<string, string>();
   const mappedAccounts: StateFile["organization"]["accounts"] = [];
   for (const organizationalUnit of props.config.organizationalUnits) {
-    const ownerParentId = mappedOrganizationalUnitIdByName.get(organizationalUnit.name);
+    const ownerParentId = mappedOrganizationalUnitIdByName.get(
+      organizationalUnit.name,
+    );
     if (ownerParentId == null) {
       throw new Error(
         `Could not resolve mapped parent id for organizational unit "${organizationalUnit.name}".`,
       );
     }
     for (const account of organizationalUnit.accounts) {
-      const matchedAccount = accountByName.get(account.name);
+      const matchedAccount = accountByName[account.name];
       const mappedId = matchedAccount?.id ?? pendingCreationId;
       mappedAccounts.push({
         id: mappedId,
@@ -620,37 +686,61 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
     }
   }
 
-  const mappedUsers: StateFile["identityCenter"]["users"] = props.config.users.map(
-    (user) => {
-      const matchedUser = userByUserName.get(user.userName);
+  const mappedUsers: StateFile["identityCenter"]["users"] =
+    props.config.users.map((user) => {
+      const matchedUser = userByUserName[user.userName];
       return {
         userId: matchedUser?.userId ?? pendingCreationId,
         userName: user.userName,
         displayName: user.displayName,
         email: user.email,
       };
-    },
-  );
-  const mappedUserIdByUserName = new Map(
-    mappedUsers.map((user) => [user.userName, user.userId]),
+    });
+  const mappedUserByUserName = toRecordByProperty(
+    mappedUsers,
+    "userName",
   );
 
-  const mappedGroups: StateFile["identityCenter"]["groups"] = props.config.groups.map(
-    (group) => {
-      const matchedGroup = groupByDisplayName.get(group.displayName);
+  const mappedGroups: StateFile["identityCenter"]["groups"] =
+    props.config.groups.map((group) => {
+      const matchedGroup = groupByDisplayName[group.displayName];
       return {
         groupId: matchedGroup?.groupId ?? pendingCreationId,
         displayName: group.displayName,
       };
-    },
+    });
+  const mappedGroupByDisplayName = toRecordByProperty(
+    mappedGroups,
+    "displayName",
   );
-  const mappedGroupIdByDisplayName = new Map(
-    mappedGroups.map((group) => [group.displayName, group.groupId]),
-  );
+  const mappedGroupMemberships: StateFile["identityCenter"]["groupMemberships"] =
+    [];
+  for (const group of props.config.groups) {
+    assertUniqueNames({
+      values: group.members,
+      entityName: `group member for "${group.displayName}"`,
+    });
+    const groupId =
+      mappedGroupByDisplayName[group.displayName]?.groupId ?? pendingCreationId;
+    for (const userName of group.members) {
+      const currentMembership =
+        groupMembershipByNameKey[
+          createGroupMembershipNameKey({
+            groupDisplayName: group.displayName,
+            userName,
+          })
+        ];
+      mappedGroupMemberships.push({
+        membershipId: currentMembership?.membershipId ?? pendingCreationId,
+        groupId,
+        userId: mappedUserByUserName[userName]?.userId ?? pendingCreationId,
+      });
+    }
+  }
 
   const mappedPermissionSets: StateFile["identityCenter"]["permissionSets"] =
     props.config.permissionSets.map((permissionSet) => {
-      const matchedPermissionSet = permissionSetByName.get(permissionSet.name);
+      const matchedPermissionSet = permissionSetByName[permissionSet.name];
       return {
         permissionSetArn:
           matchedPermissionSet?.permissionSetArn ?? pendingCreationId,
@@ -658,14 +748,13 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
         description: permissionSet.description,
       };
     });
-  const mappedPermissionSetArnByName = new Map(
-    mappedPermissionSets.map((permissionSet) => [
-      permissionSet.name,
-      permissionSet.permissionSetArn,
-    ]),
+  const mappedPermissionSetByName = toRecordByProperty(
+    mappedPermissionSets,
+    "name",
   );
 
-  const mappedAccountAssignments: StateFile["identityCenter"]["accountAssignments"] = [];
+  const mappedAccountAssignments: StateFile["identityCenter"]["accountAssignments"] =
+    [];
   for (const assignment of props.config.assignments) {
     const hasGroupPrincipal = assignment.group != null;
     const hasUserPrincipal = assignment.user != null;
@@ -678,18 +767,18 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
       hasGroupPrincipal === true
         ? {
             principalId:
-              mappedGroupIdByDisplayName.get(assignment.group ?? "") ??
+              mappedGroupByDisplayName[assignment.group ?? ""]?.groupId ??
               pendingCreationId,
             principalType: "GROUP" as const,
           }
         : {
             principalId:
-              mappedUserIdByUserName.get(assignment.user ?? "") ??
+              mappedUserByUserName[assignment.user ?? ""]?.userId ??
               pendingCreationId,
             principalType: "USER" as const,
           };
     const permissionSetArn =
-      mappedPermissionSetArnByName.get(assignment.permissionSet) ??
+      mappedPermissionSetByName[assignment.permissionSet]?.permissionSetArn ??
       pendingCreationId;
     for (const accountName of assignment.accounts) {
       mappedAccountAssignments.push({
@@ -714,6 +803,7 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
       identityStoreId: props.context.identityCenter.identityStoreId,
       users: mappedUsers,
       groups: mappedGroups,
+      groupMemberships: mappedGroupMemberships,
       permissionSets: mappedPermissionSets,
       accountAssignments: mappedAccountAssignments,
       accessRoles: mappedAccountAssignments.map((assignment) => ({
@@ -727,8 +817,8 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
   };
 
   assertUniqueNames({
-    values: props.config.organizationalUnits.map((organizationalUnit) =>
-      organizationalUnit.name,
+    values: props.config.organizationalUnits.map(
+      (organizationalUnit) => organizationalUnit.name,
     ),
     entityName: "organizational unit",
   });
@@ -747,7 +837,9 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
     entityName: "user",
   });
   assertUniqueNames({
-    values: props.config.permissionSets.map((permissionSet) => permissionSet.name),
+    values: props.config.permissionSets.map(
+      (permissionSet) => permissionSet.name,
+    ),
     entityName: "permission set",
   });
 
@@ -807,9 +899,14 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
     users: [...props.config.users].sort((left, right) =>
       left.userName.localeCompare(right.userName),
     ),
-    groups: [...props.config.groups].sort((left, right) =>
-      left.displayName.localeCompare(right.displayName),
-    ),
+    groups: [...props.config.groups]
+      .map((group) => ({
+        ...group,
+        members: [...group.members].sort((left, right) =>
+          left.localeCompare(right),
+        ),
+      }))
+      .sort((left, right) => left.displayName.localeCompare(right.displayName)),
     permissionSets: [...props.config.permissionSets].sort((left, right) =>
       left.name.localeCompare(right.name),
     ),
@@ -912,6 +1009,7 @@ export const awsConfigSchema = v.strictObject({
   groups: v.array(
     v.strictObject({
       displayName: v.string(),
+      members: v.array(userNameSchema),
     }),
   ),
   permissionSets: v.array(
@@ -1001,14 +1099,13 @@ function assertUniqueNames(props: {
 
 function mapAssignmentPrincipal(props: {
   assignment: StateFile["identityCenter"]["accountAssignments"][number];
-  groupDisplayNameById: Map<string, string>;
-  userNameById: Map<string, string>;
+  groupById: Record<string, StateFile["identityCenter"]["groups"][number]>;
+  userById: Record<string, StateFile["identityCenter"]["users"][number]>;
 }): MapAssignmentPrincipalResult {
   const principalType = props.assignment.principalType;
   if (principalType === "GROUP") {
-    const groupDisplayName = props.groupDisplayNameById.get(
-      props.assignment.principalId,
-    );
+    const groupDisplayName =
+      props.groupById[props.assignment.principalId]?.displayName;
     if (groupDisplayName == null) {
       throw new Error(
         `Could not resolve group display name for principalId "${props.assignment.principalId}".`,
@@ -1020,7 +1117,7 @@ function mapAssignmentPrincipal(props: {
     };
   }
   if (principalType === "USER") {
-    const userName = props.userNameById.get(props.assignment.principalId);
+    const userName = props.userById[props.assignment.principalId]?.userName;
     if (userName == null) {
       throw new Error(
         `Could not resolve user name for principalId "${props.assignment.principalId}".`,
@@ -1035,6 +1132,13 @@ function mapAssignmentPrincipal(props: {
     principalType,
     `Unsupported principal type "${principalType}" in account assignment.`,
   );
+}
+
+function createGroupMembershipNameKey(props: {
+  groupDisplayName: string;
+  userName: string;
+}): string {
+  return [props.groupDisplayName, props.userName].join("|");
 }
 
 function resolveOrganizationalUnitId(props: {
@@ -1084,7 +1188,9 @@ export async function loadAwsConfigModelFromTsFile(props: {
   });
 }
 
-export async function readAwsContextFromFile(path: string): Promise<AwsContextFile> {
+export async function readAwsContextFromFile(
+  path: string,
+): Promise<AwsContextFile> {
   return await readAwsContextFile(path);
 }
 

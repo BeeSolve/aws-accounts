@@ -565,6 +565,30 @@ test("diffStates emits IdC entity creation operations", () => {
   assert.deepEqual(plan.unsupported, []);
 });
 
+test("diffStates emits additive IdC group membership operations", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  next.identityCenter.groupMemberships.push({
+    membershipId: "gm-1",
+    groupId: "g-1",
+    userId: "u-1",
+  });
+
+  const plan = diffStates({
+    current,
+    next,
+  });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "addIdcGroupMembership",
+      groupDisplayName: "Platform",
+      userName: "alice",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
 test("diffStates emits additive IdC assignment grants", () => {
   const current = createBaseState();
   const next = cloneState(current);
@@ -617,8 +641,14 @@ test("diffStates emits IdC assignment revokes when entities remain supported", (
 test("diffStates keeps IdC removals unsupported and suppresses derivative revokes", () => {
   const current = createBaseState();
   const next = cloneState(current);
+  current.identityCenter.groupMemberships.push({
+    membershipId: "gm-1",
+    groupId: "g-1",
+    userId: "u-1",
+  });
   next.identityCenter.users = [];
   next.identityCenter.groups = [];
+  next.identityCenter.groupMemberships = [];
   next.identityCenter.permissionSets = [];
   next.identityCenter.accountAssignments = [];
 
@@ -644,6 +674,31 @@ test("diffStates keeps IdC removals unsupported and suppresses derivative revoke
       description: 'removed IdC user "alice"',
     },
   ]);
+});
+
+test("diffStates emits IdC group membership removals when entities remain", () => {
+  const current = createBaseState();
+  current.identityCenter.groupMemberships.push({
+    membershipId: "gm-1",
+    groupId: "g-1",
+    userId: "u-1",
+  });
+  const next = cloneState(current);
+  next.identityCenter.groupMemberships = [];
+
+  const plan = diffStates({
+    current,
+    next,
+  });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "removeIdcGroupMembership",
+      groupDisplayName: "Platform",
+      userName: "alice",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
 });
 
 test("diffStates keeps deterministic mixed Organizations and IdC ordering", () => {
@@ -747,6 +802,7 @@ function createBaseState(): StateFile {
           displayName: "Platform",
         },
       ],
+      groupMemberships: [],
       permissionSets: [
         {
           permissionSetArn: "arn:ps-admin",

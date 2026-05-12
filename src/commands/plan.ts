@@ -103,8 +103,14 @@ function formatHumanOperationLine(operation: Plan["operations"][number]): string
   if (operation.kind === "createIdcGroup") {
     return `  create IdC group "${operation.groupDisplayName}"`;
   }
+  if (operation.kind === "addIdcGroupMembership") {
+    return `  add user "${operation.userName}" to IdC group "${operation.groupDisplayName}"`;
+  }
   if (operation.kind === "createIdcPermissionSet") {
     return `  create IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "removeIdcGroupMembership") {
+    return `  remove user "${operation.userName}" from IdC group "${operation.groupDisplayName}"`;
   }
   if (operation.kind === "grantIdcAccountAssignment") {
     return `  grant IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel({

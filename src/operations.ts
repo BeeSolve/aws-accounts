@@ -54,6 +54,18 @@ const createIdcGroupOperationSchema = v.strictObject({
   groupDisplayName: v.string(),
 });
 
+const addIdcGroupMembershipOperationSchema = v.strictObject({
+  kind: v.literal("addIdcGroupMembership"),
+  groupDisplayName: v.string(),
+  userName: v.string(),
+});
+
+const removeIdcGroupMembershipOperationSchema = v.strictObject({
+  kind: v.literal("removeIdcGroupMembership"),
+  groupDisplayName: v.string(),
+  userName: v.string(),
+});
+
 const createIdcPermissionSetOperationSchema = v.strictObject({
   kind: v.literal("createIdcPermissionSet"),
   permissionSetName: v.string(),
@@ -84,6 +96,8 @@ export const operationSchema = v.variant("kind", [
   createAccountOperationSchema,
   createIdcUserOperationSchema,
   createIdcGroupOperationSchema,
+  addIdcGroupMembershipOperationSchema,
+  removeIdcGroupMembershipOperationSchema,
   createIdcPermissionSetOperationSchema,
   grantIdcAccountAssignmentOperationSchema,
   revokeIdcAccountAssignmentOperationSchema,
@@ -129,6 +143,12 @@ export type CreateIdcUserOperation = v.InferOutput<
 >;
 export type CreateIdcGroupOperation = v.InferOutput<
   typeof createIdcGroupOperationSchema
+>;
+export type AddIdcGroupMembershipOperation = v.InferOutput<
+  typeof addIdcGroupMembershipOperationSchema
+>;
+export type RemoveIdcGroupMembershipOperation = v.InferOutput<
+  typeof removeIdcGroupMembershipOperationSchema
 >;
 export type CreateIdcPermissionSetOperation = v.InferOutput<
   typeof createIdcPermissionSetOperationSchema

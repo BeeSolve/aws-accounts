@@ -50,6 +50,8 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
     assert.match(configRaw, /const awsConfig:/);
     assert.match(typesRaw, /export const awsConfigSchema/);
     assert.match(configRaw, /"name": "root"/);
+    assert.match(configRaw, /"members": \[/);
+    assert.match(configRaw, /"alice"/);
   } finally {
     await workspace.cleanup();
   }
@@ -313,6 +315,7 @@ test("mapAwsConfigToState emits sentinel ids for entities missing in current sta
     });
     config.groups.push({
       displayName: "Operators",
+      members: [],
     });
     config.permissionSets.push({
       name: "ReadOnly",
@@ -472,6 +475,15 @@ test("mapAwsConfigToState keeps existing ids for unchanged config entities", asy
       true,
     );
     assert.equal(
+      mapped.identityCenter.groupMemberships.some(
+        (groupMembership) =>
+          groupMembership.membershipId === "gm-123" &&
+          groupMembership.groupId === "g-123" &&
+          groupMembership.userId === "u-123",
+      ),
+      true,
+    );
+    assert.equal(
       mapped.identityCenter.permissionSets.some(
         (permissionSet) =>
           permissionSet.name === "AdminAccess" &&
@@ -540,6 +552,13 @@ async function writeFixtureFiles(props: {
         {
           groupId: "g-123",
           displayName: "Admins",
+        },
+      ],
+      groupMemberships: [
+        {
+          membershipId: "gm-123",
+          groupId: "g-123",
+          userId: "u-123",
         },
       ],
       permissionSets: [

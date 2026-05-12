@@ -134,6 +134,7 @@ async function writeFixtureFiles(props: {
           displayName: "Admins",
         },
       ],
+      groupMemberships: [],
       permissionSets: [
         {
           permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",

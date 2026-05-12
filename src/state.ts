@@ -9,7 +9,7 @@ const organizationalUnitSchema = v.strictObject({
   id: nonEmptyString,
   parentId: nonEmptyString,
   arn: nonEmptyString,
-  name: nonEmptyString
+  name: nonEmptyString,
 });
 
 const accountSchema = v.strictObject({
@@ -18,32 +18,38 @@ const accountSchema = v.strictObject({
   name: nonEmptyString,
   email: nonEmptyString,
   status: nonEmptyString,
-  parentId: nonEmptyString
+  parentId: nonEmptyString,
 });
 
 const userSchema = v.strictObject({
   userId: nonEmptyString,
   userName: nonEmptyString,
   displayName: v.string(),
-  email: v.string()
+  email: v.string(),
 });
 
 const groupSchema = v.strictObject({
   groupId: nonEmptyString,
-  displayName: nonEmptyString
+  displayName: nonEmptyString,
+});
+
+const groupMembershipSchema = v.strictObject({
+  membershipId: nonEmptyString,
+  groupId: nonEmptyString,
+  userId: nonEmptyString,
 });
 
 const permissionSetSchema = v.strictObject({
   permissionSetArn: nonEmptyString,
   name: nonEmptyString,
-  description: v.string()
+  description: v.string(),
 });
 
 const accountAssignmentSchema = v.strictObject({
   accountId: nonEmptyString,
   permissionSetArn: nonEmptyString,
   principalId: nonEmptyString,
-  principalType: principalTypeSchema
+  principalType: principalTypeSchema,
 });
 
 const accessRoleSchema = v.strictObject({
@@ -51,7 +57,7 @@ const accessRoleSchema = v.strictObject({
   permissionSetArn: nonEmptyString,
   principalId: nonEmptyString,
   principalType: principalTypeSchema,
-  roleName: nonEmptyString
+  roleName: nonEmptyString,
 });
 
 const stateSchema = v.strictObject({
@@ -60,25 +66,31 @@ const stateSchema = v.strictObject({
   organization: v.strictObject({
     rootId: nonEmptyString,
     organizationalUnits: v.array(organizationalUnitSchema),
-    accounts: v.array(accountSchema)
+    accounts: v.array(accountSchema),
   }),
   identityCenter: v.strictObject({
     instanceArn: nonEmptyString,
     identityStoreId: nonEmptyString,
     users: v.array(userSchema),
     groups: v.array(groupSchema),
+    groupMemberships: v.array(groupMembershipSchema),
     permissionSets: v.array(permissionSetSchema),
     accountAssignments: v.array(accountAssignmentSchema),
-    accessRoles: v.array(accessRoleSchema)
-  })
+    accessRoles: v.array(accessRoleSchema),
+  }),
 });
 
-export type OrganizationalUnitState = v.InferOutput<typeof organizationalUnitSchema>;
+export type OrganizationalUnitState = v.InferOutput<
+  typeof organizationalUnitSchema
+>;
 export type AccountState = v.InferOutput<typeof accountSchema>;
 export type UserState = v.InferOutput<typeof userSchema>;
 export type GroupState = v.InferOutput<typeof groupSchema>;
+export type GroupMembershipState = v.InferOutput<typeof groupMembershipSchema>;
 export type PermissionSetState = v.InferOutput<typeof permissionSetSchema>;
-export type AccountAssignmentState = v.InferOutput<typeof accountAssignmentSchema>;
+export type AccountAssignmentState = v.InferOutput<
+  typeof accountAssignmentSchema
+>;
 export type AccessRoleState = v.InferOutput<typeof accessRoleSchema>;
 export type StateFile = v.InferOutput<typeof stateSchema>;
 
@@ -89,6 +101,8 @@ type WorkingIdentityCenterState = {
   usersByUserName: Record<string, UserState>;
   groups: GroupState[];
   groupsByDisplayName: Record<string, GroupState>;
+  groupMemberships: GroupMembershipState[];
+  groupMembershipsByKey: Record<string, GroupMembershipState>;
   permissionSets: PermissionSetState[];
   permissionSetsByName: Record<string, PermissionSetState>;
   accountAssignments: AccountAssignmentState[];
@@ -117,33 +131,54 @@ export function normalizeState(state: StateFile): StateFile {
     ...state,
     organization: {
       ...state.organization,
-      organizationalUnits: [...state.organization.organizationalUnits].sort((a, b) =>
-        compareByKeys(a.id, b.id, a.arn, b.arn, a.name, b.name)
+      organizationalUnits: [...state.organization.organizationalUnits].sort(
+        (a, b) => compareByKeys(a.id, b.id, a.arn, b.arn, a.name, b.name),
       ),
       accounts: [...state.organization.accounts].sort((a, b) =>
-        compareByKeys(a.id, b.id, a.arn, b.arn, a.name, b.name)
-      )
+        compareByKeys(a.id, b.id, a.arn, b.arn, a.name, b.name),
+      ),
     },
     identityCenter: {
       ...state.identityCenter,
       users: [...state.identityCenter.users].sort((a, b) =>
-        compareByKeys(a.userId, b.userId, a.userName, b.userName, a.displayName, b.displayName)
-      ),
-      groups: [...state.identityCenter.groups].sort((a, b) => compareByKeys(a.groupId, b.groupId, a.displayName, b.displayName)),
-      permissionSets: [...state.identityCenter.permissionSets].sort((a, b) =>
-        compareByKeys(a.permissionSetArn, b.permissionSetArn, a.name, b.name)
-      ),
-      accountAssignments: [...state.identityCenter.accountAssignments].sort((a, b) =>
         compareByKeys(
-          a.accountId,
-          b.accountId,
-          a.permissionSetArn,
-          b.permissionSetArn,
-          a.principalId,
-          b.principalId,
-          a.principalType,
-          b.principalType
-        )
+          a.userId,
+          b.userId,
+          a.userName,
+          b.userName,
+          a.displayName,
+          b.displayName,
+        ),
+      ),
+      groups: [...state.identityCenter.groups].sort((a, b) =>
+        compareByKeys(a.groupId, b.groupId, a.displayName, b.displayName),
+      ),
+      groupMemberships: [...state.identityCenter.groupMemberships].sort(
+        (a, b) =>
+          compareByKeys(
+            a.groupId,
+            b.groupId,
+            a.userId,
+            b.userId,
+            a.membershipId,
+            b.membershipId,
+          ),
+      ),
+      permissionSets: [...state.identityCenter.permissionSets].sort((a, b) =>
+        compareByKeys(a.permissionSetArn, b.permissionSetArn, a.name, b.name),
+      ),
+      accountAssignments: [...state.identityCenter.accountAssignments].sort(
+        (a, b) =>
+          compareByKeys(
+            a.accountId,
+            b.accountId,
+            a.permissionSetArn,
+            b.permissionSetArn,
+            a.principalId,
+            b.principalId,
+            a.principalType,
+            b.principalType,
+          ),
       ),
       accessRoles: [...state.identityCenter.accessRoles].sort((a, b) =>
         compareByKeys(
@@ -156,10 +191,10 @@ export function normalizeState(state: StateFile): StateFile {
           a.principalType,
           b.principalType,
           a.roleName,
-          b.roleName
-        )
-      )
-    }
+          b.roleName,
+        ),
+      ),
+    },
   };
 }
 
@@ -171,37 +206,51 @@ export function createWorkingState(props: { state: StateFile }): WorkingState {
       rootId: props.state.organization.rootId,
       organizationalUnitsById: toRecordByProperty(
         props.state.organization.organizationalUnits,
-        "id"
+        "id",
       ),
       accountsById: toRecordByProperty(props.state.organization.accounts, "id"),
-      accountsByName: toRecordByProperty(props.state.organization.accounts, "name")
+      accountsByName: toRecordByProperty(
+        props.state.organization.accounts,
+        "name",
+      ),
     },
     identityCenter: createWorkingIdentityCenterState({
       identityCenter: props.state.identityCenter,
-    })
+    }),
   };
 }
 
-export function materializeWorkingState(props: { workingState: WorkingState }): StateFile {
+export function materializeWorkingState(props: {
+  workingState: WorkingState;
+}): StateFile {
   return {
     version: props.workingState.version,
     generatedAt: props.workingState.generatedAt,
     organization: {
       rootId: props.workingState.organization.rootId,
-      organizationalUnits: Object.values(props.workingState.organization.organizationalUnitsById),
-      accounts: Object.values(props.workingState.organization.accountsById)
+      organizationalUnits: Object.values(
+        props.workingState.organization.organizationalUnitsById,
+      ),
+      accounts: Object.values(props.workingState.organization.accountsById),
     },
     identityCenter: {
       instanceArn: props.workingState.identityCenter.instanceArn,
       identityStoreId: props.workingState.identityCenter.identityStoreId,
       users: structuredClone(props.workingState.identityCenter.users),
       groups: structuredClone(props.workingState.identityCenter.groups),
-      permissionSets: structuredClone(props.workingState.identityCenter.permissionSets),
+      groupMemberships: structuredClone(
+        props.workingState.identityCenter.groupMemberships,
+      ),
+      permissionSets: structuredClone(
+        props.workingState.identityCenter.permissionSets,
+      ),
       accountAssignments: structuredClone(
         props.workingState.identityCenter.accountAssignments,
       ),
-      accessRoles: structuredClone(props.workingState.identityCenter.accessRoles),
-    }
+      accessRoles: structuredClone(
+        props.workingState.identityCenter.accessRoles,
+      ),
+    },
   };
 }
 
@@ -210,7 +259,8 @@ export function moveAccountInWorkingState(props: {
   accountId: string;
   parentId: string;
 }): WorkingState {
-  const currentAccount = props.workingState.organization.accountsById[props.accountId];
+  const currentAccount =
+    props.workingState.organization.accountsById[props.accountId];
   if (currentAccount == null || currentAccount.parentId === props.parentId) {
     return props.workingState;
   }
@@ -222,17 +272,17 @@ export function moveAccountInWorkingState(props: {
         ...props.workingState.organization.accountsById,
         [props.accountId]: {
           ...currentAccount,
-          parentId: props.parentId
-        }
+          parentId: props.parentId,
+        },
       },
       accountsByName: {
         ...props.workingState.organization.accountsByName,
         [currentAccount.name]: {
           ...currentAccount,
-          parentId: props.parentId
-        }
-      }
-    }
+          parentId: props.parentId,
+        },
+      },
+    },
   };
 }
 
@@ -240,7 +290,8 @@ export function upsertAccountInWorkingState(props: {
   workingState: WorkingState;
   account: AccountState;
 }): WorkingState {
-  const currentAccount = props.workingState.organization.accountsById[props.account.id];
+  const currentAccount =
+    props.workingState.organization.accountsById[props.account.id];
   if (
     currentAccount != null &&
     currentAccount.id === props.account.id &&
@@ -258,13 +309,13 @@ export function upsertAccountInWorkingState(props: {
       ...props.workingState.organization,
       accountsById: {
         ...props.workingState.organization.accountsById,
-        [props.account.id]: props.account
+        [props.account.id]: props.account,
       },
       accountsByName: {
         ...props.workingState.organization.accountsByName,
-        [props.account.name]: props.account
-      }
-    }
+        [props.account.name]: props.account,
+      },
+    },
   };
 }
 
@@ -273,7 +324,9 @@ export function upsertOrganizationalUnitInWorkingState(props: {
   organizationalUnit: OrganizationalUnitState;
 }): WorkingState {
   const currentOrganizationalUnit =
-    props.workingState.organization.organizationalUnitsById[props.organizationalUnit.id];
+    props.workingState.organization.organizationalUnitsById[
+      props.organizationalUnit.id
+    ];
   if (
     currentOrganizationalUnit != null &&
     currentOrganizationalUnit.id === props.organizationalUnit.id &&
@@ -289,9 +342,9 @@ export function upsertOrganizationalUnitInWorkingState(props: {
       ...props.workingState.organization,
       organizationalUnitsById: {
         ...props.workingState.organization.organizationalUnitsById,
-        [props.organizationalUnit.id]: props.organizationalUnit
-      }
-    }
+        [props.organizationalUnit.id]: props.organizationalUnit,
+      },
+    },
   };
 }
 
@@ -301,8 +354,13 @@ export function renameOrganizationalUnitInWorkingState(props: {
   name: string;
 }): WorkingState {
   const currentOrganizationalUnit =
-    props.workingState.organization.organizationalUnitsById[props.organizationalUnitId];
-  if (currentOrganizationalUnit == null || currentOrganizationalUnit.name === props.name) {
+    props.workingState.organization.organizationalUnitsById[
+      props.organizationalUnitId
+    ];
+  if (
+    currentOrganizationalUnit == null ||
+    currentOrganizationalUnit.name === props.name
+  ) {
     return props.workingState;
   }
   return {
@@ -313,10 +371,10 @@ export function renameOrganizationalUnitInWorkingState(props: {
         ...props.workingState.organization.organizationalUnitsById,
         [props.organizationalUnitId]: {
           ...currentOrganizationalUnit,
-          name: props.name
-        }
-      }
-    }
+          name: props.name,
+        },
+      },
+    },
   };
 }
 
@@ -358,6 +416,13 @@ export function createAccountAssignmentKey(props: {
   ].join("|");
 }
 
+export function createGroupMembershipKey(props: {
+  groupId: string;
+  userId: string;
+}): string {
+  return [props.groupId, props.userId].join("|");
+}
+
 export function upsertIdcUserInWorkingState(props: {
   workingState: WorkingState;
   user: UserState;
@@ -394,7 +459,9 @@ export function upsertIdcGroupInWorkingState(props: {
   group: GroupState;
 }): WorkingState {
   const currentGroup =
-    props.workingState.identityCenter.groupsByDisplayName[props.group.displayName];
+    props.workingState.identityCenter.groupsByDisplayName[
+      props.group.displayName
+    ];
   if (
     currentGroup != null &&
     currentGroup.groupId === props.group.groupId &&
@@ -428,7 +495,8 @@ export function upsertIdcPermissionSetInWorkingState(props: {
     ];
   if (
     currentPermissionSet != null &&
-    currentPermissionSet.permissionSetArn === props.permissionSet.permissionSetArn &&
+    currentPermissionSet.permissionSetArn ===
+      props.permissionSet.permissionSetArn &&
     currentPermissionSet.name === props.permissionSet.name &&
     currentPermissionSet.description === props.permissionSet.description
   ) {
@@ -461,7 +529,10 @@ export function addAccountAssignmentToWorkingState(props: {
     principalId: props.accountAssignment.principalId,
     principalType: props.accountAssignment.principalType,
   });
-  if (props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] != null) {
+  if (
+    props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] !=
+    null
+  ) {
     return props.workingState;
   }
   return {
@@ -480,6 +551,70 @@ export function addAccountAssignmentToWorkingState(props: {
   };
 }
 
+export function addGroupMembershipToWorkingState(props: {
+  workingState: WorkingState;
+  groupMembership: GroupMembershipState;
+}): WorkingState {
+  const membershipKey = createGroupMembershipKey({
+    groupId: props.groupMembership.groupId,
+    userId: props.groupMembership.userId,
+  });
+  if (
+    props.workingState.identityCenter.groupMembershipsByKey[membershipKey] !=
+    null
+  ) {
+    return props.workingState;
+  }
+  return {
+    ...props.workingState,
+    identityCenter: createWorkingIdentityCenterState({
+      identityCenter: {
+        ...materializeWorkingIdentityCenterState({
+          identityCenter: props.workingState.identityCenter,
+        }),
+        groupMemberships: [
+          ...props.workingState.identityCenter.groupMemberships,
+          props.groupMembership,
+        ],
+      },
+    }),
+  };
+}
+
+export function removeGroupMembershipFromWorkingState(props: {
+  workingState: WorkingState;
+  groupMembership: Pick<GroupMembershipState, "groupId" | "userId">;
+}): WorkingState {
+  const membershipKey = createGroupMembershipKey({
+    groupId: props.groupMembership.groupId,
+    userId: props.groupMembership.userId,
+  });
+  if (
+    props.workingState.identityCenter.groupMembershipsByKey[membershipKey] ==
+    null
+  ) {
+    return props.workingState;
+  }
+  return {
+    ...props.workingState,
+    identityCenter: createWorkingIdentityCenterState({
+      identityCenter: {
+        ...materializeWorkingIdentityCenterState({
+          identityCenter: props.workingState.identityCenter,
+        }),
+        groupMemberships:
+          props.workingState.identityCenter.groupMemberships.filter(
+            (groupMembership) =>
+              createGroupMembershipKey({
+                groupId: groupMembership.groupId,
+                userId: groupMembership.userId,
+              }) !== membershipKey,
+          ),
+      },
+    }),
+  };
+}
+
 export function removeAccountAssignmentFromWorkingState(props: {
   workingState: WorkingState;
   accountAssignment: AccountAssignmentState;
@@ -490,7 +625,10 @@ export function removeAccountAssignmentFromWorkingState(props: {
     principalId: props.accountAssignment.principalId,
     principalType: props.accountAssignment.principalType,
   });
-  if (props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] == null) {
+  if (
+    props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] ==
+    null
+  ) {
     return props.workingState;
   }
   return {
@@ -500,15 +638,16 @@ export function removeAccountAssignmentFromWorkingState(props: {
         ...materializeWorkingIdentityCenterState({
           identityCenter: props.workingState.identityCenter,
         }),
-        accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
-          (accountAssignment) =>
-            createAccountAssignmentKey({
-              accountId: accountAssignment.accountId,
-              permissionSetArn: accountAssignment.permissionSetArn,
-              principalId: accountAssignment.principalId,
-              principalType: accountAssignment.principalType,
-            }) !== assignmentKey,
-        ),
+        accountAssignments:
+          props.workingState.identityCenter.accountAssignments.filter(
+            (accountAssignment) =>
+              createAccountAssignmentKey({
+                accountId: accountAssignment.accountId,
+                permissionSetArn: accountAssignment.permissionSetArn,
+                principalId: accountAssignment.principalId,
+                principalType: accountAssignment.principalType,
+              }) !== assignmentKey,
+          ),
       },
     }),
   };
@@ -521,17 +660,18 @@ export function buildEmptyState(): StateFile {
     organization: {
       rootId: "",
       organizationalUnits: [],
-      accounts: []
+      accounts: [],
     },
     identityCenter: {
       instanceArn: "",
       identityStoreId: "",
       users: [],
       groups: [],
+      groupMemberships: [],
       permissionSets: [],
       accountAssignments: [],
-      accessRoles: []
-    }
+      accessRoles: [],
+    },
   };
 }
 
@@ -541,14 +681,19 @@ export async function readStateFile(path: string): Promise<StateFile> {
   return validateState(parsed);
 }
 
-export async function writeStateFile(path: string, state: StateFile): Promise<void> {
+export async function writeStateFile(
+  path: string,
+  state: StateFile,
+): Promise<void> {
   const validated = validateState(state);
   const normalized = normalizeState(validated);
   const content = `${JSON.stringify(normalized, null, 2)}\n`;
   await writeFile(path, content, "utf8");
 }
 
-export function createAccessRoleName(assignment: AccountAssignmentState): string {
+export function createAccessRoleName(
+  assignment: AccountAssignmentState,
+): string {
   return `AWSReservedSSO_${assignment.permissionSetArn.split("/").at(-1) ?? "PermissionSet"}_${assignment.accountId}`;
 }
 
@@ -557,8 +702,13 @@ function createWorkingIdentityCenterState(props: {
 }): WorkingIdentityCenterState {
   const users = structuredClone(props.identityCenter.users);
   const groups = structuredClone(props.identityCenter.groups);
+  const groupMemberships = structuredClone(
+    props.identityCenter.groupMemberships,
+  );
   const permissionSets = structuredClone(props.identityCenter.permissionSets);
-  const accountAssignments = structuredClone(props.identityCenter.accountAssignments);
+  const accountAssignments = structuredClone(
+    props.identityCenter.accountAssignments,
+  );
   return {
     instanceArn: props.identityCenter.instanceArn,
     identityStoreId: props.identityCenter.identityStoreId,
@@ -566,19 +716,17 @@ function createWorkingIdentityCenterState(props: {
     usersByUserName: toRecordByProperty(users, "userName"),
     groups,
     groupsByDisplayName: toRecordByProperty(groups, "displayName"),
+    groupMemberships,
+    groupMembershipsByKey: toRecordByProperty(
+      groupMemberships,
+      createGroupMembershipKey,
+    ),
     permissionSets,
     permissionSetsByName: toRecordByProperty(permissionSets, "name"),
     accountAssignments,
-    accountAssignmentsByKey: Object.fromEntries(
-      accountAssignments.map((accountAssignment) => [
-        createAccountAssignmentKey({
-          accountId: accountAssignment.accountId,
-          permissionSetArn: accountAssignment.permissionSetArn,
-          principalId: accountAssignment.principalId,
-          principalType: accountAssignment.principalType,
-        }),
-        accountAssignment,
-      ]),
+    accountAssignmentsByKey: toRecordByProperty(
+      accountAssignments,
+      createAccountAssignmentKey,
     ),
     accessRoles: createAccessRoles({
       accountAssignments,
@@ -594,8 +742,11 @@ function materializeWorkingIdentityCenterState(props: {
     identityStoreId: props.identityCenter.identityStoreId,
     users: structuredClone(props.identityCenter.users),
     groups: structuredClone(props.identityCenter.groups),
+    groupMemberships: structuredClone(props.identityCenter.groupMemberships),
     permissionSets: structuredClone(props.identityCenter.permissionSets),
-    accountAssignments: structuredClone(props.identityCenter.accountAssignments),
+    accountAssignments: structuredClone(
+      props.identityCenter.accountAssignments,
+    ),
     accessRoles: structuredClone(props.identityCenter.accessRoles),
   };
 }

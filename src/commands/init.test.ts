@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ListGroupsCommand, ListUsersCommand } from "@aws-sdk/client-identitystore";
+import {
+  ListGroupMembershipsCommand,
+  ListGroupsCommand,
+  ListUsersCommand,
+} from "@aws-sdk/client-identitystore";
 import {
   CreateOrganizationalUnitCommand,
   DescribeOrganizationCommand,
@@ -235,6 +239,19 @@ function createIdentityStoreClientMock(): IdentitystoreClient {
             {
               GroupId: "g-123",
               DisplayName: "Admins",
+            },
+          ],
+        };
+      }
+      if (command instanceof ListGroupMembershipsCommand) {
+        return {
+          GroupMemberships: [
+            {
+              MembershipId: "gm-123",
+              GroupId: command.input.GroupId,
+              MemberId: {
+                UserId: "u-123",
+              },
             },
           ],
         };

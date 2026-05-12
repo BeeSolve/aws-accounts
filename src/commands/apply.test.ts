@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  CreateGroupMembershipCommand,
   CreateGroupCommand,
   CreateUserCommand,
   type IdentitystoreClient,
@@ -762,7 +763,6 @@ test("runApplyCommand refuses Pending OU deletion and explains it must be manual
     await updateConfigModel({
       configPath: paths.configPath,
       update: (config) => {
-        // todo: why here we are using `find` and not the `organizationalUnitsByName`?
         const pending = config.organizationalUnits.find(
           (organizationalUnit) => organizationalUnit.name === "Pending",
         );
@@ -1422,6 +1422,7 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
         });
         config.groups.push({
           displayName: "Operators",
+          members: [],
         });
         config.permissionSets.push({
           name: "ReadOnly",
@@ -1429,9 +1430,28 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
         });
       },
     });
+    await regenerateAwsConfigTypes({
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const operators = config.groups.find(
+          (group) => group.displayName === "Operators",
+        );
+        if (operators == null) {
+          throw new Error('Expected "Operators" group.');
+        }
+        operators.members = ["bob"];
+      },
+    });
 
     let sawCreateUser = false;
     let sawCreateGroup = false;
+    let sawCreateGroupMembership = false;
     let sawCreatePermissionSet = false;
     const result = await runApplyCommand({
       organizationsClient: createOrganizationsClientMock({}),
@@ -1463,12 +1483,21 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
           assert.equal(input.IdentityStoreId, "d-123");
           assert.equal(input.DisplayName, "Operators");
         },
+        onCreateGroupMembership: async (input) => {
+          sawCreateGroupMembership = true;
+          assert.equal(input.IdentityStoreId, "d-123");
+          assert.equal(input.GroupId, "g-ops");
+          assert.equal(input.MemberId?.UserId, "u-bob");
+        },
         createUserResponse: {
           UserId: "u-bob",
           IdentityStoreId: "d-123",
         },
         createGroupResponse: {
           GroupId: "g-ops",
+        },
+        createGroupMembershipResponse: {
+          MembershipId: "gm-bob",
         },
       }),
       logger: noopLogger,
@@ -1482,15 +1511,21 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
     });
 
     assert.equal(result.status, "applied");
-    assert.equal(result.appliedOperations, 3);
+    assert.equal(result.appliedOperations, 4);
     assert.equal(sawCreateUser, true);
     assert.equal(sawCreateGroup, true);
+    assert.equal(sawCreateGroupMembership, true);
     assert.equal(sawCreatePermissionSet, true);
 
     const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
       identityCenter: {
         users: Array<{ userId: string; userName: string }>;
         groups: Array<{ groupId: string; displayName: string }>;
+        groupMemberships: Array<{
+          membershipId: string;
+          groupId: string;
+          userId: string;
+        }>;
         permissionSets: Array<{ permissionSetArn: string; name: string }>;
       };
     };
@@ -1504,6 +1539,15 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
       persisted.identityCenter.groups.some(
         (group) =>
           group.groupId === "g-ops" && group.displayName === "Operators",
+      ),
+      true,
+    );
+    assert.equal(
+      persisted.identityCenter.groupMemberships.some(
+        (groupMembership) =>
+          groupMembership.membershipId === "gm-bob" &&
+          groupMembership.groupId === "g-ops" &&
+          groupMembership.userId === "u-bob",
       ),
       true,
     );
@@ -2103,8 +2147,14 @@ function createIdentityStoreClientMock(props: {
     IdentityStoreId?: string;
     DisplayName?: string;
   }) => Promise<void>;
+  onCreateGroupMembership?: (input: {
+    IdentityStoreId?: string;
+    GroupId?: string;
+    MemberId?: { UserId?: string };
+  }) => Promise<void>;
   createUserResponse?: { UserId?: string; IdentityStoreId?: string };
   createGroupResponse?: { GroupId?: string };
+  createGroupMembershipResponse?: { MembershipId?: string };
 }): IdentitystoreClient {
   const mock = {
     async send(command: unknown): Promise<unknown> {
@@ -2139,6 +2189,21 @@ function createIdentityStoreClientMock(props: {
           props.createGroupResponse ?? {
             GroupId: "g-created",
           }
+        );
+      }
+      if (command instanceof CreateGroupMembershipCommand) {
+        if (props.onCreateGroupMembership != null) {
+          await props.onCreateGroupMembership({
+            IdentityStoreId: command.input.IdentityStoreId,
+            GroupId: command.input.GroupId,
+            MemberId:
+              command.input.MemberId?.UserId != null
+                ? { UserId: command.input.MemberId.UserId }
+                : undefined,
+          });
+        }
+        return (
+          props.createGroupMembershipResponse ?? { MembershipId: "gm-created" }
         );
       }
       throw new Error("Unexpected Identity Store command in test.");
@@ -2299,7 +2364,7 @@ async function updateConfigModel(props: {
       accounts: Array<{ name: string; email: string }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string }>;
+    groups: Array<{ displayName: string; members: string[] }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
       permissionSet: string;
@@ -2325,7 +2390,7 @@ async function updateConfigModel(props: {
       accounts: Array<{ name: string; email: string }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string }>;
+    groups: Array<{ displayName: string; members: string[] }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
       permissionSet: string;
@@ -2407,6 +2472,7 @@ async function writeFixtureFiles(props: {
           displayName: "Admins",
         },
       ],
+      groupMemberships: [],
       permissionSets: [
         {
           permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",

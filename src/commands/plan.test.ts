@@ -270,7 +270,6 @@ test("runPlanCommand refuses Pending OU deletion and explains it must be manual"
     await updateConfigModel({
       configPath,
       update: (config) => {
-        // todo: why here we are using `find` and not the `organizationalUnitsByName`?
         const pending = config.organizationalUnits.find(
           (organizationalUnit) => organizationalUnit.name === "Pending",
         );
@@ -438,6 +437,7 @@ test("runPlanCommand prints human-readable IdC operations", async () => {
         });
         config.groups.push({
           displayName: "Operators",
+          members: [],
         });
         config.permissionSets.push({
           name: "ReadOnly",
@@ -454,6 +454,13 @@ test("runPlanCommand prints human-readable IdC operations", async () => {
     await updateConfigModel({
       configPath,
       update: (config) => {
+        const operators = config.groups.find(
+          (group) => group.displayName === "Operators",
+        );
+        if (operators == null) {
+          throw new Error('Expected "Operators" group.');
+        }
+        operators.members = ["bob"];
         config.assignments.push({
           permissionSet: "ReadOnly",
           user: "bob",
@@ -471,13 +478,18 @@ test("runPlanCommand prints human-readable IdC operations", async () => {
       contextPath,
       output: "human",
     });
-    assert.equal(result.plan.operations.length, 4);
+    assert.equal(result.plan.operations.length, 5);
     assert.equal(result.plan.unsupported.length, 0);
     assert.ok(
       logger.logs.some((line) => line.includes('create IdC user "bob"')),
     );
     assert.ok(
       logger.logs.some((line) => line.includes('create IdC group "Operators"')),
+    );
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes('add user "bob" to IdC group "Operators"'),
+      ),
     );
     assert.ok(
       logger.logs.some((line) =>
@@ -569,7 +581,7 @@ async function updateConfigModel(props: {
       accounts: Array<{ name: string; email: string }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string }>;
+    groups: Array<{ displayName: string; members: string[] }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
       permissionSet: string;
@@ -595,7 +607,7 @@ async function updateConfigModel(props: {
       accounts: Array<{ name: string; email: string }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string }>;
+    groups: Array<{ displayName: string; members: string[] }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
       permissionSet: string;
@@ -669,6 +681,7 @@ async function writeFixtureFiles(props: {
           displayName: "Admins",
         },
       ],
+      groupMemberships: [],
       permissionSets: [
         {
           permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",

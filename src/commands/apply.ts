@@ -8,8 +8,11 @@ import {
   UpdateOrganizationalUnitCommand,
 } from "@aws-sdk/client-organizations";
 import {
+  CreateGroupMembershipCommand,
   CreateGroupCommand,
   CreateUserCommand,
+  DeleteGroupMembershipCommand,
+  GetGroupMembershipIdCommand,
   IdentitystoreClient,
 } from "@aws-sdk/client-identitystore";
 import {
@@ -31,11 +34,14 @@ import { assertUnreachable } from "../helpers.js";
 import type { Operation, Plan } from "../operations.js";
 import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 import {
+  addGroupMembershipToWorkingState,
   addAccountAssignmentToWorkingState,
+  createGroupMembershipKey,
   createWorkingState,
   materializeWorkingState,
   moveAccountInWorkingState,
   removeAccountAssignmentFromWorkingState,
+  removeGroupMembershipFromWorkingState,
   removeOrganizationalUnitFromWorkingState,
   readStateFile,
   renameOrganizationalUnitInWorkingState,
@@ -417,6 +423,41 @@ async function applyOperation(props: {
       },
     });
   }
+  if (operation.kind === "addIdcGroupMembership") {
+    const resolvedMembership = resolveGroupMembershipDependencies({
+      state: props.state,
+      groupDisplayName: operation.groupDisplayName,
+      userName: operation.userName,
+    });
+    props.logger.log(
+      `Adding user "${operation.userName}" to IdC group "${operation.groupDisplayName}"...`,
+    );
+    const response = await props.identityStoreClient.send(
+      new CreateGroupMembershipCommand({
+        IdentityStoreId: props.state.identityCenter.identityStoreId,
+        GroupId: resolvedMembership.groupId,
+        MemberId: {
+          UserId: resolvedMembership.userId,
+        },
+      }),
+    );
+    if (response.MembershipId == null) {
+      throw new Error(
+        `CreateGroupMembership for group "${operation.groupDisplayName}" and user "${operation.userName}" returned no membership id.`,
+      );
+    }
+    props.logger.log(
+      `Done: user "${operation.userName}" -> group "${operation.groupDisplayName}"`,
+    );
+    return addGroupMembershipToWorkingState({
+      workingState: props.state,
+      groupMembership: {
+        membershipId: response.MembershipId,
+        groupId: resolvedMembership.groupId,
+        userId: resolvedMembership.userId,
+      },
+    });
+  }
   if (operation.kind === "createIdcPermissionSet") {
     props.logger.log(
       `Creating IdC permission set "${operation.permissionSetName}"...`,
@@ -441,6 +482,38 @@ async function applyOperation(props: {
         permissionSetArn,
         name: operation.permissionSetName,
         description: operation.description,
+      },
+    });
+  }
+  if (operation.kind === "removeIdcGroupMembership") {
+    const resolvedMembership = resolveGroupMembershipDependencies({
+      state: props.state,
+      groupDisplayName: operation.groupDisplayName,
+      userName: operation.userName,
+    });
+    const membershipId = await resolveGroupMembershipId({
+      state: props.state,
+      identityStoreClient: props.identityStoreClient,
+      groupId: resolvedMembership.groupId,
+      userId: resolvedMembership.userId,
+    });
+    props.logger.log(
+      `Removing user "${operation.userName}" from IdC group "${operation.groupDisplayName}"...`,
+    );
+    await props.identityStoreClient.send(
+      new DeleteGroupMembershipCommand({
+        IdentityStoreId: props.state.identityCenter.identityStoreId,
+        MembershipId: membershipId,
+      }),
+    );
+    props.logger.log(
+      `Done: user "${operation.userName}" x group "${operation.groupDisplayName}"`,
+    );
+    return removeGroupMembershipFromWorkingState({
+      workingState: props.state,
+      groupMembership: {
+        groupId: resolvedMembership.groupId,
+        userId: resolvedMembership.userId,
       },
     });
   }
@@ -619,8 +692,14 @@ function formatApplyOperationLine(operation: Operation): string {
   if (operation.kind === "createIdcGroup") {
     return `  create IdC group "${operation.groupDisplayName}"`;
   }
+  if (operation.kind === "addIdcGroupMembership") {
+    return `  add user "${operation.userName}" to IdC group "${operation.groupDisplayName}"`;
+  }
   if (operation.kind === "createIdcPermissionSet") {
     return `  create IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "removeIdcGroupMembership") {
+    return `  remove user "${operation.userName}" from IdC group "${operation.groupDisplayName}"`;
   }
   if (operation.kind === "grantIdcAccountAssignment") {
     return `  grant IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel(
@@ -884,6 +963,65 @@ function formatPrincipalLabel(props: {
     return `group "${props.principalName}"`;
   }
   return `user "${props.principalName}"`;
+}
+
+function resolveGroupMembershipDependencies(props: {
+  state: WorkingState;
+  groupDisplayName: string;
+  userName: string;
+}): {
+  groupId: string;
+  userId: string;
+} {
+  const group = props.state.identityCenter.groupsByDisplayName[props.groupDisplayName];
+  if (group == null) {
+    throw new Error(
+      `Could not resolve group "${props.groupDisplayName}" in working state.`,
+    );
+  }
+  const user = props.state.identityCenter.usersByUserName[props.userName];
+  if (user == null) {
+    throw new Error(
+      `Could not resolve user "${props.userName}" in working state.`,
+    );
+  }
+  return {
+    groupId: group.groupId,
+    userId: user.userId,
+  };
+}
+
+async function resolveGroupMembershipId(props: {
+  state: WorkingState;
+  identityStoreClient: IdentitystoreClient;
+  groupId: string;
+  userId: string;
+}): Promise<string> {
+  const existingMembership =
+    props.state.identityCenter.groupMembershipsByKey[
+      createGroupMembershipKey({
+        groupId: props.groupId,
+        userId: props.userId,
+      })
+    ];
+  if (existingMembership?.membershipId != null) {
+    return existingMembership.membershipId;
+  }
+  const response = await props.identityStoreClient.send(
+    new GetGroupMembershipIdCommand({
+      IdentityStoreId: props.state.identityCenter.identityStoreId,
+      GroupId: props.groupId,
+      MemberId: {
+        UserId: props.userId,
+      },
+    }),
+  );
+  if (response.MembershipId == null) {
+    throw new Error(
+      `GetGroupMembershipId returned no membership id for group "${props.groupId}" and user "${props.userId}".`,
+    );
+  }
+  return response.MembershipId;
 }
 
 async function delay(ms: number): Promise<void> {

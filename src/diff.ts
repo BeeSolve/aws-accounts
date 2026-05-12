@@ -15,10 +15,12 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   moveAccount: 4,
   createIdcUser: 5,
   createIdcGroup: 6,
-  createIdcPermissionSet: 7,
-  grantIdcAccountAssignment: 8,
-  revokeIdcAccountAssignment: 9,
-  deleteOu: 10,
+  addIdcGroupMembership: 7,
+  createIdcPermissionSet: 8,
+  grantIdcAccountAssignment: 9,
+  removeIdcGroupMembership: 10,
+  revokeIdcAccountAssignment: 11,
+  deleteOu: 12,
 };
 
 type DiffStatesProps = {
@@ -55,12 +57,18 @@ type NormalizedIdcAssignment = {
   principalName: string;
 };
 
+type NormalizedIdcMembership = {
+  groupDisplayName: string;
+  userName: string;
+};
+
 type NormalizedIdcView = {
   usersByUserName: Map<string, StateFile["identityCenter"]["users"][number]>;
   groupsByDisplayName: Map<
     string,
     StateFile["identityCenter"]["groups"][number]
   >;
+  membershipsByKey: Map<string, NormalizedIdcMembership>;
   permissionSetsByName: Map<
     string,
     StateFile["identityCenter"]["permissionSets"][number]
@@ -404,6 +412,58 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
+  const removedUserNames = new Set(
+    props.current.identityCenter.users
+      .filter(
+        (user) => nextIdcView.usersByUserName.has(user.userName) === false,
+      )
+      .map((user) => user.userName),
+  );
+  const removedGroupDisplayNames = new Set(
+    props.current.identityCenter.groups
+      .filter(
+        (group) =>
+          nextIdcView.groupsByDisplayName.has(group.displayName) === false,
+      )
+      .map((group) => group.displayName),
+  );
+
+  for (const nextMembership of nextIdcView.membershipsByKey.values()) {
+    const membershipKey = createNormalizedIdcMembershipKey({
+      membership: nextMembership,
+    });
+    if (currentIdcView.membershipsByKey.has(membershipKey)) {
+      continue;
+    }
+    operations.push({
+      kind: "addIdcGroupMembership",
+      groupDisplayName: nextMembership.groupDisplayName,
+      userName: nextMembership.userName,
+    });
+  }
+  for (const currentMembership of currentIdcView.membershipsByKey.values()) {
+    const membershipKey = createNormalizedIdcMembershipKey({
+      membership: currentMembership,
+    });
+    if (nextIdcView.membershipsByKey.has(membershipKey)) {
+      continue;
+    }
+    if (
+      shouldSuppressDerivativeGroupMembershipRemoval({
+        membership: currentMembership,
+        removedUserNames,
+        removedGroupDisplayNames,
+      })
+    ) {
+      continue;
+    }
+    operations.push({
+      kind: "removeIdcGroupMembership",
+      groupDisplayName: currentMembership.groupDisplayName,
+      userName: currentMembership.userName,
+    });
+  }
+
   for (const nextPermissionSet of props.next.identityCenter.permissionSets) {
     if (currentIdcView.permissionSetsByName.has(nextPermissionSet.name)) {
       continue;
@@ -426,21 +486,6 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
-  const removedUserNames = new Set(
-    props.current.identityCenter.users
-      .filter(
-        (user) => nextIdcView.usersByUserName.has(user.userName) === false,
-      )
-      .map((user) => user.userName),
-  );
-  const removedGroupDisplayNames = new Set(
-    props.current.identityCenter.groups
-      .filter(
-        (group) =>
-          nextIdcView.groupsByDisplayName.has(group.displayName) === false,
-      )
-      .map((group) => group.displayName),
-  );
   const removedPermissionSetNames = new Set(
     props.current.identityCenter.permissionSets
       .filter(
@@ -723,6 +768,12 @@ function getOperationSortKey(operation: Operation): string {
   if (operation.kind === "createIdcGroup") {
     return `${operation.kind}|${operation.groupDisplayName}`;
   }
+  if (
+    operation.kind === "addIdcGroupMembership" ||
+    operation.kind === "removeIdcGroupMembership"
+  ) {
+    return `${operation.kind}|${operation.groupDisplayName}|${operation.userName}`;
+  }
   if (operation.kind === "createIdcPermissionSet") {
     return `${operation.kind}|${operation.permissionSetName}`;
   }
@@ -753,6 +804,43 @@ function normalizeIdentityCenterState(props: {
       group,
     ]),
   );
+  const groupDisplayNameById = new Map(
+    props.state.identityCenter.groups.map((group) => [
+      group.groupId,
+      group.displayName,
+    ]),
+  );
+  const userNameById = new Map(
+    props.state.identityCenter.users.map((user) => [
+      user.userId,
+      user.userName,
+    ]),
+  );
+  const membershipsByKey = new Map<string, NormalizedIdcMembership>();
+  for (const groupMembership of props.state.identityCenter.groupMemberships) {
+    const groupDisplayName = groupDisplayNameById.get(groupMembership.groupId);
+    if (groupDisplayName == null) {
+      throw new Error(
+        `Could not resolve group display name for IdC membership groupId "${groupMembership.groupId}".`,
+      );
+    }
+    const userName = userNameById.get(groupMembership.userId);
+    if (userName == null) {
+      throw new Error(
+        `Could not resolve user name for IdC membership userId "${groupMembership.userId}".`,
+      );
+    }
+    const normalizedMembership = {
+      groupDisplayName,
+      userName,
+    };
+    membershipsByKey.set(
+      createNormalizedIdcMembershipKey({
+        membership: normalizedMembership,
+      }),
+      normalizedMembership,
+    );
+  }
   const permissionSetsByName = new Map(
     props.state.identityCenter.permissionSets.map((permissionSet) => [
       permissionSet.name,
@@ -769,18 +857,6 @@ function normalizeIdentityCenterState(props: {
     props.state.identityCenter.permissionSets.map((permissionSet) => [
       permissionSet.permissionSetArn,
       permissionSet.name,
-    ]),
-  );
-  const groupDisplayNameById = new Map(
-    props.state.identityCenter.groups.map((group) => [
-      group.groupId,
-      group.displayName,
-    ]),
-  );
-  const userNameById = new Map(
-    props.state.identityCenter.users.map((user) => [
-      user.userId,
-      user.userName,
     ]),
   );
   const assignmentsByKey = new Map<string, NormalizedIdcAssignment>();
@@ -822,9 +898,16 @@ function normalizeIdentityCenterState(props: {
   return {
     usersByUserName,
     groupsByDisplayName,
+    membershipsByKey,
     permissionSetsByName,
     assignmentsByKey,
   };
+}
+
+function createNormalizedIdcMembershipKey(props: {
+  membership: NormalizedIdcMembership;
+}): string {
+  return [props.membership.groupDisplayName, props.membership.userName].join("|");
 }
 
 function resolveAssignmentPrincipalName(props: {
@@ -860,6 +943,17 @@ function createNormalizedIdcAssignmentKey(props: {
     props.assignment.principalType,
     props.assignment.principalName,
   ].join("|");
+}
+
+function shouldSuppressDerivativeGroupMembershipRemoval(props: {
+  membership: NormalizedIdcMembership;
+  removedUserNames: Set<string>;
+  removedGroupDisplayNames: Set<string>;
+}): boolean {
+  return (
+    props.removedUserNames.has(props.membership.userName) ||
+    props.removedGroupDisplayNames.has(props.membership.groupDisplayName)
+  );
 }
 
 function shouldSuppressDerivativeAssignmentRevoke(props: {

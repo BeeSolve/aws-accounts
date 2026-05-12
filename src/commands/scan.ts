@@ -1,4 +1,5 @@
 import {
+  ListGroupMembershipsCommand,
   IdentitystoreClient,
   ListGroupsCommand,
   ListUsersCommand,
@@ -190,6 +191,11 @@ async function scanIdentityCenter(props: {
       instanceArn: instance.instanceArn,
     }),
   ]);
+  const groupMemberships = await listGroupMemberships({
+    identityStoreClient: props.identityStoreClient,
+    identityStoreId: instance.identityStoreId,
+    groups,
+  });
   const accountAssignments = await listAccountAssignments({
     ssoAdminClient: props.ssoAdminClient,
     instanceArn: instance.instanceArn,
@@ -205,6 +211,7 @@ async function scanIdentityCenter(props: {
     identityStoreId: instance.identityStoreId,
     users,
     groups,
+    groupMemberships,
     permissionSets,
     accountAssignments,
     accessRoles,
@@ -306,6 +313,43 @@ async function listIdentityStoreGroups(props: {
     nextToken = response.NextToken;
   } while (nextToken != null);
   return groups;
+}
+
+async function listGroupMemberships(props: {
+  identityStoreClient: IdentitystoreClient;
+  identityStoreId: string;
+  groups: StateFile["identityCenter"]["groups"];
+}): Promise<StateFile["identityCenter"]["groupMemberships"]> {
+  const groupMemberships: StateFile["identityCenter"]["groupMemberships"] = [];
+  for (const group of props.groups) {
+    let nextToken: string | undefined;
+    do {
+      const response = await props.identityStoreClient.send(
+        new ListGroupMembershipsCommand({
+          IdentityStoreId: props.identityStoreId,
+          GroupId: group.groupId,
+          NextToken: nextToken,
+        }),
+      );
+      for (const groupMembership of response.GroupMemberships ?? []) {
+        const userId = groupMembership.MemberId?.UserId;
+        if (
+          groupMembership.MembershipId == null ||
+          groupMembership.GroupId == null ||
+          userId == null
+        ) {
+          continue;
+        }
+        groupMemberships.push({
+          membershipId: groupMembership.MembershipId,
+          groupId: groupMembership.GroupId,
+          userId,
+        });
+      }
+      nextToken = response.NextToken;
+    } while (nextToken != null);
+  }
+  return groupMemberships;
 }
 
 function resolveIdentityStoreUserEmail(props: {

@@ -569,7 +569,7 @@ async function updateConfigModel(props: {
       accounts: Array<{ name: string; email: string }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string }>;
+    groups: Array<{ displayName: string; members: string[] }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
       permissionSet: string;
@@ -593,7 +593,7 @@ async function updateConfigModel(props: {
       accounts: Array<{ name: string; email: string }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string }>;
+    groups: Array<{ displayName: string; members: string[] }>;
     permissionSets: Array<{ name: string; description: string }>;
     assignments: Array<{
       permissionSet: string;
@@ -661,6 +661,7 @@ async function writeFixtureFiles(props: {
           displayName: "Admins",
         },
       ],
+      groupMemberships: [],
       permissionSets: [
         {
           permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
