@@ -3,11 +3,14 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import {
-  loadAwsConfigModelFromTsFile,
   regenerateAwsConfigTypes,
   writeAwsConfigFromState,
 } from "../awsConfig.js";
-import { createTestWorkspace } from "../helpers.test.js";
+import {
+  createTestWorkspace,
+  readConfigModelForTest,
+  writeConfigModelForTest,
+} from "../helpers.test.js";
 import type { Logger } from "../logger.js";
 import { noopLogger } from "../logger.js";
 import { runPlanCommand } from "./plan.js";
@@ -716,9 +719,9 @@ async function updateConfigModel(props: {
 }): Promise<void> {
   const typesPath =
     props.typesPath ?? join(dirname(props.configPath), "aws.config.types.ts");
-  const parsedConfig = (await loadAwsConfigModelFromTsFile({
+  void typesPath;
+  const parsedConfig = (await readConfigModelForTest({
     configPath: props.configPath,
-    typesPath,
   })) as {
     organizationalUnits: Array<{
       name: string;
@@ -742,14 +745,10 @@ async function updateConfigModel(props: {
     }>;
   };
   props.update(parsedConfig);
-  const nextConfig = `import * as v from "valibot";
-import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
-
-const awsConfig: AwsConfig = v.parse(awsConfigSchema, ${JSON.stringify(parsedConfig, null, 2)} satisfies AwsConfig);
-
-export default awsConfig;
-`;
-  await writeFile(props.configPath, nextConfig, "utf8");
+  await writeConfigModelForTest({
+    configPath: props.configPath,
+    config: parsedConfig,
+  });
 }
 
 async function writeFixtureFiles(props: {
