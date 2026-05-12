@@ -37,7 +37,7 @@ test(
         logger: noopLogger,
         profile: "default",
         region: "eu-central-1",
-        outputPath: outputPath,
+        outputPath,
         planConfirmation: async (props: { planLines: string[] }) => {
           planLinesSeen.push([...props.planLines]);
           return true;
@@ -88,7 +88,7 @@ test(
             logger: noopLogger,
             profile: "default",
             region: "eu-central-1",
-            outputPath: outputPath,
+            outputPath,
             planConfirmation: async () => false,
           }),
         /Bootstrap aborted/,
@@ -133,7 +133,7 @@ test(
         logger: noopLogger,
         profile: "default",
         region: "eu-central-1",
-        outputPath: outputPath,
+        outputPath,
         planConfirmation: async () => {
           confirmationCalls += 1;
           return true;
@@ -187,7 +187,7 @@ test(
         logger: noopLogger,
         profile: "default",
         region: "eu-central-1",
-        outputPath: outputPath,
+        outputPath,
         planConfirmation: async (props: { planLines: string[] }) => {
           planLinesSeen.push([...props.planLines]);
           return true;
@@ -312,7 +312,7 @@ test(
             logger: noopLogger,
             profile: "default",
             region: "eu-central-1",
-            outputPath: outputPath,
+            outputPath,
             planConfirmation: async () => true,
           }),
         /aws\.context\.json conflicts with live AWS resolution/,
@@ -362,7 +362,7 @@ test(
             logger: noopLogger,
             profile: "default",
             region: "eu-central-1",
-            outputPath: outputPath,
+            outputPath,
             planConfirmation: async () => true,
           }),
         /Multiple IAM Identity Center instances/,
@@ -411,7 +411,7 @@ test(
         profile: "default",
         region: "eu-central-1",
         instanceArn: "arn:aws:sso:::instance/ssoins-2",
-        outputPath: outputPath,
+        outputPath,
         planConfirmation: async () => true,
       });
 

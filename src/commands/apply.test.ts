@@ -680,6 +680,69 @@ test("runApplyCommand refuses destructive deleteOu operations without flag", asy
   }
 });
 
+test("runApplyCommand passes destructive warning into confirmation lines", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        config.organizationalUnits = config.organizationalUnits.filter(
+          (organizationalUnit) => organizationalUnit.name !== "Engineering",
+        );
+      },
+    });
+
+    let confirmationProps:
+      | { planLines: string[]; hasDestructiveChanges: boolean }
+      | undefined;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({}),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      allowDestructive: true,
+      ignoreUnsupported: false,
+      planConfirmation: async (props) => {
+        confirmationProps = props;
+        return false;
+      },
+    });
+
+    assert.equal(result.status, "cancelled");
+    assert.equal(confirmationProps?.hasDestructiveChanges, true);
+    assert.ok(
+      confirmationProps?.planLines.some((line) =>
+        line.includes("WARNING: this apply includes destructive operations."),
+      ) ?? false,
+    );
+    assert.ok(
+      confirmationProps?.planLines.some((line) =>
+        line.includes('[destructive] delete OU "Engineering" from root'),
+      ) ?? false,
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand refuses Pending OU deletion and explains it must be manual", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
@@ -1077,7 +1140,7 @@ test("runApplyCommand refuses deleteOu when live AWS still has child accounts", 
           ignoreUnsupported: false,
           planConfirmation: async () => true,
         }),
-      /still contains account "StrayAccount"/,
+      /live AWS preflight failed \[account-present\]: account "StrayAccount" \(333333333333\) is still attached/,
     );
     assert.equal(deleteCalls, 0);
   } finally {

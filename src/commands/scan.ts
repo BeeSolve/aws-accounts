@@ -60,8 +60,8 @@ export async function runScanCommand(
   const state: StateFile = {
     version: "1",
     generatedAt: new Date().toISOString(),
-    organization: organization,
-    identityCenter: identityCenter,
+    organization,
+    identityCenter,
   };
 
   const resolvedOutputPath = props.outputPath ?? outputPath;
@@ -110,7 +110,7 @@ async function scanOrganization(props: {
         name: account.Name,
         email: account.Email,
         status: account.Status,
-        parentId: parentId,
+        parentId,
       });
     }
     nextToken = response.NextToken;
@@ -118,8 +118,8 @@ async function scanOrganization(props: {
 
   return {
     rootId: root.Id,
-    organizationalUnits: organizationalUnits,
-    accounts: accounts,
+    organizationalUnits,
+    accounts,
   };
 }
 
@@ -172,7 +172,7 @@ async function scanIdentityCenter(props: {
   }
 
   const instance = selectIdentityCenterInstance({
-    instances: instances,
+    instances,
     requestedInstanceArn: props.requestedInstanceArn,
   });
 
@@ -193,7 +193,7 @@ async function scanIdentityCenter(props: {
   const accountAssignments = await listAccountAssignments({
     ssoAdminClient: props.ssoAdminClient,
     instanceArn: instance.instanceArn,
-    permissionSets: permissionSets,
+    permissionSets,
   });
   const accessRoles = accountAssignments.map((assignment) => ({
     ...assignment,
@@ -203,11 +203,11 @@ async function scanIdentityCenter(props: {
   return {
     instanceArn: instance.instanceArn,
     identityStoreId: instance.identityStoreId,
-    users: users,
-    groups: groups,
-    permissionSets: permissionSets,
-    accountAssignments: accountAssignments,
-    accessRoles: accessRoles,
+    users,
+    groups,
+    permissionSets,
+    accountAssignments,
+    accessRoles,
   };
 }
 

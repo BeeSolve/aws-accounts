@@ -49,7 +49,7 @@ export function applyReservedOuDeletionGuard(props: {
   );
 
   return {
-    operations: operations,
-    unsupported: unsupported,
+    operations,
+    unsupported,
   };
 }

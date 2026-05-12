@@ -235,7 +235,12 @@ test("runPlanCommand prints human-readable deleteOu operations", async () => {
     assert.equal(result.plan.unsupported.length, 0);
     assert.ok(
       logger.logs.some((line) =>
-        line.includes('delete OU "Engineering" from root'),
+        line.includes("Destructive operations detected: 1"),
+      ),
+    );
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes('[destructive] delete OU "Engineering" from root'),
       ),
     );
   } finally {

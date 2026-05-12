@@ -115,8 +115,8 @@ export async function runCreateAccountCommand(
   const creationResult = await createAccountAndMoveToOu({
     organizationsClient: props.organizationsClient,
     logger: props.logger,
-    accountName: accountName,
-    accountEmail: accountEmail,
+    accountName,
+    accountEmail,
     sourceParentId: context.organization.rootId,
     destinationParentId: context.organization.pendingOuId,
     timeoutInMs: props.timeoutInMs,

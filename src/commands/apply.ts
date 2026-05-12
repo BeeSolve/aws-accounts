@@ -71,7 +71,10 @@ type ApplyCommandInput = {
   };
   allowDestructive: boolean;
   ignoreUnsupported: boolean;
-  planConfirmation: (props: { planLines: string[] }) => Promise<boolean>;
+  planConfirmation: (props: {
+    planLines: string[];
+    hasDestructiveChanges: boolean;
+  }) => Promise<boolean>;
 };
 
 type ApplyCommandResult = {
@@ -96,16 +99,16 @@ export async function runApplyCommand(
     readAwsContextFromFile(props.contextPath),
   ]);
   const nextState = mapAwsConfigToState({
-    config: config,
-    currentState: currentState,
-    context: context,
+    config,
+    currentState,
+    context,
   });
   const plan = applyReservedOuDeletionGuard({
     plan: diffStates({
       current: currentState,
       next: nextState,
     }),
-    context: context,
+    context,
   });
 
   const destructiveUnsupported = plan.unsupported.filter(
@@ -146,6 +149,7 @@ export async function runApplyCommand(
   const destructiveOperations = plan.operations.filter((operation) =>
     isDestructiveOperation(operation),
   );
+  const hasDestructiveChanges = destructiveOperations.length > 0;
   if (destructiveOperations.length > 0 && allowDestructive !== true) {
     props.logger.log("Destructive operations:");
     for (const operation of destructiveOperations) {
@@ -159,7 +163,7 @@ export async function runApplyCommand(
   if (plan.operations.length === 0) {
     props.logger.log("No changes.");
     return {
-      plan: plan,
+      plan,
       appliedOperations: 0,
       statePath: props.statePath,
       status: "no-changes",
@@ -167,18 +171,20 @@ export async function runApplyCommand(
   }
 
   const planLines = buildApplyPlanLines({
-    plan: plan,
+    plan,
+    hasDestructiveChanges,
   });
   for (const line of planLines) {
     props.logger.log(line);
   }
   const confirmed = await props.planConfirmation({
-    planLines: planLines,
+    planLines,
+    hasDestructiveChanges,
   });
   if (confirmed !== true) {
     props.logger.log("Apply cancelled.");
     return {
-      plan: plan,
+      plan,
       appliedOperations: 0,
       statePath: props.statePath,
       status: "cancelled",
@@ -197,9 +203,9 @@ export async function runApplyCommand(
         ssoAdminClient: props.ssoAdminClient,
         identityStoreClient: props.identityStoreClient,
         logger: props.logger,
-        context: context,
+        context,
         runtime: props.runtime,
-        operation: operation,
+        operation,
       });
       appliedOperations += 1;
     }
@@ -226,8 +232,8 @@ export async function runApplyCommand(
     `Apply complete. Applied ${appliedOperations} operation(s).`,
   );
   return {
-    plan: plan,
-    appliedOperations: appliedOperations,
+    plan,
+    appliedOperations,
     statePath: props.statePath,
     status: "applied",
   };
@@ -432,7 +438,7 @@ async function applyOperation(props: {
     return upsertIdcPermissionSetInWorkingState({
       workingState: props.state,
       permissionSet: {
-        permissionSetArn: permissionSetArn,
+        permissionSetArn,
         name: operation.permissionSetName,
         description: operation.description,
       },
@@ -474,7 +480,7 @@ async function applyOperation(props: {
       ssoAdminClient: props.ssoAdminClient,
       logger: props.logger,
       instanceArn: props.state.identityCenter.instanceArn,
-      requestId: requestId,
+      requestId,
       timeoutInMs: props.runtime.accountAssignment.timeoutInMs,
       pollIntervalInMs: props.runtime.accountAssignment.pollIntervalInMs,
       operationLabel: `"${operation.permissionSetName}" on "${operation.accountName}"`,
@@ -528,7 +534,7 @@ async function applyOperation(props: {
       ssoAdminClient: props.ssoAdminClient,
       logger: props.logger,
       instanceArn: props.state.identityCenter.instanceArn,
-      requestId: requestId,
+      requestId,
       timeoutInMs: props.runtime.accountAssignment.timeoutInMs,
       pollIntervalInMs: props.runtime.accountAssignment.pollIntervalInMs,
       operationLabel: `"${operation.permissionSetName}" on "${operation.accountName}"`,
@@ -553,81 +559,20 @@ function statesAreDifferent(current: StateFile, next: StateFile): boolean {
   return JSON.stringify(current) !== JSON.stringify(next);
 }
 
-function buildApplyPlanLines(props: { plan: Plan }): string[] {
+function buildApplyPlanLines(props: {
+  plan: Plan;
+  hasDestructiveChanges: boolean;
+}): string[] {
   const lines = [
     `Apply: ${props.plan.operations.length} operation(s), ${props.plan.unsupported.length} unsupported diff(s)`,
   ];
-  for (const operation of props.plan.operations) {
-    if (operation.kind === "moveAccount") {
-      lines.push(
-        `  move account "${operation.accountName}" (${operation.accountId}) from ${operation.fromOuName} -> ${operation.toOuName}`,
-      );
-      continue;
-    }
-    if (operation.kind === "createOu") {
-      lines.push(
-        `  create OU "${operation.ouName}" under ${operation.parentOuName}`,
-      );
-      continue;
-    }
-    if (operation.kind === "renameOu") {
-      lines.push(
-        `  rename OU "${operation.fromOuName}" -> "${operation.toOuName}"`,
-      );
-      continue;
-    }
-    if (operation.kind === "deleteOu") {
-      lines.push(
-        `  delete OU "${operation.ouName}" from ${operation.parentOuName}`,
-      );
-      continue;
-    }
-    if (operation.kind === "createAccount") {
-      lines.push(
-        `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`,
-      );
-      continue;
-    }
-    if (operation.kind === "createIdcUser") {
-      lines.push(`  create IdC user "${operation.userName}"`);
-      continue;
-    }
-    if (operation.kind === "createIdcGroup") {
-      lines.push(`  create IdC group "${operation.groupDisplayName}"`);
-      continue;
-    }
-    if (operation.kind === "createIdcPermissionSet") {
-      lines.push(
-        `  create IdC permission set "${operation.permissionSetName}"`,
-      );
-      continue;
-    }
-    if (operation.kind === "grantIdcAccountAssignment") {
-      lines.push(
-        `  grant IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel(
-          {
-            principalType: operation.principalType,
-            principalName: operation.principalName,
-          },
-        )} on "${operation.accountName}"`,
-      );
-      continue;
-    }
-    if (operation.kind === "revokeIdcAccountAssignment") {
-      lines.push(
-        `  revoke IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel(
-          {
-            principalType: operation.principalType,
-            principalName: operation.principalName,
-          },
-        )} on "${operation.accountName}"`,
-      );
-      continue;
-    }
-    assertUnreachable(
-      operation,
-      "Unsupported operation kind in apply plan lines.",
+  if (props.hasDestructiveChanges) {
+    lines.push(
+      "WARNING: this apply includes destructive operations. Review carefully before confirming.",
     );
+  }
+  for (const operation of props.plan.operations) {
+    lines.push(formatApplyOperationLine(operation));
   }
   if (props.plan.unsupported.length > 0) {
     lines.push("Unsupported diffs:");
@@ -650,6 +595,50 @@ function describeDestructiveOperation(
   operation: Extract<Operation, { kind: "deleteOu" }>,
 ): string {
   return `delete OU "${operation.ouName}"`;
+}
+
+function formatApplyOperationLine(operation: Operation): string {
+  if (operation.kind === "moveAccount") {
+    return `  move account "${operation.accountName}" (${operation.accountId}) from ${operation.fromOuName} -> ${operation.toOuName}`;
+  }
+  if (operation.kind === "createOu") {
+    return `  create OU "${operation.ouName}" under ${operation.parentOuName}`;
+  }
+  if (operation.kind === "renameOu") {
+    return `  rename OU "${operation.fromOuName}" -> "${operation.toOuName}"`;
+  }
+  if (operation.kind === "deleteOu") {
+    return `  [destructive] delete OU "${operation.ouName}" from ${operation.parentOuName}`;
+  }
+  if (operation.kind === "createAccount") {
+    return `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`;
+  }
+  if (operation.kind === "createIdcUser") {
+    return `  create IdC user "${operation.userName}"`;
+  }
+  if (operation.kind === "createIdcGroup") {
+    return `  create IdC group "${operation.groupDisplayName}"`;
+  }
+  if (operation.kind === "createIdcPermissionSet") {
+    return `  create IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "grantIdcAccountAssignment") {
+    return `  grant IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel(
+      {
+        principalType: operation.principalType,
+        principalName: operation.principalName,
+      },
+    )} on "${operation.accountName}"`;
+  }
+  if (operation.kind === "revokeIdcAccountAssignment") {
+    return `  revoke IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel(
+      {
+        principalType: operation.principalType,
+        principalName: operation.principalName,
+      },
+    )} on "${operation.accountName}"`;
+  }
+  assertUnreachable(operation, "Unsupported operation kind in apply plan lines.");
 }
 
 function resolveAssignmentDependencies(props: {
@@ -727,7 +716,11 @@ async function assertOrganizationalUnitIsEmpty(props: {
   });
   if (childOrganizationalUnit != null) {
     throw new Error(
-      `Refusing to delete OU "${props.organizationalUnitName}": it still contains child OU "${childOrganizationalUnit.Name ?? childOrganizationalUnit.Id ?? "unknown"}".`,
+      `Refusing to delete OU "${props.organizationalUnitName}": live AWS preflight failed [child-ou-present]: ${formatLivePreflightResource({
+        resourceType: "child OU",
+        name: childOrganizationalUnit.Name,
+        id: childOrganizationalUnit.Id,
+      })} is still attached.`,
     );
   }
   const account = await listFirstAccountForParent({
@@ -736,9 +729,31 @@ async function assertOrganizationalUnitIsEmpty(props: {
   });
   if (account != null) {
     throw new Error(
-      `Refusing to delete OU "${props.organizationalUnitName}": it still contains account "${account.Name ?? account.Id ?? "unknown"}".`,
+      `Refusing to delete OU "${props.organizationalUnitName}": live AWS preflight failed [account-present]: ${formatLivePreflightResource({
+        resourceType: "account",
+        name: account.Name,
+        id: account.Id,
+      })} is still attached.`,
     );
   }
+}
+
+function formatLivePreflightResource(props: {
+  resourceType: string;
+  name?: string;
+  id?: string;
+}): string {
+  const quotedName = props.name != null ? `"${props.name}"` : undefined;
+  if (quotedName != null && props.id != null) {
+    return `${props.resourceType} ${quotedName} (${props.id})`;
+  }
+  if (quotedName != null) {
+    return `${props.resourceType} ${quotedName}`;
+  }
+  if (props.id != null) {
+    return `${props.resourceType} (${props.id})`;
+  }
+  return `${props.resourceType} "unknown"`;
 }
 
 async function listFirstChildOrganizationalUnit(props: {

@@ -578,8 +578,14 @@ function buildBootstrapPlanConfirmation(
 
 function buildApplyPlanConfirmation(
   props: BuildBootstrapPlanConfirmationProps,
-): (props: { planLines: string[] }) => Promise<boolean> {
-  return async (planProps: { planLines: string[] }): Promise<boolean> => {
+): (props: {
+  planLines: string[];
+  hasDestructiveChanges: boolean;
+}) => Promise<boolean> {
+  return async (planProps: {
+    planLines: string[];
+    hasDestructiveChanges: boolean;
+  }): Promise<boolean> => {
     if (planProps.planLines.length === 0) {
       return true;
     }
@@ -597,7 +603,9 @@ function buildApplyPlanConfirmation(
     });
     try {
       const answer = await readlineInterface.question(
-        "Proceed with applying these changes? [y/N] ",
+        planProps.hasDestructiveChanges
+          ? "Proceed with applying these changes? This includes destructive operations. [y/N] "
+          : "Proceed with applying these changes? [y/N] ",
       );
       const normalized = answer.trim().toLowerCase();
       return normalized === "y" || normalized === "yes";

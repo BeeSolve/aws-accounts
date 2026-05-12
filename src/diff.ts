@@ -108,7 +108,7 @@ export function diffStates(props: DiffStatesProps): Plan {
           accountName: nextAccount.name,
           accountEmail: nextAccount.email,
           targetOuId: nextAccount.parentId,
-          targetOuName: targetOuName,
+          targetOuName,
         });
       }
       continue;
@@ -139,9 +139,9 @@ export function diffStates(props: DiffStatesProps): Plan {
       accountId: nextAccount.id,
       accountName: nextAccount.name,
       fromOuId: currentAccount.parentId,
-      fromOuName: fromOuName,
+      fromOuName,
       toOuId: nextAccount.parentId,
-      toOuName: toOuName,
+      toOuName,
     });
   }
 
@@ -213,7 +213,7 @@ export function diffStates(props: DiffStatesProps): Plan {
     organizationalUnits: removedOrganizationalUnits,
   });
   const plannedMoveAccountDeparturesByOuId = countMoveAccountDeparturesByOuId({
-    operations: operations,
+    operations,
   });
   const consumedAddedOrganizationalUnitNames = new Set<string>();
   const consumedRemovedOrganizationalUnitNames = new Set<string>();
@@ -250,7 +250,7 @@ export function diffStates(props: DiffStatesProps): Plan {
         fromOuName: removed.name,
         toOuName: added.name,
         parentOuId: parentId,
-        parentOuName: parentOuName,
+        parentOuName,
       });
       continue;
     }
@@ -311,7 +311,7 @@ export function diffStates(props: DiffStatesProps): Plan {
       kind: "createOu",
       ouName: addedOrganizationalUnit.name,
       parentOuId: addedOrganizationalUnit.parentId,
-      parentOuName: parentOuName,
+      parentOuName,
     });
   }
   const pendingRemovedOrganizationalUnits = removedOrganizationalUnits.filter(
@@ -330,7 +330,7 @@ export function diffStates(props: DiffStatesProps): Plan {
     currentOrganizationalUnitsByParentId:
       currentOrganization.organizationalUnitsByParentId,
     currentAccountsByParentId: currentOrganization.accountsByParentId,
-    plannedMoveAccountDeparturesByOuId: plannedMoveAccountDeparturesByOuId,
+    plannedMoveAccountDeparturesByOuId,
   });
   for (const removedOrganizationalUnit of pendingRemovedOrganizationalUnits) {
     if (deleteEligibilityByOuId.get(removedOrganizationalUnit.id) === true) {
@@ -344,7 +344,7 @@ export function diffStates(props: DiffStatesProps): Plan {
         ouId: removedOrganizationalUnit.id,
         ouName: removedOrganizationalUnit.name,
         parentOuId: removedOrganizationalUnit.parentId,
-        parentOuName: parentOuName,
+        parentOuName,
       });
       continue;
     }
@@ -475,9 +475,9 @@ export function diffStates(props: DiffStatesProps): Plan {
     if (
       shouldSuppressDerivativeAssignmentRevoke({
         assignment: currentAssignment,
-        removedUserNames: removedUserNames,
-        removedGroupDisplayNames: removedGroupDisplayNames,
-        removedPermissionSetNames: removedPermissionSetNames,
+        removedUserNames,
+        removedGroupDisplayNames,
+        removedPermissionSetNames,
       })
     ) {
       continue;
@@ -517,8 +517,8 @@ export function diffStates(props: DiffStatesProps): Plan {
   });
 
   return v.parse(planSchema, {
-    operations: operations,
-    unsupported: unsupported,
+    operations,
+    unsupported,
   });
 }
 
@@ -596,15 +596,15 @@ function normalizeOrganizationState(props: {
     rootId: props.state.organization.rootId,
     organizationalUnits: props.state.organization.organizationalUnits,
     accounts: props.state.organization.accounts,
-    organizationalUnitByName: organizationalUnitByName,
-    accountByName: accountByName,
-    organizationalUnitNameById: organizationalUnitNameById,
-    organizationalUnitsByParentId: organizationalUnitsByParentId,
-    accountsByParentId: accountsByParentId,
+    organizationalUnitByName,
+    accountByName,
+    organizationalUnitNameById,
+    organizationalUnitsByParentId,
+    accountsByParentId,
     organizationalUnitDepthById: props.includeDepthById
       ? createOrganizationalUnitDepthById({
           rootId: props.state.organization.rootId,
-          organizationalUnitById: organizationalUnitById,
+          organizationalUnitById,
         })
       : new Map(),
   };
@@ -803,14 +803,14 @@ function normalizeIdentityCenterState(props: {
     const principalName = resolveAssignmentPrincipalName({
       principalId: accountAssignment.principalId,
       principalType: accountAssignment.principalType,
-      groupDisplayNameById: groupDisplayNameById,
-      userNameById: userNameById,
+      groupDisplayNameById,
+      userNameById,
     });
     const normalizedAssignment = {
-      accountName: accountName,
-      permissionSetName: permissionSetName,
+      accountName,
+      permissionSetName,
       principalType: accountAssignment.principalType,
-      principalName: principalName,
+      principalName,
     };
     assignmentsByKey.set(
       createNormalizedIdcAssignmentKey({
@@ -820,10 +820,10 @@ function normalizeIdentityCenterState(props: {
     );
   }
   return {
-    usersByUserName: usersByUserName,
-    groupsByDisplayName: groupsByDisplayName,
-    permissionSetsByName: permissionSetsByName,
-    assignmentsByKey: assignmentsByKey,
+    usersByUserName,
+    groupsByDisplayName,
+    permissionSetsByName,
+    assignmentsByKey,
   };
 }
 

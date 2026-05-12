@@ -7,8 +7,8 @@ test("diffStates returns empty plan for identical states", () => {
   const current = createBaseState();
   const next = cloneState(current);
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, []);
   assert.deepEqual(plan.unsupported, []);
@@ -23,8 +23,8 @@ test("diffStates detects single account move", () => {
     parentId: "ou-data",
   });
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, [
     {
@@ -55,8 +55,8 @@ test("diffStates sorts multiple account moves by accountName", () => {
     parentId: "ou-eng",
   });
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   const movedAccountNames = plan.operations
     .filter((operation) => operation.kind === "moveAccount")
@@ -77,8 +77,8 @@ test("diffStates emits createAccount operation for sentinel new account", () => 
     parentId: "ou-eng",
   });
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, [
     {
@@ -104,8 +104,8 @@ test("diffStates classifies removed account and removed OU as destructive", () =
     organizationalUnitName: "Data",
   });
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, []);
   assert.deepEqual(plan.unsupported, [
@@ -140,8 +140,8 @@ test("diffStates emits deleteOu for removed empty leaf OU", () => {
   });
 
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
 
   assert.deepEqual(plan.operations, [
@@ -170,8 +170,8 @@ test("diffStates emits moveAccount and deleteOu when the last account leaves in 
   });
 
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
 
   assert.deepEqual(plan.operations, [
@@ -217,8 +217,8 @@ test("diffStates keeps OU delete unsupported when same-batch moves do not empty 
   });
 
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
 
   assert.deepEqual(plan.operations, [
@@ -272,8 +272,8 @@ test("diffStates emits nested deleteOu operations deepest first", () => {
   });
 
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
 
   assert.deepEqual(plan.operations, [
@@ -334,8 +334,8 @@ test("diffStates keeps nested OU delete unsupported when a descendant is not saf
   });
 
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
 
   assert.deepEqual(plan.operations, []);
@@ -367,7 +367,7 @@ test("diffStates emits createOu and renameOu operations", () => {
     },
   });
   const addPlan = diffStates({
-    current: current,
+    current,
     next: nextWithAddedOu,
   });
   assert.deepEqual(addPlan.operations, [
@@ -388,7 +388,7 @@ test("diffStates emits createOu and renameOu operations", () => {
     nextId: "ou-data-platform",
   });
   const renamePlan = diffStates({
-    current: current,
+    current,
     next: nextWithRenamedOu,
   });
   assert.deepEqual(renamePlan.operations, [
@@ -413,8 +413,8 @@ test("diffStates reports OU reparent as unsupported mutation", () => {
     parentId: "ou-eng",
   });
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, []);
   assert.deepEqual(plan.unsupported, [
@@ -456,8 +456,8 @@ test("diffStates reports ambiguous OU rename aggregated per parent", () => {
     },
   });
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, []);
   assert.deepEqual(plan.unsupported, [
@@ -483,8 +483,8 @@ test("diffStates reports new OU with unresolved parent", () => {
     },
   });
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, []);
   assert.deepEqual(plan.unsupported, [
@@ -509,8 +509,8 @@ test("diffStates reports new account with unresolved target OU", () => {
     parentId: "__pending_creation__",
   });
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, []);
   assert.deepEqual(plan.unsupported, [
@@ -542,8 +542,8 @@ test("diffStates emits IdC entity creation operations", () => {
     description: "Read only",
   });
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, [
     {
@@ -578,8 +578,8 @@ test("diffStates emits additive IdC assignment grants", () => {
     },
   ];
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, [
     {
@@ -599,8 +599,8 @@ test("diffStates emits IdC assignment revokes when entities remain supported", (
   next.identityCenter.accountAssignments = [];
 
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, [
     {
@@ -623,8 +623,8 @@ test("diffStates keeps IdC removals unsupported and suppresses derivative revoke
   next.identityCenter.accountAssignments = [];
 
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
   assert.deepEqual(plan.operations, []);
   assert.deepEqual(plan.unsupported, [
@@ -676,8 +676,8 @@ test("diffStates keeps deterministic mixed Organizations and IdC ordering", () =
   });
 
   const plan = diffStates({
-    current: current,
-    next: next,
+    current,
+    next,
   });
 
   assert.deepEqual(

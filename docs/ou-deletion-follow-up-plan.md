@@ -12,26 +12,13 @@ This document covers the remaining OU deletion work after the current safe miles
 - `apply` re-checks live AWS state before delete and refuses if the OU still contains:
   - any child OU,
   - any account.
+- `Pending` and `Graveyard` are hard-blocked from tool-driven deletion.
+- Human-readable `plan` / `apply` output marks destructive deletes explicitly and the apply confirmation prompt warns when destructive work is present.
+- README now documents the supported OU deletion boundary, a concrete `apply --allow-destructive` example, and the recovery flow after partial destructive failure.
 
 ## Remaining work
 
-### 1. Reserved OU policy
-
-Decided:
-- `Pending` and `Graveyard` must not be deleted by this tool.
-- If config removal would imply deleting either reserved OU, `plan` / `apply` must fail and explain that deletion has to be done manually in AWS.
-
-### 2. UX improvements
+### 1. Machine-readable destructive metadata
 
 Potential improvements:
-- mark destructive operations explicitly in human `plan` output,
-- make the confirmation prompt mention destructive work when present,
-- print the live preflight reason in a more structured way,
 - add a dedicated JSON field later if plan consumers need to separate supported destructive operations from safe mutations.
-
-### 3. Documentation cleanup
-
-After the next deletion increment:
-- update README examples with a concrete destructive apply example,
-- document the exact current boundary for OU deletion,
-- add recovery guidance for failed destructive apply runs.

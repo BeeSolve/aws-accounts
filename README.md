@@ -19,6 +19,8 @@ The tool's lifecycle has three phases:
 - `apply --yes` skips the interactive confirmation prompt.
 - `apply --ignore-unsupported` proceeds only when unsupported diffs are non-destructive (`unsupportedMutation`).
 - `apply --allow-destructive` is required for supported destructive operations.
+- Human-readable `plan` and `apply` previews mark supported destructive deletes as `[destructive]`.
+- The interactive `apply` prompt explicitly warns when the pending batch includes destructive operations.
 - Destructive unsupported diffs always block `apply` (no override).
 - If `apply` fails mid-run, the CLI persists partial `state.json`; recovery flow is: run `scan`, verify state, then re-run `apply`.
 
@@ -40,6 +42,50 @@ The tool's lifecycle has three phases:
 - grant account assignments
 - revoke account assignments
 
+## Safe OU deletion boundary
+
+OU deletion is intentionally narrow in the current increment.
+
+A removed OU can be reconciled with `deleteOu` only when all of the following are true:
+
+- the OU is removed from `aws.config.ts`,
+- every current descendant OU in that removed subtree is also removed and safely deletable,
+- each OU in the subtree is either already empty in `state.json` or becomes empty through same-batch direct account moves,
+- `apply` can execute the deletes deepest-first,
+- live AWS preflight checks immediately before each delete confirm that no child OU or account is still attached.
+
+These cases are still blocked:
+
+- deleting `Pending` or `Graveyard`,
+- deleting an OU subtree when any descendant is unresolved or not being removed,
+- deleting an OU that still has live child OUs or live accounts,
+- deleting accounts themselves.
+
+## Example: destructive apply
+
+If you remove an empty OU subtree from `aws.config.ts`, the normal flow is:
+
+```bash
+npm run cli -- plan
+npm run cli -- apply --allow-destructive
+```
+
+You should expect the preview to call the delete out explicitly, for example:
+
+```text
+Plan: 1 operation(s), 0 unsupported diff(s)
+Destructive operations detected: 1. Apply requires --allow-destructive.
+  [destructive] delete OU "Engineering" from root
+```
+
+And the matching apply preview:
+
+```text
+Apply: 1 operation(s), 0 unsupported diff(s)
+WARNING: this apply includes destructive operations. Review carefully before confirming.
+  [destructive] delete OU "Engineering" from root
+```
+
 Still out of scope in the current increment:
 
 - account removals
@@ -52,6 +98,18 @@ Still out of scope in the current increment:
 - permission set policy / attachment management
 - group membership management
 - account metadata reconciliation after creation (tags, alternate contacts, account-name drift)
+
+## Recovery after failed destructive apply
+
+If `apply --allow-destructive` fails after some operations succeeded, the CLI writes the progressed `state.json` before exiting.
+
+Recovery flow:
+
+1. Run `npm run cli -- scan` to refresh local state from live AWS.
+2. Review the resulting `state.json` and rerun `npm run cli -- plan`.
+3. If the remaining diff is still intended, rerun `npm run cli -- apply --allow-destructive`.
+
+Do not blindly rerun `apply` without `scan` after a partial destructive failure; the live AWS state may already differ from the old local plan.
 
 ## FAQ
 

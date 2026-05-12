@@ -36,93 +36,38 @@ export async function runPlanCommand(
   ]);
 
   const nextState = mapAwsConfigToState({
-    config: config,
-    currentState: currentState,
-    context: context,
+    config,
+    currentState,
+    context,
   });
   const plan = applyReservedOuDeletionGuard({
     plan: diffStates({
       current: currentState,
       next: nextState,
     }),
-    context: context,
+    context,
   });
 
   if (props.output === "json") {
     props.logger.log(JSON.stringify(plan, null, 2));
     return {
-      plan: plan,
+      plan,
     };
   }
 
   props.logger.log(
     `Plan: ${plan.operations.length} operation(s), ${plan.unsupported.length} unsupported diff(s)`,
   );
-  for (const operation of plan.operations) {
-    if (operation.kind === "moveAccount") {
-      props.logger.log(
-        `  move account "${operation.accountName}" (${operation.accountId}) from ${operation.fromOuName} -> ${operation.toOuName}`,
-      );
-      continue;
-    }
-    if (operation.kind === "createOu") {
-      props.logger.log(
-        `  create OU "${operation.ouName}" under ${operation.parentOuName}`,
-      );
-      continue;
-    }
-    if (operation.kind === "renameOu") {
-      props.logger.log(
-        `  rename OU "${operation.fromOuName}" -> "${operation.toOuName}"`,
-      );
-      continue;
-    }
-    if (operation.kind === "deleteOu") {
-      props.logger.log(`  delete OU "${operation.ouName}" from ${operation.parentOuName}`);
-      continue;
-    }
-    if (operation.kind === "createAccount") {
-      props.logger.log(
-        `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`,
-      );
-      continue;
-    }
-    if (operation.kind === "createIdcUser") {
-      props.logger.log(`  create IdC user "${operation.userName}"`);
-      continue;
-    }
-    if (operation.kind === "createIdcGroup") {
-      props.logger.log(`  create IdC group "${operation.groupDisplayName}"`);
-      continue;
-    }
-    if (operation.kind === "createIdcPermissionSet") {
-      props.logger.log(
-        `  create IdC permission set "${operation.permissionSetName}"`,
-      );
-      continue;
-    }
-    if (operation.kind === "grantIdcAccountAssignment") {
-      props.logger.log(
-        `  grant IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel({
-          principalType: operation.principalType,
-          principalName: operation.principalName,
-        })} on "${operation.accountName}"`,
-      );
-      continue;
-    }
-    if (operation.kind === "revokeIdcAccountAssignment") {
-      props.logger.log(
-        `  revoke IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel({
-          principalType: operation.principalType,
-          principalName: operation.principalName,
-        })} on "${operation.accountName}"`,
-      );
-      continue;
-    }
-    assertUnreachable(
-      operation,
-      "Unsupported operation kind in human-readable plan output.",
+  const destructiveOperations = plan.operations.filter((operation) =>
+    isDestructiveOperation(operation),
+  );
+  if (destructiveOperations.length > 0) {
+    props.logger.log(
+      `Destructive operations detected: ${destructiveOperations.length}. Apply requires --allow-destructive.`,
     );
+  }
+  for (const operation of plan.operations) {
+    props.logger.log(formatHumanOperationLine(operation));
   }
   if (plan.unsupported.length > 0) {
     props.logger.log("Unsupported diffs:");
@@ -132,8 +77,57 @@ export async function runPlanCommand(
   }
 
   return {
-    plan: plan,
+    plan,
   };
+}
+
+function formatHumanOperationLine(operation: Plan["operations"][number]): string {
+  if (operation.kind === "moveAccount") {
+    return `  move account "${operation.accountName}" (${operation.accountId}) from ${operation.fromOuName} -> ${operation.toOuName}`;
+  }
+  if (operation.kind === "createOu") {
+    return `  create OU "${operation.ouName}" under ${operation.parentOuName}`;
+  }
+  if (operation.kind === "renameOu") {
+    return `  rename OU "${operation.fromOuName}" -> "${operation.toOuName}"`;
+  }
+  if (operation.kind === "deleteOu") {
+    return `  [destructive] delete OU "${operation.ouName}" from ${operation.parentOuName}`;
+  }
+  if (operation.kind === "createAccount") {
+    return `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`;
+  }
+  if (operation.kind === "createIdcUser") {
+    return `  create IdC user "${operation.userName}"`;
+  }
+  if (operation.kind === "createIdcGroup") {
+    return `  create IdC group "${operation.groupDisplayName}"`;
+  }
+  if (operation.kind === "createIdcPermissionSet") {
+    return `  create IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "grantIdcAccountAssignment") {
+    return `  grant IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel({
+      principalType: operation.principalType,
+      principalName: operation.principalName,
+    })} on "${operation.accountName}"`;
+  }
+  if (operation.kind === "revokeIdcAccountAssignment") {
+    return `  revoke IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel({
+      principalType: operation.principalType,
+      principalName: operation.principalName,
+    })} on "${operation.accountName}"`;
+  }
+  assertUnreachable(
+    operation,
+    "Unsupported operation kind in human-readable plan output.",
+  );
+}
+
+function isDestructiveOperation(
+  operation: Plan["operations"][number],
+): operation is Extract<Plan["operations"][number], { kind: "deleteOu" }> {
+  return operation.kind === "deleteOu";
 }
 
 function formatPrincipalLabel(props: {

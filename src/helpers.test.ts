@@ -14,7 +14,7 @@ export async function createTestWorkspace(props: { prefix: string }): Promise<{
     "dir",
   );
   return {
-    workspacePath: workspacePath,
+    workspacePath,
     cleanup: async () => {
       await rm(workspacePath, { recursive: true, force: true });
     },

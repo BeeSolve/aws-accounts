@@ -139,7 +139,7 @@ test("working state materializes back to the original state", () => {
     state: input
   });
   const materialized = materializeWorkingState({
-    workingState: workingState
+    workingState
   });
 
   assert.deepEqual(materialized, input);
@@ -152,7 +152,7 @@ test("working state helpers update organization records immutably", () => {
     state: input
   });
   const movedState = moveAccountInWorkingState({
-    workingState: workingState,
+    workingState,
     accountId: "111111111111",
     parentId: "ou-b"
   });
@@ -210,7 +210,7 @@ test("working state helpers update IdC records immutably and regenerate access r
     state: input
   });
   const withUser = upsertIdcUserInWorkingState({
-    workingState: workingState,
+    workingState,
     user: {
       userId: "u-1",
       userName: "alice",

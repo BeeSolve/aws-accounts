@@ -562,13 +562,13 @@ function createWorkingIdentityCenterState(props: {
   return {
     instanceArn: props.identityCenter.instanceArn,
     identityStoreId: props.identityCenter.identityStoreId,
-    users: users,
+    users,
     usersByUserName: toRecordByProperty(users, "userName"),
-    groups: groups,
+    groups,
     groupsByDisplayName: toRecordByProperty(groups, "displayName"),
-    permissionSets: permissionSets,
+    permissionSets,
     permissionSetsByName: toRecordByProperty(permissionSets, "name"),
-    accountAssignments: accountAssignments,
+    accountAssignments,
     accountAssignmentsByKey: Object.fromEntries(
       accountAssignments.map((accountAssignment) => [
         createAccountAssignmentKey({
@@ -581,7 +581,7 @@ function createWorkingIdentityCenterState(props: {
       ]),
     ),
     accessRoles: createAccessRoles({
-      accountAssignments: accountAssignments,
+      accountAssignments,
     }),
   };
 }

@@ -53,7 +53,7 @@ export async function createAccountAndMoveToOu(
   const accountId = await pollCreateAccountStatusUntilTerminal({
     organizationsClient: props.organizationsClient,
     logger: props.logger,
-    createRequestId: createRequestId,
+    createRequestId,
     timeoutInMs: props.timeoutInMs,
     pollIntervalInMs: props.pollIntervalInMs,
   });
@@ -69,12 +69,12 @@ export async function createAccountAndMoveToOu(
   );
   const account = await resolveCreatedAccountRecord({
     organizationsClient: props.organizationsClient,
-    accountId: accountId,
+    accountId,
     destinationParentId: props.destinationParentId,
   });
   return {
-    accountId: accountId,
-    account: account,
+    accountId,
+    account,
   };
 }
 

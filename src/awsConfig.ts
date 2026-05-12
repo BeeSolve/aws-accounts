@@ -162,12 +162,12 @@ export async function writeAwsConfigFromState(
   const state = await readStateFile(props.statePath);
   const context = await readAwsContextFile(props.contextPath);
   assertStateMatchesContext({
-    state: state,
-    context: context,
+    state,
+    context,
   });
 
   const mappedConfig = mapStateToAwsConfig({
-    state: state,
+    state,
   });
   const sortedConfig = sortAwsConfigModel({
     config: mappedConfig,
@@ -229,7 +229,7 @@ export async function writeAwsConfigFromState(
   props.logger.log(`Review with: git diff ${props.configPath} ${props.typesPath}`);
 
   const shouldWrite = await props.overwriteConfirmation({
-    fileSummaries: fileSummaries,
+    fileSummaries,
   });
   if (!shouldWrite) {
     props.logger.log("Config write cancelled.");
@@ -386,7 +386,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     }
     organizationalUnits.push({
       name: organizationalUnit.name,
-      parentName: parentName,
+      parentName,
       accounts: [],
     });
   }
@@ -461,9 +461,9 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       );
     }
     const principal = mapAssignmentPrincipal({
-      assignment: assignment,
-      groupDisplayNameById: groupDisplayNameById,
-      userNameById: userNameById,
+      assignment,
+      groupDisplayNameById,
+      userNameById,
     });
 
     const assignmentKey = `${principal.kind}:${principal.value}|${permissionSetName}`;
@@ -483,7 +483,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
   }
 
   const mapped: AwsConfigModel = {
-    organizationalUnits: organizationalUnits,
+    organizationalUnits,
     users: props.state.identityCenter.users.map((user) => ({
       userName: user.userName,
       displayName: user.displayName,
@@ -590,7 +590,7 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
     );
     mappedOrganizationalUnits.push({
       id: mappedId,
-      parentId: parentId,
+      parentId,
       arn: matchedOrganizationalUnit?.arn ?? pendingCreationId,
       name: organizationalUnit.name,
     });
@@ -694,7 +694,7 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
     for (const accountName of assignment.accounts) {
       mappedAccountAssignments.push({
         accountId: mappedAccountIdByName.get(accountName) ?? pendingCreationId,
-        permissionSetArn: permissionSetArn,
+        permissionSetArn,
         principalId: mappedPrincipal.principalId,
         principalType: mappedPrincipal.principalType,
       });

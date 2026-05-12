@@ -46,7 +46,7 @@ test(
         }),
         identityStoreClient: createIdentityStoreClientMock(),
         logger: noopLogger,
-        outputPath: outputPath,
+        outputPath,
       });
 
       assert.equal(result.outputPath, outputPath);

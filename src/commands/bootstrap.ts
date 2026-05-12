@@ -60,7 +60,7 @@ export async function runBootstrapCommand(
 
   const initialDiscovery = await discoverBootstrapState({
     organizationsClient: props.organizationsClient,
-    rootId: rootId,
+    rootId,
   });
   if (initialDiscovery.analysis.ok === false) {
     throw new Error(initialDiscovery.analysis.reason);
@@ -68,13 +68,13 @@ export async function runBootstrapCommand(
 
   const planLines = buildBootstrapPlanLines({
     analysis: initialDiscovery.analysis,
-    rootId: rootId,
+    rootId,
   });
   for (const line of planLines) {
     props.logger.log(line);
   }
   if (planLines.length > 0) {
-    const confirmed = await props.planConfirmation({ planLines: planLines });
+    const confirmed = await props.planConfirmation({ planLines });
     if (confirmed !== true) {
       throw new Error("Bootstrap aborted.");
     }
@@ -83,13 +83,13 @@ export async function runBootstrapCommand(
   await createMissingRequiredOus({
     organizationsClient: props.organizationsClient,
     logger: props.logger,
-    rootId: rootId,
+    rootId,
     analysis: initialDiscovery.analysis,
   });
 
   const finalDiscovery = await discoverBootstrapState({
     organizationsClient: props.organizationsClient,
-    rootId: rootId,
+    rootId,
   });
   if (finalDiscovery.analysis.ok === false) {
     throw new Error(finalDiscovery.analysis.reason);
@@ -116,10 +116,10 @@ export async function runBootstrapCommand(
 
   const nextContext = buildAwsContextFile({
     managementAccountId: masterAccountId,
-    rootId: rootId,
+    rootId,
     pendingOuId: finalDiscovery.analysis.pendingOuId,
     graveyardOuId: finalDiscovery.analysis.graveyardOuId,
-    identityCenter: identityCenter,
+    identityCenter,
     profile: props.profile,
     region: props.region,
     existingDeployment: existingContext?.deployment,
@@ -273,7 +273,7 @@ async function discoverBootstrapState(props: {
     rootId: props.rootId,
   });
   const analysis = analyzeRootChildrenForBootstrap({
-    children: children,
+    children,
   });
   return { children, analysis };
 }
