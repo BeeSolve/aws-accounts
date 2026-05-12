@@ -540,6 +540,9 @@ test("diffStates emits IdC entity creation operations", () => {
     permissionSetArn: "arn:ps-readonly",
     name: "ReadOnly",
     description: "Read only",
+    inlinePolicy: null,
+    awsManagedPolicies: [],
+    customerManagedPolicies: [],
   });
   const plan = diffStates({
     current,
@@ -560,6 +563,83 @@ test("diffStates emits IdC entity creation operations", () => {
       kind: "createIdcPermissionSet",
       permissionSetName: "ReadOnly",
       description: "Read only",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates emits permission set policy operations and provisioning", () => {
+  const current = createBaseState();
+  current.identityCenter.permissionSets[0] = {
+    ...current.identityCenter.permissionSets[0],
+    inlinePolicy:
+      '{"Statement":[{"Action":["s3:GetObject"],"Effect":"Allow","Resource":"*"}],"Version":"2012-10-17"}',
+    awsManagedPolicies: [
+      "arn:aws:iam::aws:policy/SecurityAudit",
+      "arn:aws:iam::aws:policy/ReadOnlyAccess",
+    ],
+    customerManagedPolicies: [
+      {
+        name: "SupportReadOnly",
+        path: "/beesolve/",
+      },
+    ],
+  };
+  const next = cloneState(current);
+  next.identityCenter.permissionSets[0] = {
+    ...next.identityCenter.permissionSets[0],
+    inlinePolicy:
+      '{"Statement":[{"Action":["ec2:Describe*"],"Effect":"Allow","Resource":"*"}],"Version":"2012-10-17"}',
+    awsManagedPolicies: [
+      "arn:aws:iam::aws:policy/ReadOnlyAccess",
+      "arn:aws:iam::aws:policy/ViewOnlyAccess",
+    ],
+    customerManagedPolicies: [
+      {
+        name: "SupportReadWrite",
+        path: "/beesolve/",
+      },
+    ],
+  };
+
+  const plan = diffStates({
+    current,
+    next,
+  });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "putIdcPermissionSetInlinePolicy",
+      permissionSetName: "Admin",
+      inlinePolicy:
+        '{"Statement":[{"Action":["ec2:Describe*"],"Effect":"Allow","Resource":"*"}],"Version":"2012-10-17"}',
+    },
+    {
+      kind: "attachIdcManagedPolicyToPermissionSet",
+      permissionSetName: "Admin",
+      managedPolicyArn: "arn:aws:iam::aws:policy/ViewOnlyAccess",
+    },
+    {
+      kind: "detachIdcManagedPolicyFromPermissionSet",
+      permissionSetName: "Admin",
+      managedPolicyArn: "arn:aws:iam::aws:policy/SecurityAudit",
+    },
+    {
+      kind: "attachIdcCustomerManagedPolicyReferenceToPermissionSet",
+      permissionSetName: "Admin",
+      customerManagedPolicyName: "SupportReadWrite",
+      customerManagedPolicyPath: "/beesolve/",
+    },
+    {
+      kind: "detachIdcCustomerManagedPolicyReferenceFromPermissionSet",
+      permissionSetName: "Admin",
+      customerManagedPolicyName: "SupportReadOnly",
+      customerManagedPolicyPath: "/beesolve/",
+    },
+    {
+      kind: "provisionIdcPermissionSet",
+      permissionSetName: "Admin",
+      targetScope: "ALL_PROVISIONED_ACCOUNTS",
     },
   ]);
   assert.deepEqual(plan.unsupported, []);
@@ -722,6 +802,9 @@ test("diffStates keeps deterministic mixed Organizations and IdC ordering", () =
     permissionSetArn: "__pending_creation__",
     name: "ReadOnly",
     description: "Read only",
+    inlinePolicy: null,
+    awsManagedPolicies: [],
+    customerManagedPolicies: [],
   });
   next.identityCenter.accountAssignments.push({
     accountId: "__pending_creation__",
@@ -808,6 +891,9 @@ function createBaseState(): StateFile {
           permissionSetArn: "arn:ps-admin",
           name: "Admin",
           description: "Admin access",
+          inlinePolicy: null,
+          awsManagedPolicies: [],
+          customerManagedPolicies: [],
         },
       ],
       accountAssignments: [

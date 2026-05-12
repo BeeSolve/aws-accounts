@@ -39,10 +39,18 @@ const groupMembershipSchema = v.strictObject({
   userId: nonEmptyString,
 });
 
+const customerManagedPolicyReferenceSchema = v.strictObject({
+  name: nonEmptyString,
+  path: nonEmptyString,
+});
+
 const permissionSetSchema = v.strictObject({
   permissionSetArn: nonEmptyString,
   name: nonEmptyString,
   description: v.string(),
+  inlinePolicy: v.nullable(nonEmptyString),
+  awsManagedPolicies: v.array(nonEmptyString),
+  customerManagedPolicies: v.array(customerManagedPolicyReferenceSchema),
 });
 
 const accountAssignmentSchema = v.strictObject({
@@ -87,6 +95,9 @@ export type AccountState = v.InferOutput<typeof accountSchema>;
 export type UserState = v.InferOutput<typeof userSchema>;
 export type GroupState = v.InferOutput<typeof groupSchema>;
 export type GroupMembershipState = v.InferOutput<typeof groupMembershipSchema>;
+export type CustomerManagedPolicyReferenceState = v.InferOutput<
+  typeof customerManagedPolicyReferenceSchema
+>;
 export type PermissionSetState = v.InferOutput<typeof permissionSetSchema>;
 export type AccountAssignmentState = v.InferOutput<
   typeof accountAssignmentSchema
@@ -164,9 +175,30 @@ export function normalizeState(state: StateFile): StateFile {
             b.membershipId,
           ),
       ),
-      permissionSets: [...state.identityCenter.permissionSets].sort((a, b) =>
-        compareByKeys(a.permissionSetArn, b.permissionSetArn, a.name, b.name),
-      ),
+      permissionSets: [...state.identityCenter.permissionSets]
+        .map((permissionSet) => ({
+          ...permissionSet,
+          inlinePolicy: normalizeInlinePolicyString(permissionSet.inlinePolicy),
+          awsManagedPolicies: [...permissionSet.awsManagedPolicies].sort(
+            (left, right) => left.localeCompare(right),
+          ),
+          customerManagedPolicies: [...permissionSet.customerManagedPolicies].sort(
+            (left, right) =>
+              compareByKeys(left.path, right.path, left.name, right.name),
+          ),
+        }))
+        .sort((a, b) =>
+          compareByKeys(
+            a.permissionSetArn,
+            b.permissionSetArn,
+            a.name,
+            b.name,
+            a.description,
+            b.description,
+            a.inlinePolicy ?? "",
+            b.inlinePolicy ?? "",
+          ),
+        ),
       accountAssignments: [...state.identityCenter.accountAssignments].sort(
         (a, b) =>
           compareByKeys(
@@ -498,7 +530,12 @@ export function upsertIdcPermissionSetInWorkingState(props: {
     currentPermissionSet.permissionSetArn ===
       props.permissionSet.permissionSetArn &&
     currentPermissionSet.name === props.permissionSet.name &&
-    currentPermissionSet.description === props.permissionSet.description
+    currentPermissionSet.description === props.permissionSet.description &&
+    currentPermissionSet.inlinePolicy === props.permissionSet.inlinePolicy &&
+    JSON.stringify(currentPermissionSet.awsManagedPolicies) ===
+      JSON.stringify(props.permissionSet.awsManagedPolicies) &&
+    JSON.stringify(currentPermissionSet.customerManagedPolicies) ===
+      JSON.stringify(props.permissionSet.customerManagedPolicies)
   ) {
     return props.workingState;
   }
@@ -773,4 +810,29 @@ function compareByKeys(...values: string[]): number {
     }
   }
   return 0;
+}
+
+function normalizeInlinePolicyString(value: string | null): string | null {
+  if (value == null) {
+    return null;
+  }
+  try {
+    return JSON.stringify(sortJsonValue(JSON.parse(value) as unknown));
+  } catch {
+    return value;
+  }
+}
+
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sortJsonValue(entry));
+  }
+  if (value != null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+        .map(([key, nestedValue]) => [key, sortJsonValue(nestedValue)]),
+    );
+  }
+  return value;
 }

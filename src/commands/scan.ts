@@ -13,9 +13,12 @@ import {
 } from "@aws-sdk/client-organizations";
 import {
   DescribePermissionSetCommand,
+  GetInlinePolicyForPermissionSetCommand,
   ListAccountAssignmentsCommand,
   ListAccountsForProvisionedPermissionSetCommand,
+  ListCustomerManagedPolicyReferencesInPermissionSetCommand,
   ListInstancesCommand,
+  ListManagedPoliciesInPermissionSetCommand,
   ListPermissionSetsCommand,
   SSOAdminClient,
 } from "@aws-sdk/client-sso-admin";
@@ -384,7 +387,6 @@ async function listPermissionSets(props: {
     nextToken = response.NextToken;
   } while (nextToken != null);
 
-  const permissionSets: StateFile["identityCenter"]["permissionSets"] = [];
   const describeResponses = await Promise.all(
     permissionSetArns.map((permissionSetArn) =>
       props.ssoAdminClient.send(
@@ -395,18 +397,124 @@ async function listPermissionSets(props: {
       ),
     ),
   );
-  for (const response of describeResponses) {
-    const permissionSet = response.PermissionSet;
-    if (permissionSet?.PermissionSetArn == null || permissionSet.Name == null) {
-      continue;
+  const permissionSets = await Promise.all(
+    describeResponses.map(async (response) => {
+      const permissionSet = response.PermissionSet;
+      if (permissionSet?.PermissionSetArn == null || permissionSet.Name == null) {
+        return undefined;
+      }
+      const [
+        inlinePolicy,
+        awsManagedPolicies,
+        customerManagedPolicies,
+      ] = await Promise.all([
+        getInlinePolicyForPermissionSet({
+          ssoAdminClient: props.ssoAdminClient,
+          instanceArn: props.instanceArn,
+          permissionSetArn: permissionSet.PermissionSetArn,
+        }),
+        listManagedPoliciesInPermissionSet({
+          ssoAdminClient: props.ssoAdminClient,
+          instanceArn: props.instanceArn,
+          permissionSetArn: permissionSet.PermissionSetArn,
+        }),
+        listCustomerManagedPoliciesInPermissionSet({
+          ssoAdminClient: props.ssoAdminClient,
+          instanceArn: props.instanceArn,
+          permissionSetArn: permissionSet.PermissionSetArn,
+        }),
+      ]);
+      return {
+        permissionSetArn: permissionSet.PermissionSetArn,
+        name: permissionSet.Name,
+        description: permissionSet.Description ?? "",
+        inlinePolicy,
+        awsManagedPolicies,
+        customerManagedPolicies,
+      };
+    }),
+  );
+  return permissionSets.filter(
+    (permissionSet): permissionSet is StateFile["identityCenter"]["permissionSets"][number] =>
+      permissionSet != null,
+  );
+}
+
+async function getInlinePolicyForPermissionSet(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+  permissionSetArn: string;
+}): Promise<string | null> {
+  const response = await props.ssoAdminClient.send(
+    new GetInlinePolicyForPermissionSetCommand({
+      InstanceArn: props.instanceArn,
+      PermissionSetArn: props.permissionSetArn,
+    }),
+  );
+  const inlinePolicy = response.InlinePolicy?.trim();
+  return inlinePolicy != null && inlinePolicy.length > 0 ? inlinePolicy : null;
+}
+
+async function listManagedPoliciesInPermissionSet(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+  permissionSetArn: string;
+}): Promise<string[]> {
+  const managedPolicies: string[] = [];
+  let nextToken: string | undefined;
+  do {
+    const response = await props.ssoAdminClient.send(
+      new ListManagedPoliciesInPermissionSetCommand({
+        InstanceArn: props.instanceArn,
+        PermissionSetArn: props.permissionSetArn,
+        NextToken: nextToken,
+      }),
+    );
+    for (const attachedManagedPolicy of response.AttachedManagedPolicies ?? []) {
+      if (attachedManagedPolicy.Arn == null) {
+        continue;
+      }
+      managedPolicies.push(attachedManagedPolicy.Arn);
     }
-    permissionSets.push({
-      permissionSetArn: permissionSet.PermissionSetArn,
-      name: permissionSet.Name,
-      description: permissionSet.Description ?? "",
-    });
-  }
-  return permissionSets;
+    nextToken = response.NextToken;
+  } while (nextToken != null);
+  return managedPolicies;
+}
+
+async function listCustomerManagedPoliciesInPermissionSet(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+  permissionSetArn: string;
+}): Promise<
+  StateFile["identityCenter"]["permissionSets"][number]["customerManagedPolicies"]
+> {
+  const customerManagedPolicies: StateFile["identityCenter"]["permissionSets"][number]["customerManagedPolicies"] =
+    [];
+  let nextToken: string | undefined;
+  do {
+    const response = await props.ssoAdminClient.send(
+      new ListCustomerManagedPolicyReferencesInPermissionSetCommand({
+        InstanceArn: props.instanceArn,
+        PermissionSetArn: props.permissionSetArn,
+        NextToken: nextToken,
+      }),
+    );
+    for (const customerManagedPolicyReference of response.CustomerManagedPolicyReferences ??
+      []) {
+      if (
+        customerManagedPolicyReference.Name == null ||
+        customerManagedPolicyReference.Path == null
+      ) {
+        continue;
+      }
+      customerManagedPolicies.push({
+        name: customerManagedPolicyReference.Name,
+        path: customerManagedPolicyReference.Path,
+      });
+    }
+    nextToken = response.NextToken;
+  } while (nextToken != null);
+  return customerManagedPolicies;
 }
 
 async function listAccountAssignments(props: {

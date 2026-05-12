@@ -109,6 +109,31 @@ function formatHumanOperationLine(operation: Plan["operations"][number]): string
   if (operation.kind === "createIdcPermissionSet") {
     return `  create IdC permission set "${operation.permissionSetName}"`;
   }
+  if (operation.kind === "putIdcPermissionSetInlinePolicy") {
+    return `  put inline policy on IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "deleteIdcPermissionSetInlinePolicy") {
+    return `  delete inline policy from IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "attachIdcManagedPolicyToPermissionSet") {
+    return `  attach managed policy "${operation.managedPolicyArn}" to IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "detachIdcManagedPolicyFromPermissionSet") {
+    return `  detach managed policy "${operation.managedPolicyArn}" from IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (
+    operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet"
+  ) {
+    return `  attach customer-managed policy "${operation.customerManagedPolicyPath}${operation.customerManagedPolicyName}" to IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (
+    operation.kind === "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
+  ) {
+    return `  detach customer-managed policy "${operation.customerManagedPolicyPath}${operation.customerManagedPolicyName}" from IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "provisionIdcPermissionSet") {
+    return `  provision IdC permission set "${operation.permissionSetName}" to all provisioned accounts`;
+  }
   if (operation.kind === "removeIdcGroupMembership") {
     return `  remove user "${operation.userName}" from IdC group "${operation.groupDisplayName}"`;
   }

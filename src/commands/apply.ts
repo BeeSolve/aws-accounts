@@ -17,10 +17,18 @@ import {
 } from "@aws-sdk/client-identitystore";
 import {
   CreateAccountAssignmentCommand,
+  AttachCustomerManagedPolicyReferenceToPermissionSetCommand,
+  AttachManagedPolicyToPermissionSetCommand,
   CreatePermissionSetCommand,
   DeleteAccountAssignmentCommand,
+  DeleteInlinePolicyFromPermissionSetCommand,
   DescribeAccountAssignmentCreationStatusCommand,
   DescribeAccountAssignmentDeletionStatusCommand,
+  DescribePermissionSetProvisioningStatusCommand,
+  DetachCustomerManagedPolicyReferenceFromPermissionSetCommand,
+  DetachManagedPolicyFromPermissionSetCommand,
+  ProvisionPermissionSetCommand,
+  PutInlinePolicyToPermissionSetCommand,
   SSOAdminClient,
 } from "@aws-sdk/client-sso-admin";
 import { createAccountAndMoveToOu } from "../accountCreation.js";
@@ -71,6 +79,10 @@ type ApplyCommandInput = {
       pollIntervalInMs: number;
     };
     accountAssignment: {
+      timeoutInMs: number;
+      pollIntervalInMs: number;
+    };
+    permissionSetProvisioning: {
       timeoutInMs: number;
       pollIntervalInMs: number;
     };
@@ -482,8 +494,219 @@ async function applyOperation(props: {
         permissionSetArn,
         name: operation.permissionSetName,
         description: operation.description,
+        inlinePolicy: null,
+        awsManagedPolicies: [],
+        customerManagedPolicies: [],
       },
     });
+  }
+  if (operation.kind === "putIdcPermissionSetInlinePolicy") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Putting inline policy on IdC permission set "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new PutInlinePolicyToPermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+        InlinePolicy: operation.inlinePolicy,
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertPermissionSetPolicyState({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+      update: (currentPermissionSet) => ({
+        ...currentPermissionSet,
+        inlinePolicy: operation.inlinePolicy,
+      }),
+    });
+  }
+  if (operation.kind === "deleteIdcPermissionSetInlinePolicy") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Deleting inline policy from IdC permission set "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new DeleteInlinePolicyFromPermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertPermissionSetPolicyState({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+      update: (currentPermissionSet) => ({
+        ...currentPermissionSet,
+        inlinePolicy: null,
+      }),
+    });
+  }
+  if (operation.kind === "attachIdcManagedPolicyToPermissionSet") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Attaching managed policy "${operation.managedPolicyArn}" to IdC permission set "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new AttachManagedPolicyToPermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+        ManagedPolicyArn: operation.managedPolicyArn,
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertPermissionSetPolicyState({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+      update: (currentPermissionSet) => ({
+        ...currentPermissionSet,
+        awsManagedPolicies: [
+          ...currentPermissionSet.awsManagedPolicies,
+          operation.managedPolicyArn,
+        ],
+      }),
+    });
+  }
+  if (operation.kind === "detachIdcManagedPolicyFromPermissionSet") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Detaching managed policy "${operation.managedPolicyArn}" from IdC permission set "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new DetachManagedPolicyFromPermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+        ManagedPolicyArn: operation.managedPolicyArn,
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertPermissionSetPolicyState({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+      update: (currentPermissionSet) => ({
+        ...currentPermissionSet,
+        awsManagedPolicies: currentPermissionSet.awsManagedPolicies.filter(
+          (managedPolicyArn) => managedPolicyArn !== operation.managedPolicyArn,
+        ),
+      }),
+    });
+  }
+  if (
+    operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet"
+  ) {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Attaching customer-managed policy "${operation.customerManagedPolicyPath}${operation.customerManagedPolicyName}" to IdC permission set "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new AttachCustomerManagedPolicyReferenceToPermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+        CustomerManagedPolicyReference: {
+          Name: operation.customerManagedPolicyName,
+          Path: operation.customerManagedPolicyPath,
+        },
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertPermissionSetPolicyState({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+      update: (currentPermissionSet) => ({
+        ...currentPermissionSet,
+        customerManagedPolicies: [
+          ...currentPermissionSet.customerManagedPolicies,
+          {
+            name: operation.customerManagedPolicyName,
+            path: operation.customerManagedPolicyPath,
+          },
+        ],
+      }),
+    });
+  }
+  if (
+    operation.kind === "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
+  ) {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Detaching customer-managed policy "${operation.customerManagedPolicyPath}${operation.customerManagedPolicyName}" from IdC permission set "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new DetachCustomerManagedPolicyReferenceFromPermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+        CustomerManagedPolicyReference: {
+          Name: operation.customerManagedPolicyName,
+          Path: operation.customerManagedPolicyPath,
+        },
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertPermissionSetPolicyState({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+      update: (currentPermissionSet) => ({
+        ...currentPermissionSet,
+        customerManagedPolicies: currentPermissionSet.customerManagedPolicies.filter(
+          (customerManagedPolicy) =>
+            customerManagedPolicy.name !== operation.customerManagedPolicyName ||
+            customerManagedPolicy.path !== operation.customerManagedPolicyPath,
+        ),
+      }),
+    });
+  }
+  if (operation.kind === "provisionIdcPermissionSet") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Provisioning IdC permission set "${operation.permissionSetName}" to all provisioned accounts...`,
+    );
+    const response = await props.ssoAdminClient.send(
+      new ProvisionPermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+        TargetType: operation.targetScope,
+      }),
+    );
+    const requestId =
+      response.PermissionSetProvisioningStatus?.RequestId ?? undefined;
+    if (requestId == null) {
+      throw new Error(
+        `ProvisionPermissionSet for "${operation.permissionSetName}" returned no request id.`,
+      );
+    }
+    await waitForPermissionSetProvisioningSuccess({
+      ssoAdminClient: props.ssoAdminClient,
+      logger: props.logger,
+      instanceArn: props.state.identityCenter.instanceArn,
+      requestId,
+      timeoutInMs: props.runtime.permissionSetProvisioning.timeoutInMs,
+      pollIntervalInMs: props.runtime.permissionSetProvisioning.pollIntervalInMs,
+      operationLabel: `"${operation.permissionSetName}"`,
+    });
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return props.state;
   }
   if (operation.kind === "removeIdcGroupMembership") {
     const resolvedMembership = resolveGroupMembershipDependencies({
@@ -698,6 +921,31 @@ function formatApplyOperationLine(operation: Operation): string {
   if (operation.kind === "createIdcPermissionSet") {
     return `  create IdC permission set "${operation.permissionSetName}"`;
   }
+  if (operation.kind === "putIdcPermissionSetInlinePolicy") {
+    return `  put inline policy on IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "deleteIdcPermissionSetInlinePolicy") {
+    return `  delete inline policy from IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "attachIdcManagedPolicyToPermissionSet") {
+    return `  attach managed policy "${operation.managedPolicyArn}" to IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "detachIdcManagedPolicyFromPermissionSet") {
+    return `  detach managed policy "${operation.managedPolicyArn}" from IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (
+    operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet"
+  ) {
+    return `  attach customer-managed policy "${operation.customerManagedPolicyPath}${operation.customerManagedPolicyName}" to IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (
+    operation.kind === "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
+  ) {
+    return `  detach customer-managed policy "${operation.customerManagedPolicyPath}${operation.customerManagedPolicyName}" from IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "provisionIdcPermissionSet") {
+    return `  provision IdC permission set "${operation.permissionSetName}" to all provisioned accounts`;
+  }
   if (operation.kind === "removeIdcGroupMembership") {
     return `  remove user "${operation.userName}" from IdC group "${operation.groupDisplayName}"`;
   }
@@ -772,6 +1020,52 @@ function resolveAssignmentDependencies(props: {
     principalId: user.userId,
     principalType: props.principalType,
   };
+}
+
+function resolvePermissionSetByName(props: {
+  state: WorkingState;
+  permissionSetName: string;
+}) {
+  const permissionSet =
+    props.state.identityCenter.permissionSetsByName[props.permissionSetName];
+  if (permissionSet == null) {
+    throw new Error(
+      `Could not resolve permission set "${props.permissionSetName}" in working state.`,
+    );
+  }
+  return permissionSet;
+}
+
+function upsertPermissionSetPolicyState(props: {
+  state: WorkingState;
+  permissionSetName: string;
+  update: (
+    permissionSet: WorkingState["identityCenter"]["permissionSets"][number],
+  ) => WorkingState["identityCenter"]["permissionSets"][number];
+}): WorkingState {
+  const permissionSet = resolvePermissionSetByName({
+    state: props.state,
+    permissionSetName: props.permissionSetName,
+  });
+  const nextPermissionSet = props.update(permissionSet);
+  return upsertIdcPermissionSetInWorkingState({
+    workingState: props.state,
+    permissionSet: {
+      ...nextPermissionSet,
+      awsManagedPolicies: [...new Set(nextPermissionSet.awsManagedPolicies)].sort(
+        (left, right) => left.localeCompare(right),
+      ),
+      customerManagedPolicies: [
+        ...nextPermissionSet.customerManagedPolicies,
+      ].sort((left, right) => {
+        const pathComparison = left.path.localeCompare(right.path);
+        if (pathComparison !== 0) {
+          return pathComparison;
+        }
+        return left.name.localeCompare(right.name);
+      }),
+    },
+  });
 }
 
 function buildIdentityStoreUserName(props: { displayName: string }): {
@@ -952,6 +1246,45 @@ async function waitForAccountAssignmentDeletionSuccess(props: {
   }
   throw new Error(
     `DeleteAccountAssignment timed out after ${props.timeoutInMs}ms for ${props.operationLabel}.`,
+  );
+}
+
+async function waitForPermissionSetProvisioningSuccess(props: {
+  ssoAdminClient: SSOAdminClient;
+  logger: Logger;
+  instanceArn: string;
+  requestId: string;
+  timeoutInMs: number;
+  pollIntervalInMs: number;
+  operationLabel: string;
+}): Promise<void> {
+  const startedAt = Date.now();
+  let lastStatus: string | undefined;
+  while (Date.now() - startedAt < props.timeoutInMs) {
+    const response = await props.ssoAdminClient.send(
+      new DescribePermissionSetProvisioningStatusCommand({
+        InstanceArn: props.instanceArn,
+        ProvisionPermissionSetRequestId: props.requestId,
+      }),
+    );
+    const status = response.PermissionSetProvisioningStatus;
+    const state = status?.Status ?? "UNKNOWN";
+    if (state !== lastStatus) {
+      props.logger.log(`ProvisionPermissionSet status: ${state}`);
+      lastStatus = state;
+    }
+    if (state === "SUCCEEDED") {
+      return;
+    }
+    if (state === "FAILED") {
+      throw new Error(
+        `ProvisionPermissionSet failed for ${props.operationLabel}: ${status?.FailureReason ?? "unknown reason"}.`,
+      );
+    }
+    await delay(props.pollIntervalInMs);
+  }
+  throw new Error(
+    `ProvisionPermissionSet timed out after ${props.timeoutInMs}ms for ${props.operationLabel}.`,
   );
 }
 

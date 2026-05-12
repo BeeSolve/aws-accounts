@@ -320,6 +320,8 @@ test("mapAwsConfigToState emits sentinel ids for entities missing in current sta
     config.permissionSets.push({
       name: "ReadOnly",
       description: "Read-only access",
+      awsManagedPolicies: [],
+      customerManagedPolicies: [],
     });
     config.assignments.push({
       permissionSet: "ReadOnly",
@@ -503,6 +505,107 @@ test("mapAwsConfigToState keeps existing ids for unchanged config entities", asy
   }
 });
 
+test("permission set policy state round-trips between state and config", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+
+    const rawState = JSON.parse(await readFile(statePath, "utf8")) as {
+      identityCenter: {
+        permissionSets: Array<{
+          permissionSetArn: string;
+          name: string;
+          description: string;
+          inlinePolicy: string | null;
+          awsManagedPolicies: string[];
+          customerManagedPolicies: Array<{ name: string; path: string }>;
+        }>;
+      };
+    };
+    rawState.identityCenter.permissionSets[0] = {
+      ...rawState.identityCenter.permissionSets[0],
+      inlinePolicy:
+        '{"Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"*"}],"Version":"2012-10-17"}',
+      awsManagedPolicies: ["arn:aws:iam::aws:policy/ReadOnlyAccess"],
+      customerManagedPolicies: [
+        {
+          name: "SupportReadOnly",
+          path: "/beesolve/",
+        },
+      ],
+    };
+    await writeFile(statePath, `${JSON.stringify(rawState, null, 2)}\n`, "utf8");
+
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    const [config, currentState, context, configRaw] = await Promise.all([
+      loadAwsConfigModelFromTsFile({
+        configPath,
+        typesPath,
+      }),
+      readStateFile(statePath),
+      readAwsContextFromFile(contextPath),
+      readFile(configPath, "utf8"),
+    ]);
+
+    assert.match(configRaw, /"inlinePolicy": \{/);
+    assert.match(configRaw, /"Version": "2012-10-17"/);
+    assert.match(
+      configRaw,
+      /"arn:aws:iam::aws:policy\/ReadOnlyAccess"/,
+    );
+    assert.match(configRaw, /"customerManagedPolicies": \[/);
+    assert.deepEqual(config.permissionSets[0]?.inlinePolicy, {
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: ["s3:GetObject"],
+          Resource: "*",
+        },
+      ],
+      Version: "2012-10-17",
+    });
+
+    const mapped = mapAwsConfigToState({
+      config,
+      currentState,
+      context,
+    });
+    assert.equal(
+      mapped.identityCenter.permissionSets[0]?.inlinePolicy,
+      '{"Statement":[{"Action":["s3:GetObject"],"Effect":"Allow","Resource":"*"}],"Version":"2012-10-17"}',
+    );
+    assert.deepEqual(mapped.identityCenter.permissionSets[0]?.awsManagedPolicies, [
+      "arn:aws:iam::aws:policy/ReadOnlyAccess",
+    ]);
+    assert.deepEqual(
+      mapped.identityCenter.permissionSets[0]?.customerManagedPolicies,
+      [
+        {
+          name: "SupportReadOnly",
+          path: "/beesolve/",
+        },
+      ],
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 async function writeFixtureFiles(props: {
   statePath: string;
   contextPath: string;
@@ -566,6 +669,9 @@ async function writeFixtureFiles(props: {
           permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
           name: "AdminAccess",
           description: "Admin",
+          inlinePolicy: null,
+          awsManagedPolicies: [],
+          customerManagedPolicies: [],
         },
       ],
       accountAssignments: [

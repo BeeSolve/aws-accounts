@@ -72,6 +72,51 @@ const createIdcPermissionSetOperationSchema = v.strictObject({
   description: v.string(),
 });
 
+const putIdcPermissionSetInlinePolicyOperationSchema = v.strictObject({
+  kind: v.literal("putIdcPermissionSetInlinePolicy"),
+  permissionSetName: v.string(),
+  inlinePolicy: v.string(),
+});
+
+const deleteIdcPermissionSetInlinePolicyOperationSchema = v.strictObject({
+  kind: v.literal("deleteIdcPermissionSetInlinePolicy"),
+  permissionSetName: v.string(),
+});
+
+const attachIdcManagedPolicyToPermissionSetOperationSchema = v.strictObject({
+  kind: v.literal("attachIdcManagedPolicyToPermissionSet"),
+  permissionSetName: v.string(),
+  managedPolicyArn: v.string(),
+});
+
+const detachIdcManagedPolicyFromPermissionSetOperationSchema = v.strictObject({
+  kind: v.literal("detachIdcManagedPolicyFromPermissionSet"),
+  permissionSetName: v.string(),
+  managedPolicyArn: v.string(),
+});
+
+const attachIdcCustomerManagedPolicyReferenceToPermissionSetOperationSchema =
+  v.strictObject({
+    kind: v.literal("attachIdcCustomerManagedPolicyReferenceToPermissionSet"),
+    permissionSetName: v.string(),
+    customerManagedPolicyName: v.string(),
+    customerManagedPolicyPath: v.string(),
+  });
+
+const detachIdcCustomerManagedPolicyReferenceFromPermissionSetOperationSchema =
+  v.strictObject({
+    kind: v.literal("detachIdcCustomerManagedPolicyReferenceFromPermissionSet"),
+    permissionSetName: v.string(),
+    customerManagedPolicyName: v.string(),
+    customerManagedPolicyPath: v.string(),
+  });
+
+const provisionIdcPermissionSetOperationSchema = v.strictObject({
+  kind: v.literal("provisionIdcPermissionSet"),
+  permissionSetName: v.string(),
+  targetScope: v.literal("ALL_PROVISIONED_ACCOUNTS"),
+});
+
 const grantIdcAccountAssignmentOperationSchema = v.strictObject({
   kind: v.literal("grantIdcAccountAssignment"),
   accountName: v.string(),
@@ -99,6 +144,13 @@ export const operationSchema = v.variant("kind", [
   addIdcGroupMembershipOperationSchema,
   removeIdcGroupMembershipOperationSchema,
   createIdcPermissionSetOperationSchema,
+  putIdcPermissionSetInlinePolicyOperationSchema,
+  deleteIdcPermissionSetInlinePolicyOperationSchema,
+  attachIdcManagedPolicyToPermissionSetOperationSchema,
+  detachIdcManagedPolicyFromPermissionSetOperationSchema,
+  attachIdcCustomerManagedPolicyReferenceToPermissionSetOperationSchema,
+  detachIdcCustomerManagedPolicyReferenceFromPermissionSetOperationSchema,
+  provisionIdcPermissionSetOperationSchema,
   grantIdcAccountAssignmentOperationSchema,
   revokeIdcAccountAssignmentOperationSchema,
 ]);
@@ -152,6 +204,29 @@ export type RemoveIdcGroupMembershipOperation = v.InferOutput<
 >;
 export type CreateIdcPermissionSetOperation = v.InferOutput<
   typeof createIdcPermissionSetOperationSchema
+>;
+export type PutIdcPermissionSetInlinePolicyOperation = v.InferOutput<
+  typeof putIdcPermissionSetInlinePolicyOperationSchema
+>;
+export type DeleteIdcPermissionSetInlinePolicyOperation = v.InferOutput<
+  typeof deleteIdcPermissionSetInlinePolicyOperationSchema
+>;
+export type AttachIdcManagedPolicyToPermissionSetOperation = v.InferOutput<
+  typeof attachIdcManagedPolicyToPermissionSetOperationSchema
+>;
+export type DetachIdcManagedPolicyFromPermissionSetOperation = v.InferOutput<
+  typeof detachIdcManagedPolicyFromPermissionSetOperationSchema
+>;
+export type AttachIdcCustomerManagedPolicyReferenceToPermissionSetOperation =
+  v.InferOutput<
+    typeof attachIdcCustomerManagedPolicyReferenceToPermissionSetOperationSchema
+  >;
+export type DetachIdcCustomerManagedPolicyReferenceFromPermissionSetOperation =
+  v.InferOutput<
+    typeof detachIdcCustomerManagedPolicyReferenceFromPermissionSetOperationSchema
+  >;
+export type ProvisionIdcPermissionSetOperation = v.InferOutput<
+  typeof provisionIdcPermissionSetOperationSchema
 >;
 export type GrantIdcAccountAssignmentOperation = v.InferOutput<
   typeof grantIdcAccountAssignmentOperationSchema

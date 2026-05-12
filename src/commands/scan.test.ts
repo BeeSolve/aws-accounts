@@ -17,9 +17,12 @@ import {
 } from "@aws-sdk/client-organizations";
 import {
   DescribePermissionSetCommand,
+  GetInlinePolicyForPermissionSetCommand,
   ListAccountAssignmentsCommand,
   ListAccountsForProvisionedPermissionSetCommand,
+  ListCustomerManagedPolicyReferencesInPermissionSetCommand,
   ListInstancesCommand,
+  ListManagedPoliciesInPermissionSetCommand,
   ListPermissionSetsCommand,
   type SSOAdminClient,
 } from "@aws-sdk/client-sso-admin";
@@ -60,6 +63,23 @@ test(
       assert.equal(result.state.identityCenter.permissionSets.length, 1);
       assert.equal(result.state.identityCenter.accountAssignments.length, 1);
       assert.equal(result.state.identityCenter.accessRoles.length, 1);
+      assert.equal(
+        result.state.identityCenter.permissionSets[0]?.inlinePolicy,
+        '{"Statement":[{"Action":["s3:GetObject"],"Effect":"Allow","Resource":"*"}],"Version":"2012-10-17"}',
+      );
+      assert.deepEqual(
+        result.state.identityCenter.permissionSets[0]?.awsManagedPolicies,
+        ["arn:aws:iam::aws:policy/ReadOnlyAccess"],
+      );
+      assert.deepEqual(
+        result.state.identityCenter.permissionSets[0]?.customerManagedPolicies,
+        [
+          {
+            name: "SupportReadOnly",
+            path: "/beesolve/",
+          },
+        ],
+      );
       assert.match(
         result.state.identityCenter.accessRoles[0].roleName,
         /^AWSReservedSSO_/,
@@ -191,6 +211,33 @@ function createSsoAdminClientMock(props: {
             Name: "AdminAccess",
             Description: "Admin access",
           },
+        };
+      }
+      if (command instanceof GetInlinePolicyForPermissionSetCommand) {
+        return {
+          InlinePolicy:
+            '{"Statement":[{"Action":["s3:GetObject"],"Effect":"Allow","Resource":"*"}],"Version":"2012-10-17"}',
+        };
+      }
+      if (command instanceof ListManagedPoliciesInPermissionSetCommand) {
+        return {
+          AttachedManagedPolicies: [
+            {
+              Arn: "arn:aws:iam::aws:policy/ReadOnlyAccess",
+            },
+          ],
+        };
+      }
+      if (
+        command instanceof ListCustomerManagedPolicyReferencesInPermissionSetCommand
+      ) {
+        return {
+          CustomerManagedPolicyReferences: [
+            {
+              Name: "SupportReadOnly",
+              Path: "/beesolve/",
+            },
+          ],
         };
       }
       if (command instanceof ListAccountsForProvisionedPermissionSetCommand) {

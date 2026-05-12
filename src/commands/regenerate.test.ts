@@ -140,6 +140,9 @@ async function writeFixtureFiles(props: {
           permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
           name: "AdminAccess",
           description: "Admin",
+          inlinePolicy: null,
+          awsManagedPolicies: [],
+          customerManagedPolicies: [],
         },
       ],
       accountAssignments: [

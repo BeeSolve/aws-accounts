@@ -18,9 +18,12 @@ import {
 } from "@aws-sdk/client-organizations";
 import {
   DescribePermissionSetCommand,
+  GetInlinePolicyForPermissionSetCommand,
   ListAccountAssignmentsCommand,
   ListAccountsForProvisionedPermissionSetCommand,
+  ListCustomerManagedPolicyReferencesInPermissionSetCommand,
   ListInstancesCommand,
+  ListManagedPoliciesInPermissionSetCommand,
   ListPermissionSetsCommand,
   type SSOAdminClient,
 } from "@aws-sdk/client-sso-admin";
@@ -193,6 +196,21 @@ function createSsoAdminClientMock(): SSOAdminClient {
             Name: "AdminAccess",
             Description: "Admin",
           },
+        };
+      }
+      if (command instanceof GetInlinePolicyForPermissionSetCommand) {
+        return {};
+      }
+      if (command instanceof ListManagedPoliciesInPermissionSetCommand) {
+        return {
+          AttachedManagedPolicies: [],
+        };
+      }
+      if (
+        command instanceof ListCustomerManagedPolicyReferencesInPermissionSetCommand
+      ) {
+        return {
+          CustomerManagedPolicyReferences: [],
         };
       }
       if (command instanceof ListAccountsForProvisionedPermissionSetCommand) {

@@ -17,10 +17,17 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   createIdcGroup: 6,
   addIdcGroupMembership: 7,
   createIdcPermissionSet: 8,
-  grantIdcAccountAssignment: 9,
-  removeIdcGroupMembership: 10,
-  revokeIdcAccountAssignment: 11,
-  deleteOu: 12,
+  putIdcPermissionSetInlinePolicy: 9,
+  deleteIdcPermissionSetInlinePolicy: 10,
+  attachIdcManagedPolicyToPermissionSet: 11,
+  detachIdcManagedPolicyFromPermissionSet: 12,
+  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 13,
+  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 14,
+  provisionIdcPermissionSet: 15,
+  grantIdcAccountAssignment: 16,
+  removeIdcGroupMembership: 17,
+  revokeIdcAccountAssignment: 18,
+  deleteOu: 19,
 };
 
 type DiffStatesProps = {
@@ -427,6 +434,11 @@ export function diffStates(props: DiffStatesProps): Plan {
       )
       .map((group) => group.displayName),
   );
+  const permissionSetNamesWithDesiredAssignments = new Set(
+    [...nextIdcView.assignmentsByKey.values()].map(
+      (assignment) => assignment.permissionSetName,
+    ),
+  );
 
   for (const nextMembership of nextIdcView.membershipsByKey.values()) {
     const membershipKey = createNormalizedIdcMembershipKey({
@@ -465,14 +477,108 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const nextPermissionSet of props.next.identityCenter.permissionSets) {
-    if (currentIdcView.permissionSetsByName.has(nextPermissionSet.name)) {
-      continue;
+    const currentPermissionSet =
+      currentIdcView.permissionSetsByName.get(nextPermissionSet.name);
+    if (currentPermissionSet == null) {
+      operations.push({
+        kind: "createIdcPermissionSet",
+        permissionSetName: nextPermissionSet.name,
+        description: nextPermissionSet.description,
+      });
     }
-    operations.push({
-      kind: "createIdcPermissionSet",
-      permissionSetName: nextPermissionSet.name,
-      description: nextPermissionSet.description,
-    });
+
+    const policyOperationStartIndex = operations.length;
+    const currentInlinePolicy = normalizeInlinePolicyString(
+      currentPermissionSet?.inlinePolicy ?? null,
+    );
+    const nextInlinePolicy = normalizeInlinePolicyString(
+      nextPermissionSet.inlinePolicy,
+    );
+    if (nextInlinePolicy != null && nextInlinePolicy !== currentInlinePolicy) {
+      operations.push({
+        kind: "putIdcPermissionSetInlinePolicy",
+        permissionSetName: nextPermissionSet.name,
+        inlinePolicy: nextInlinePolicy,
+      });
+    }
+    if (nextInlinePolicy == null && currentInlinePolicy != null) {
+      operations.push({
+        kind: "deleteIdcPermissionSetInlinePolicy",
+        permissionSetName: nextPermissionSet.name,
+      });
+    }
+
+    const currentAwsManagedPolicies = new Set(
+      currentPermissionSet?.awsManagedPolicies ?? [],
+    );
+    const nextAwsManagedPolicies = new Set(nextPermissionSet.awsManagedPolicies);
+    for (const managedPolicyArn of nextAwsManagedPolicies) {
+      if (currentAwsManagedPolicies.has(managedPolicyArn)) {
+        continue;
+      }
+      operations.push({
+        kind: "attachIdcManagedPolicyToPermissionSet",
+        permissionSetName: nextPermissionSet.name,
+        managedPolicyArn,
+      });
+    }
+    for (const managedPolicyArn of currentAwsManagedPolicies) {
+      if (nextAwsManagedPolicies.has(managedPolicyArn)) {
+        continue;
+      }
+      operations.push({
+        kind: "detachIdcManagedPolicyFromPermissionSet",
+        permissionSetName: nextPermissionSet.name,
+        managedPolicyArn,
+      });
+    }
+
+    const currentCustomerManagedPolicies = new Map(
+      (currentPermissionSet?.customerManagedPolicies ?? []).map((policy) => [
+        createCustomerManagedPolicyReferenceKey(policy),
+        policy,
+      ]),
+    );
+    const nextCustomerManagedPolicies = new Map(
+      nextPermissionSet.customerManagedPolicies.map((policy) => [
+        createCustomerManagedPolicyReferenceKey(policy),
+        policy,
+      ]),
+    );
+    for (const [policyKey, customerManagedPolicy] of nextCustomerManagedPolicies) {
+      if (currentCustomerManagedPolicies.has(policyKey)) {
+        continue;
+      }
+      operations.push({
+        kind: "attachIdcCustomerManagedPolicyReferenceToPermissionSet",
+        permissionSetName: nextPermissionSet.name,
+        customerManagedPolicyName: customerManagedPolicy.name,
+        customerManagedPolicyPath: customerManagedPolicy.path,
+      });
+    }
+    for (const [policyKey, customerManagedPolicy] of currentCustomerManagedPolicies) {
+      if (nextCustomerManagedPolicies.has(policyKey)) {
+        continue;
+      }
+      operations.push({
+        kind: "detachIdcCustomerManagedPolicyReferenceFromPermissionSet",
+        permissionSetName: nextPermissionSet.name,
+        customerManagedPolicyName: customerManagedPolicy.name,
+        customerManagedPolicyPath: customerManagedPolicy.path,
+      });
+    }
+
+    if (
+      currentPermissionSet != null &&
+      operations.length > policyOperationStartIndex &&
+      permissionSetNamesWithDesiredAssignments.has(nextPermissionSet.name)
+    ) {
+      operations.push({
+        kind: "provisionIdcPermissionSet",
+        permissionSetName: nextPermissionSet.name,
+        targetScope: "ALL_PROVISIONED_ACCOUNTS",
+      });
+    }
   }
   for (const currentPermissionSet of props.current.identityCenter
     .permissionSets) {
@@ -778,6 +884,34 @@ function getOperationSortKey(operation: Operation): string {
     return `${operation.kind}|${operation.permissionSetName}`;
   }
   if (
+    operation.kind === "putIdcPermissionSetInlinePolicy" ||
+    operation.kind === "deleteIdcPermissionSetInlinePolicy" ||
+    operation.kind === "provisionIdcPermissionSet"
+  ) {
+    return `${operation.kind}|${operation.permissionSetName}`;
+  }
+  if (
+    operation.kind === "attachIdcManagedPolicyToPermissionSet" ||
+    operation.kind === "detachIdcManagedPolicyFromPermissionSet"
+  ) {
+    return [
+      operation.kind,
+      operation.permissionSetName,
+      operation.managedPolicyArn,
+    ].join("|");
+  }
+  if (
+    operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet" ||
+    operation.kind === "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
+  ) {
+    return [
+      operation.kind,
+      operation.permissionSetName,
+      operation.customerManagedPolicyPath,
+      operation.customerManagedPolicyName,
+    ].join("|");
+  }
+  if (
     operation.kind === "grantIdcAccountAssignment" ||
     operation.kind === "revokeIdcAccountAssignment"
   ) {
@@ -943,6 +1077,38 @@ function createNormalizedIdcAssignmentKey(props: {
     props.assignment.principalType,
     props.assignment.principalName,
   ].join("|");
+}
+
+function createCustomerManagedPolicyReferenceKey(props: {
+  name: string;
+  path: string;
+}): string {
+  return [props.path, props.name].join("|");
+}
+
+function normalizeInlinePolicyString(value: string | null): string | null {
+  if (value == null) {
+    return null;
+  }
+  try {
+    return JSON.stringify(sortJsonValue(JSON.parse(value) as unknown));
+  } catch {
+    return value;
+  }
+}
+
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sortJsonValue(entry));
+  }
+  if (value != null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+        .map(([key, nestedValue]) => [key, sortJsonValue(nestedValue)]),
+    );
+  }
+  return value;
 }
 
 function shouldSuppressDerivativeGroupMembershipRemoval(props: {

@@ -69,6 +69,14 @@ const awsConfigModelSchema = v.strictObject({
     v.strictObject({
       name: v.string(),
       description: v.string(),
+      inlinePolicy: v.optional(v.record(v.string(), v.unknown())),
+      awsManagedPolicies: v.array(v.string()),
+      customerManagedPolicies: v.array(
+        v.strictObject({
+          name: v.string(),
+          path: v.string(),
+        }),
+      ),
     }),
   ),
   assignments: v.array(
@@ -521,6 +529,20 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       (permissionSet) => ({
         name: permissionSet.name,
         description: permissionSet.description,
+        inlinePolicy:
+          permissionSet.inlinePolicy == null
+            ? undefined
+            : parseInlinePolicyForConfig({
+                permissionSetName: permissionSet.name,
+                inlinePolicy: permissionSet.inlinePolicy,
+              }),
+        awsManagedPolicies: [...permissionSet.awsManagedPolicies],
+        customerManagedPolicies: permissionSet.customerManagedPolicies.map(
+          (customerManagedPolicy) => ({
+            name: customerManagedPolicy.name,
+            path: customerManagedPolicy.path,
+          }),
+        ),
       }),
     ),
     assignments: [...assignmentsByKey.values()],
@@ -746,6 +768,14 @@ export function mapAwsConfigToState(
           matchedPermissionSet?.permissionSetArn ?? pendingCreationId,
         name: permissionSet.name,
         description: permissionSet.description,
+        inlinePolicy: stableStringifyInlinePolicy(permissionSet.inlinePolicy),
+        awsManagedPolicies: [...permissionSet.awsManagedPolicies],
+        customerManagedPolicies: permissionSet.customerManagedPolicies.map(
+          (customerManagedPolicy) => ({
+            name: customerManagedPolicy.name,
+            path: customerManagedPolicy.path,
+          }),
+        ),
       };
     });
   const mappedPermissionSetByName = toRecordByProperty(
@@ -907,9 +937,22 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
         ),
       }))
       .sort((left, right) => left.displayName.localeCompare(right.displayName)),
-    permissionSets: [...props.config.permissionSets].sort((left, right) =>
-      left.name.localeCompare(right.name),
-    ),
+    permissionSets: [...props.config.permissionSets]
+      .map((permissionSet) => ({
+        ...permissionSet,
+        inlinePolicy:
+          permissionSet.inlinePolicy == null
+            ? undefined
+            : sortJsonRecord(permissionSet.inlinePolicy),
+        awsManagedPolicies: [...permissionSet.awsManagedPolicies].sort(
+          (left, right) => left.localeCompare(right),
+        ),
+        customerManagedPolicies: [...permissionSet.customerManagedPolicies].sort(
+          (left, right) =>
+            compareStringKeys(left.path, right.path, left.name, right.name),
+        ),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
     assignments: [...props.config.assignments]
       .map((assignment) => ({
         ...assignment,
@@ -1016,6 +1059,14 @@ export const awsConfigSchema = v.strictObject({
     v.strictObject({
       name: v.string(),
       description: v.string(),
+      inlinePolicy: v.optional(v.record(v.string(), v.unknown())),
+      awsManagedPolicies: v.array(v.string()),
+      customerManagedPolicies: v.array(
+        v.strictObject({
+          name: v.string(),
+          path: v.string(),
+        }),
+      ),
     }),
   ),
   assignments: v.array(
@@ -1139,6 +1190,70 @@ function createGroupMembershipNameKey(props: {
   userName: string;
 }): string {
   return [props.groupDisplayName, props.userName].join("|");
+}
+
+function parseInlinePolicyForConfig(props: {
+  permissionSetName: string;
+  inlinePolicy: string;
+}): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(props.inlinePolicy) as unknown;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Could not parse inline policy for permission set "${props.permissionSetName}": ${message}`,
+    );
+  }
+  if (isJsonRecord(parsed) === false) {
+    throw new Error(
+      `Inline policy for permission set "${props.permissionSetName}" must be a JSON object.`,
+    );
+  }
+  return sortJsonRecord(parsed);
+}
+
+function stableStringifyInlinePolicy(
+  inlinePolicy: Record<string, unknown> | undefined,
+): string | null {
+  if (inlinePolicy == null) {
+    return null;
+  }
+  return JSON.stringify(sortJsonRecord(inlinePolicy));
+}
+
+function sortJsonRecord(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(input)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([key, value]) => [key, sortJsonValue(value)]),
+  );
+}
+
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sortJsonValue(entry));
+  }
+  if (isJsonRecord(value)) {
+    return sortJsonRecord(value);
+  }
+  return value;
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && Array.isArray(value) === false;
+}
+
+function compareStringKeys(...values: string[]): number {
+  for (let index = 0; index < values.length; index += 2) {
+    const left = values[index] ?? "";
+    const right = values[index + 1] ?? "";
+    const compared = left.localeCompare(right);
+    if (compared !== 0) {
+      return compared;
+    }
+  }
+  return 0;
 }
 
 function resolveOrganizationalUnitId(props: {

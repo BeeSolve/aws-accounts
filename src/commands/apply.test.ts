@@ -9,11 +9,19 @@ import {
   type IdentitystoreClient,
 } from "@aws-sdk/client-identitystore";
 import {
+  AttachCustomerManagedPolicyReferenceToPermissionSetCommand,
+  AttachManagedPolicyToPermissionSetCommand,
   CreateAccountAssignmentCommand,
   CreatePermissionSetCommand,
   DeleteAccountAssignmentCommand,
+  DeleteInlinePolicyFromPermissionSetCommand,
   DescribeAccountAssignmentCreationStatusCommand,
   DescribeAccountAssignmentDeletionStatusCommand,
+  DescribePermissionSetProvisioningStatusCommand,
+  DetachCustomerManagedPolicyReferenceFromPermissionSetCommand,
+  DetachManagedPolicyFromPermissionSetCommand,
+  ProvisionPermissionSetCommand,
+  PutInlinePolicyToPermissionSetCommand,
   type SSOAdminClient,
 } from "@aws-sdk/client-sso-admin";
 import {
@@ -1427,6 +1435,8 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
         config.permissionSets.push({
           name: "ReadOnly",
           description: "Read only",
+          awsManagedPolicies: [],
+          customerManagedPolicies: [],
         });
       },
     });
@@ -1564,6 +1574,192 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
   }
 });
 
+test("runApplyCommand applies permission set policy updates and provisioning", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    const rawState = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        permissionSets: Array<{
+          permissionSetArn: string;
+          name: string;
+          description: string;
+          inlinePolicy: string | null;
+          awsManagedPolicies: string[];
+          customerManagedPolicies: Array<{ name: string; path: string }>;
+        }>;
+        accountAssignments: Array<{
+          accountId: string;
+          permissionSetArn: string;
+          principalId: string;
+          principalType: "GROUP" | "USER";
+        }>;
+      };
+    };
+    rawState.identityCenter.permissionSets[0] = {
+      ...rawState.identityCenter.permissionSets[0],
+      inlinePolicy:
+        '{"Statement":[{"Action":["s3:GetObject"],"Effect":"Allow","Resource":"*"}],"Version":"2012-10-17"}',
+      awsManagedPolicies: ["arn:aws:iam::aws:policy/ReadOnlyAccess"],
+      customerManagedPolicies: [
+        {
+          name: "SupportReadOnly",
+          path: "/beesolve/",
+        },
+      ],
+    };
+    rawState.identityCenter.accountAssignments.push({
+      accountId: "111111111111",
+      permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+      principalId: "g-123",
+      principalType: "GROUP",
+    });
+    await writeFile(paths.statePath, `${JSON.stringify(rawState, null, 2)}\n`, "utf8");
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const adminAccess = config.permissionSets.find(
+          (permissionSet) => permissionSet.name === "AdminAccess",
+        );
+        if (adminAccess == null) {
+          throw new Error('Expected "AdminAccess" permission set.');
+        }
+        adminAccess.inlinePolicy = {
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Allow",
+              Action: ["ec2:Describe*"],
+              Resource: "*",
+            },
+          ],
+        };
+        adminAccess.awsManagedPolicies = [
+          "arn:aws:iam::aws:policy/ViewOnlyAccess",
+        ];
+        adminAccess.customerManagedPolicies = [
+          {
+            name: "SupportReadWrite",
+            path: "/beesolve/",
+          },
+        ];
+      },
+    });
+
+    const seenCalls: string[] = [];
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({}),
+      ssoAdminClient: createSsoAdminClientMock({
+        onPutInlinePolicy: async (input) => {
+          seenCalls.push("put-inline");
+          assert.equal(
+            input.PermissionSetArn,
+            "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+          );
+        },
+        onAttachManagedPolicy: async (input) => {
+          seenCalls.push("attach-managed");
+          assert.equal(
+            input.ManagedPolicyArn,
+            "arn:aws:iam::aws:policy/ViewOnlyAccess",
+          );
+        },
+        onDetachManagedPolicy: async (input) => {
+          seenCalls.push("detach-managed");
+          assert.equal(
+            input.ManagedPolicyArn,
+            "arn:aws:iam::aws:policy/ReadOnlyAccess",
+          );
+        },
+        onAttachCustomerManagedPolicyReference: async (input) => {
+          seenCalls.push("attach-customer");
+          assert.deepEqual(input.CustomerManagedPolicyReference, {
+            Name: "SupportReadWrite",
+            Path: "/beesolve/",
+          });
+        },
+        onDetachCustomerManagedPolicyReference: async (input) => {
+          seenCalls.push("detach-customer");
+          assert.deepEqual(input.CustomerManagedPolicyReference, {
+            Name: "SupportReadOnly",
+            Path: "/beesolve/",
+          });
+        },
+        onProvisionPermissionSet: async (input) => {
+          seenCalls.push("provision");
+          assert.equal(
+            input.PermissionSetArn,
+            "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+          );
+          assert.equal(input.TargetType, "ALL_PROVISIONED_ACCOUNTS");
+        },
+      }),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 6);
+    assert.deepEqual(seenCalls, [
+      "put-inline",
+      "attach-managed",
+      "detach-managed",
+      "attach-customer",
+      "detach-customer",
+      "provision",
+    ]);
+
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        permissionSets: Array<{
+          permissionSetArn: string;
+          name: string;
+          inlinePolicy: string | null;
+          awsManagedPolicies: string[];
+          customerManagedPolicies: Array<{ name: string; path: string }>;
+        }>;
+      };
+    };
+    const adminAccess = persisted.identityCenter.permissionSets.find(
+      (permissionSet) => permissionSet.name === "AdminAccess",
+    );
+    assert.equal(
+      adminAccess?.inlinePolicy,
+      '{"Statement":[{"Action":["ec2:Describe*"],"Effect":"Allow","Resource":"*"}],"Version":"2012-10-17"}',
+    );
+    assert.deepEqual(adminAccess?.awsManagedPolicies, [
+      "arn:aws:iam::aws:policy/ViewOnlyAccess",
+    ]);
+    assert.deepEqual(adminAccess?.customerManagedPolicies, [
+      {
+        name: "SupportReadWrite",
+        path: "/beesolve/",
+      },
+    ]);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand resolves mixed dependency batches from working state", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
@@ -1601,6 +1797,8 @@ test("runApplyCommand resolves mixed dependency batches from working state", asy
         config.permissionSets.push({
           name: "ReadOnly",
           description: "Read only",
+          awsManagedPolicies: [],
+          customerManagedPolicies: [],
         });
       },
     });
@@ -1955,6 +2153,7 @@ function getFixturePaths(props: { workspacePath: string }): {
 function createApplyRuntime(): {
   createAccount: { timeoutInMs: number; pollIntervalInMs: number };
   accountAssignment: { timeoutInMs: number; pollIntervalInMs: number };
+  permissionSetProvisioning: { timeoutInMs: number; pollIntervalInMs: number };
 } {
   return {
     createAccount: {
@@ -1962,6 +2161,10 @@ function createApplyRuntime(): {
       pollIntervalInMs: 1,
     },
     accountAssignment: {
+      timeoutInMs: 5000,
+      pollIntervalInMs: 1,
+    },
+    permissionSetProvisioning: {
       timeoutInMs: 5000,
       pollIntervalInMs: 1,
     },
@@ -2218,6 +2421,40 @@ function createSsoAdminClientMock(props: {
     Name?: string;
     Description?: string;
   }) => Promise<void>;
+  onPutInlinePolicy?: (input: {
+    InstanceArn?: string;
+    PermissionSetArn?: string;
+    InlinePolicy?: string;
+  }) => Promise<void>;
+  onDeleteInlinePolicy?: (input: {
+    InstanceArn?: string;
+    PermissionSetArn?: string;
+  }) => Promise<void>;
+  onAttachManagedPolicy?: (input: {
+    InstanceArn?: string;
+    PermissionSetArn?: string;
+    ManagedPolicyArn?: string;
+  }) => Promise<void>;
+  onDetachManagedPolicy?: (input: {
+    InstanceArn?: string;
+    PermissionSetArn?: string;
+    ManagedPolicyArn?: string;
+  }) => Promise<void>;
+  onAttachCustomerManagedPolicyReference?: (input: {
+    InstanceArn?: string;
+    PermissionSetArn?: string;
+    CustomerManagedPolicyReference?: { Name?: string; Path?: string };
+  }) => Promise<void>;
+  onDetachCustomerManagedPolicyReference?: (input: {
+    InstanceArn?: string;
+    PermissionSetArn?: string;
+    CustomerManagedPolicyReference?: { Name?: string; Path?: string };
+  }) => Promise<void>;
+  onProvisionPermissionSet?: (input: {
+    InstanceArn?: string;
+    PermissionSetArn?: string;
+    TargetType?: string;
+  }) => Promise<void>;
   onCreateAccountAssignment?: (input: {
     InstanceArn?: string;
     TargetId?: string;
@@ -2241,6 +2478,9 @@ function createSsoAdminClientMock(props: {
       Description?: string;
     };
   };
+  provisionPermissionSetResponse?: {
+    PermissionSetProvisioningStatus?: { RequestId?: string };
+  };
   createAccountAssignmentResponse?: {
     AccountAssignmentCreationStatus?: { RequestId?: string };
   };
@@ -2261,11 +2501,20 @@ function createSsoAdminClientMock(props: {
       FailureReason?: string;
     };
   }>;
+  provisioningStatuses?: Array<{
+    PermissionSetProvisioningStatus?: {
+      Status?: string;
+      RequestId?: string;
+      FailureReason?: string;
+    };
+  }>;
 }): SSOAdminClient {
   const creationStatuses = props.creationStatuses ?? [];
   const deletionStatuses = props.deletionStatuses ?? [];
+  const provisioningStatuses = props.provisioningStatuses ?? [];
   let creationIndex = 0;
   let deletionIndex = 0;
+  let provisioningIndex = 0;
   const mock = {
     async send(command: unknown): Promise<unknown> {
       if (command instanceof CreatePermissionSetCommand) {
@@ -2283,6 +2532,99 @@ function createSsoAdminClientMock(props: {
                 "arn:aws:sso:::permissionSet/ssoins-123/ps-created",
               Name: command.input.Name,
               Description: command.input.Description,
+            },
+          }
+        );
+      }
+      if (command instanceof PutInlinePolicyToPermissionSetCommand) {
+        if (props.onPutInlinePolicy != null) {
+          await props.onPutInlinePolicy({
+            InstanceArn: command.input.InstanceArn,
+            PermissionSetArn: command.input.PermissionSetArn,
+            InlinePolicy: command.input.InlinePolicy,
+          });
+        }
+        return {};
+      }
+      if (command instanceof DeleteInlinePolicyFromPermissionSetCommand) {
+        if (props.onDeleteInlinePolicy != null) {
+          await props.onDeleteInlinePolicy({
+            InstanceArn: command.input.InstanceArn,
+            PermissionSetArn: command.input.PermissionSetArn,
+          });
+        }
+        return {};
+      }
+      if (command instanceof AttachManagedPolicyToPermissionSetCommand) {
+        if (props.onAttachManagedPolicy != null) {
+          await props.onAttachManagedPolicy({
+            InstanceArn: command.input.InstanceArn,
+            PermissionSetArn: command.input.PermissionSetArn,
+            ManagedPolicyArn: command.input.ManagedPolicyArn,
+          });
+        }
+        return {};
+      }
+      if (command instanceof DetachManagedPolicyFromPermissionSetCommand) {
+        if (props.onDetachManagedPolicy != null) {
+          await props.onDetachManagedPolicy({
+            InstanceArn: command.input.InstanceArn,
+            PermissionSetArn: command.input.PermissionSetArn,
+            ManagedPolicyArn: command.input.ManagedPolicyArn,
+          });
+        }
+        return {};
+      }
+      if (
+        command instanceof
+        AttachCustomerManagedPolicyReferenceToPermissionSetCommand
+      ) {
+        if (props.onAttachCustomerManagedPolicyReference != null) {
+          await props.onAttachCustomerManagedPolicyReference({
+            InstanceArn: command.input.InstanceArn,
+            PermissionSetArn: command.input.PermissionSetArn,
+            CustomerManagedPolicyReference:
+              command.input.CustomerManagedPolicyReference != null
+                ? {
+                    Name: command.input.CustomerManagedPolicyReference.Name,
+                    Path: command.input.CustomerManagedPolicyReference.Path,
+                  }
+                : undefined,
+          });
+        }
+        return {};
+      }
+      if (
+        command instanceof
+        DetachCustomerManagedPolicyReferenceFromPermissionSetCommand
+      ) {
+        if (props.onDetachCustomerManagedPolicyReference != null) {
+          await props.onDetachCustomerManagedPolicyReference({
+            InstanceArn: command.input.InstanceArn,
+            PermissionSetArn: command.input.PermissionSetArn,
+            CustomerManagedPolicyReference:
+              command.input.CustomerManagedPolicyReference != null
+                ? {
+                    Name: command.input.CustomerManagedPolicyReference.Name,
+                    Path: command.input.CustomerManagedPolicyReference.Path,
+                  }
+                : undefined,
+          });
+        }
+        return {};
+      }
+      if (command instanceof ProvisionPermissionSetCommand) {
+        if (props.onProvisionPermissionSet != null) {
+          await props.onProvisionPermissionSet({
+            InstanceArn: command.input.InstanceArn,
+            PermissionSetArn: command.input.PermissionSetArn,
+            TargetType: command.input.TargetType,
+          });
+        }
+        return (
+          props.provisionPermissionSetResponse ?? {
+            PermissionSetProvisioningStatus: {
+              RequestId: "pps-1",
             },
           }
         );
@@ -2349,6 +2691,18 @@ function createSsoAdminClientMock(props: {
         deletionIndex += 1;
         return response;
       }
+      if (command instanceof DescribePermissionSetProvisioningStatusCommand) {
+        const response = provisioningStatuses[
+          Math.min(provisioningIndex, provisioningStatuses.length - 1)
+        ] ?? {
+          PermissionSetProvisioningStatus: {
+            Status: "SUCCEEDED",
+            RequestId: command.input.ProvisionPermissionSetRequestId,
+          },
+        };
+        provisioningIndex += 1;
+        return response;
+      }
       throw new Error("Unexpected SSO Admin command in test.");
     },
   };
@@ -2365,7 +2719,13 @@ async function updateConfigModel(props: {
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string; members: string[] }>;
-    permissionSets: Array<{ name: string; description: string }>;
+    permissionSets: Array<{
+      name: string;
+      description: string;
+      inlinePolicy?: Record<string, unknown>;
+      awsManagedPolicies: string[];
+      customerManagedPolicies: Array<{ name: string; path: string }>;
+    }>;
     assignments: Array<{
       permissionSet: string;
       group?: string;
@@ -2391,7 +2751,13 @@ async function updateConfigModel(props: {
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string; members: string[] }>;
-    permissionSets: Array<{ name: string; description: string }>;
+    permissionSets: Array<{
+      name: string;
+      description: string;
+      inlinePolicy?: Record<string, unknown>;
+      awsManagedPolicies: string[];
+      customerManagedPolicies: Array<{ name: string; path: string }>;
+    }>;
     assignments: Array<{
       permissionSet: string;
       group?: string;
@@ -2478,6 +2844,9 @@ async function writeFixtureFiles(props: {
           permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
           name: "AdminAccess",
           description: "Admin",
+          inlinePolicy: null,
+          awsManagedPolicies: [],
+          customerManagedPolicies: [],
         },
       ],
       accountAssignments: [],

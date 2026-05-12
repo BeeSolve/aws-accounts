@@ -46,6 +46,8 @@ const createAccountTimeoutInMs = 15 * 60 * 1000;
 const createAccountPollIntervalInMs = 5 * 1000;
 const accountAssignmentTimeoutInMs = 15 * 60 * 1000;
 const accountAssignmentPollIntervalInMs = 5 * 1000;
+const permissionSetProvisioningTimeoutInMs = 15 * 60 * 1000;
+const permissionSetProvisioningPollIntervalInMs = 5 * 1000;
 const nonEmptyString = v.pipe(v.string(), v.trim(), v.nonEmpty());
 const emailSchema = v.pipe(nonEmptyString, v.email());
 
@@ -280,6 +282,10 @@ async function main(): Promise<void> {
         accountAssignment: {
           timeoutInMs: accountAssignmentTimeoutInMs,
           pollIntervalInMs: accountAssignmentPollIntervalInMs,
+        },
+        permissionSetProvisioning: {
+          timeoutInMs: permissionSetProvisioningTimeoutInMs,
+          pollIntervalInMs: permissionSetProvisioningPollIntervalInMs,
         },
       },
       allowDestructive: args.values["allow-destructive"] ?? false,

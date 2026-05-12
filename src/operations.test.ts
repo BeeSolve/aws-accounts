@@ -38,6 +38,42 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       description: "Admin",
     },
     {
+      kind: "putIdcPermissionSetInlinePolicy",
+      permissionSetName: "AdminAccess",
+      inlinePolicy: '{"Version":"2012-10-17"}',
+    },
+    {
+      kind: "deleteIdcPermissionSetInlinePolicy",
+      permissionSetName: "AdminAccess",
+    },
+    {
+      kind: "attachIdcManagedPolicyToPermissionSet",
+      permissionSetName: "AdminAccess",
+      managedPolicyArn: "arn:aws:iam::aws:policy/ReadOnlyAccess",
+    },
+    {
+      kind: "detachIdcManagedPolicyFromPermissionSet",
+      permissionSetName: "AdminAccess",
+      managedPolicyArn: "arn:aws:iam::aws:policy/ReadOnlyAccess",
+    },
+    {
+      kind: "attachIdcCustomerManagedPolicyReferenceToPermissionSet",
+      permissionSetName: "AdminAccess",
+      customerManagedPolicyName: "SupportReadOnly",
+      customerManagedPolicyPath: "/beesolve/",
+    },
+    {
+      kind: "detachIdcCustomerManagedPolicyReferenceFromPermissionSet",
+      permissionSetName: "AdminAccess",
+      customerManagedPolicyName: "SupportReadOnly",
+      customerManagedPolicyPath: "/beesolve/",
+    },
+    {
+      kind: "provisionIdcPermissionSet",
+      permissionSetName: "AdminAccess",
+      targetScope: "ALL_PROVISIONED_ACCOUNTS",
+    },
+    {
       kind: "grantIdcAccountAssignment",
       accountName: "AppAccount",
       permissionSetName: "AdminAccess",

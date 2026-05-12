@@ -50,8 +50,22 @@ test("normalizeState sorts by ids/arns before names", () => {
         { membershipId: "m-1", groupId: "g-1", userId: "u-1" }
       ],
       permissionSets: [
-        { permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-1/ps-2", name: "PS2", description: "" },
-        { permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-1/ps-1", name: "PS1", description: "" }
+        {
+          permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-1/ps-2",
+          name: "PS2",
+          description: "",
+          inlinePolicy: null,
+          awsManagedPolicies: [],
+          customerManagedPolicies: []
+        },
+        {
+          permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-1/ps-1",
+          name: "PS1",
+          description: "",
+          inlinePolicy: null,
+          awsManagedPolicies: [],
+          customerManagedPolicies: []
+        }
       ],
       accountAssignments: [
         { accountId: "222222222222", permissionSetArn: "arn2", principalId: "p2", principalType: "USER" as const },
@@ -240,6 +254,9 @@ test("working state helpers update IdC records immutably and regenerate access r
       permissionSetArn: "arn:ps-1",
       name: "AdminAccess",
       description: "Admin",
+      inlinePolicy: null,
+      awsManagedPolicies: [],
+      customerManagedPolicies: [],
     },
   });
   const withMembership = addGroupMembershipToWorkingState({
