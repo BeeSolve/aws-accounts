@@ -6,6 +6,11 @@ membership management.
 Status: implemented in repository head. This document now serves as the design
 record for the shipped permission set policy wave.
 
+Follow-up:
+
+- IAM action hint generation and `init` helper-rendering follow-up plan:
+  [`docs/phase-6-wave-4-iam-action-hints-plan.md`](./phase-6-wave-4-iam-action-hints-plan.md)
+
 Cloud-backed execution (`Lambda` / `S3` / saved remote plans) remains **v2**.
 This wave stays in the current local-first v1 model:
 

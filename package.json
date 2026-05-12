@@ -11,7 +11,9 @@
     "build:tests": "esbuild \"src/**/*.test.ts\" --platform=node --target=node24 --format=esm --outdir=dist --outbase=src",
     "cli": "npm run build && node dist/cli.js",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && npm run build:tests && node --test \"dist/**/*.test.js\""
+    "test": "npm run build && npm run build:tests && node --test \"dist/**/*.test.js\"",
+    "update:iam-actions": "node scripts/update-iam-action-catalog.mjs",
+    "prepublishOnly": "npm run update:iam-actions"
   },
   "keywords": [],
   "author": "",

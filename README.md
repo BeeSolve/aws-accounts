@@ -12,6 +12,15 @@ The tool's lifecycle has three phases:
 
 `bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged in increment 1; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
 
+For IAM inline policies, `aws.config.types.ts` also exports `iam` helpers with
+service-scoped action autocomplete:
+
+```ts
+import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
+
+Action: [iam.s3("GetObject"), iam.identitystore("CreateGroupMembership")];
+```
+
 ## Plan/apply safety
 
 - `plan` is local-only in increment 1 and does not require AWS IAM permissions.
@@ -160,12 +169,23 @@ Reason: `scan` updates only `state.json`, while `aws.config.ts` is rewritten fro
 `regenerate` refreshes only `aws.config.types.ts` from the current `aws.config.ts`.  
 It does not rewrite `aws.config.ts`, so stale config remains stale.
 
+Maintainers can refresh the IAM action hint snapshot with:
+
+```bash
+npm run update:iam-actions
+```
+
+That command normalizes the upstream AWS Policy Generator data into a checked-in
+cache file and only rewrites it when the upstream content actually changes.
+`npm publish` runs the same refresh automatically via `prepublishOnly`.
+
 ## Project docs
 
 - Decision log for phase 1 scan: `docs/phase-1-decisions.md`
 - Decision log for phase 2 bootstrap: `docs/phase-2-decisions.md`
 - Decision log for phase 3 init / regenerate: `docs/phase-3-decisions.md`
 - Wave 4 permission set policy plan: `docs/phase-6-wave-4-permission-set-policy-plan.md`
+- Wave 4 IAM action hinting follow-up plan: `docs/phase-6-wave-4-iam-action-hints-plan.md`
 - Wave 5 IdC entity removal plan: `docs/phase-6-wave-5-idc-removal-plan.md`
 - Current v1 backlog priority: `docs/v1-backlog-priority.md`
 - Agreed repository structure: `docs/repository-structure.md`

@@ -52,6 +52,8 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
     assert.match(typesRaw, /iamPolicyDocumentSchema/);
     assert.match(typesRaw, /isIamPolicyDocument/);
     assert.match(typesRaw, /type IamPolicyDocument/);
+    assert.match(typesRaw, /export function iamAction/);
+    assert.match(typesRaw, /export const iam = \{/);
     assert.match(configRaw, /"name": "root"/);
     assert.match(configRaw, /"members": \[/);
     assert.match(configRaw, /"alice"/);
@@ -659,6 +661,127 @@ test("loadAwsConfigModelFromTsFile validates inline policy documents against IAM
         }),
       /aws\.config\.ts validation failed/,
     );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("loadAwsConfigModelFromTsFile supports IAM action helper functions", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    await writeFile(
+      configPath,
+      `import * as v from "valibot";
+import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
+
+const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
+  organizationalUnits: [
+    {
+      name: "root",
+      parentName: null,
+      accounts: [],
+    },
+    {
+      name: "Pending",
+      parentName: "root",
+      accounts: [
+        {
+          name: "AppAccount",
+          email: "app@example.com",
+        },
+      ],
+    },
+    {
+      name: "Graveyard",
+      parentName: "root",
+      accounts: [],
+    },
+  ],
+  users: [
+    {
+      userName: "alice",
+      displayName: "Alice",
+      email: "alice@example.com",
+    },
+  ],
+  groups: [
+    {
+      displayName: "Admins",
+      members: ["alice"],
+    },
+  ],
+  permissionSets: [
+    {
+      name: "AdminAccess",
+      description: "Admin",
+      inlinePolicy: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Action: [
+              iam.s3("GetObject"),
+              iam.identitystore("CreateGroupMembership"),
+              iam["sso-directory"]("SearchUsers"),
+            ],
+            Resource: "*",
+          },
+        ],
+      },
+      awsManagedPolicies: [],
+      customerManagedPolicies: [],
+    },
+  ],
+  assignments: [
+    {
+      permissionSet: "AdminAccess",
+      group: "Admins",
+      accounts: ["AppAccount"],
+    },
+  ],
+} satisfies AwsConfig);
+
+export default awsConfig;
+`,
+      "utf8",
+    );
+
+    const config = await loadAwsConfigModelFromTsFile({
+      configPath,
+      typesPath,
+    });
+
+    assert.deepEqual(config.permissionSets[0]?.inlinePolicy, {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: [
+            "s3:GetObject",
+            "identitystore:CreateGroupMembership",
+            "sso-directory:SearchUsers",
+          ],
+          Resource: "*",
+        },
+      ],
+    });
   } finally {
     await workspace.cleanup();
   }
