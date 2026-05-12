@@ -7,7 +7,8 @@ those helpers automatically.
 Status:
 
 - action-hint type generation: implemented in repository head
-- `init` / config code generation with helper rendering: planned in this document
+- `init` / config code generation with helper rendering: implemented in
+  repository head
 
 ## Goal
 
@@ -67,7 +68,7 @@ Desired outcome:
   `servicePrefix:ActionName`
 - unknown or unrecognized action strings must remain valid raw string literals
 
-## Proposed `init` / config codegen behavior
+## Implemented `init` / config codegen behavior
 
 Replace the current JSON-only inline policy rendering with a TS-aware renderer
 for policy documents emitted into `aws.config.ts`.
@@ -96,18 +97,21 @@ Action: [
 ]
 ```
 
-## Implementation plan
+## Implemented work
 
-1. Add a policy-aware TypeScript renderer in `src/awsConfig.ts` instead of using
-   raw `JSON.stringify()` for the whole generated config payload.
-2. Reuse the checked-in `iamActionCatalog` for helper rendering decisions.
-3. Keep the renderer narrowly scoped to `Action` / `NotAction` so policy objects
-   remain straightforward and low-risk.
-4. Add tests covering:
+The repository head now:
+
+1. Uses a policy-aware TypeScript renderer in `src/awsConfig.ts` instead of a
+   raw `JSON.stringify()` dump for generated config files.
+2. Reuses the checked-in `iamActionCatalog` for helper rendering decisions.
+3. Renders helper calls only for recognized `Action` / `NotAction` strings and
+   leaves the rest of the policy document in plain JSON-like TypeScript.
+4. Covers the behavior with tests for:
    - `writeAwsConfigFromState()` generating helper calls for known actions
    - bracket syntax for prefixes like `sso-directory`
    - fallback to raw string literals for unknown actions
    - `loadAwsConfigModelFromTsFile()` round-tripping helper-generated config
+   - `runInitCommand()` emitting helper-based inline policy code
 
 ## Guardrails
 

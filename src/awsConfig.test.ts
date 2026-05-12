@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   loadAwsConfigModelFromTsFile,
   mapAwsConfigToState,
@@ -54,9 +54,70 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
     assert.match(typesRaw, /type IamPolicyDocument/);
     assert.match(typesRaw, /export function iamAction/);
     assert.match(typesRaw, /export const iam = \{/);
-    assert.match(configRaw, /"name": "root"/);
-    assert.match(configRaw, /"members": \[/);
+    assert.match(configRaw, /\bname: "root"/);
+    assert.match(configRaw, /\bmembers: \[/);
     assert.match(configRaw, /"alice"/);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("writeAwsConfigFromState renders IAM action helpers for known inline policy actions", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+
+    const stateRaw = await readFile(statePath, "utf8");
+    const state = JSON.parse(stateRaw) as {
+      identityCenter: {
+        permissionSets: Array<{
+          name: string;
+          inlinePolicy: string | null;
+        }>;
+      };
+    };
+    const adminAccess = state.identityCenter.permissionSets.find(
+      (permissionSet) => permissionSet.name === "AdminAccess",
+    );
+    if (adminAccess == null) {
+      throw new Error('Expected "AdminAccess" permission set.');
+    }
+    adminAccess.inlinePolicy = JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: [
+            "s3:GetObject",
+            "sso-directory:SearchUsers",
+            "custom-service:DoThing",
+          ],
+          Resource: "*",
+        },
+      ],
+    });
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    const configRaw = await readFile(configPath, "utf8");
+    assert.match(configRaw, /iam\.s3\("GetObject"\)/);
+    assert.match(configRaw, /iam\["sso-directory"\]\("SearchUsers"\)/);
+    assert.match(configRaw, /"custom-service:DoThing"/);
   } finally {
     await workspace.cleanup();
   }
@@ -567,13 +628,13 @@ test("permission set policy state round-trips between state and config", async (
       readFile(configPath, "utf8"),
     ]);
 
-    assert.match(configRaw, /"inlinePolicy": \{/);
-    assert.match(configRaw, /"Version": "2012-10-17"/);
+    assert.match(configRaw, /\binlinePolicy: \{/);
+    assert.match(configRaw, /\bVersion: "2012-10-17"/);
     assert.match(
       configRaw,
       /"arn:aws:iam::aws:policy\/ReadOnlyAccess"/,
     );
-    assert.match(configRaw, /"customerManagedPolicies": \[/);
+    assert.match(configRaw, /\bcustomerManagedPolicies: \[/);
     assert.deepEqual(config.permissionSets[0]?.inlinePolicy, {
       Statement: [
         {
@@ -633,6 +694,7 @@ test("loadAwsConfigModelFromTsFile validates inline policy documents against IAM
 
     await updateConfigModel({
       configPath,
+      typesPath,
       update: (config) => {
         const adminAccess = config.permissionSets.find(
           (permissionSet) => permissionSet.name === "AdminAccess",
@@ -898,6 +960,7 @@ async function writeFixtureFiles(props: {
 
 async function updateConfigModel(props: {
   configPath: string;
+  typesPath?: string;
   update: (config: {
     organizationalUnits: Array<{
       name: string;
@@ -921,16 +984,12 @@ async function updateConfigModel(props: {
     }>;
   }) => void;
 }): Promise<void> {
-  const rawConfig = await readFile(props.configPath, "utf8");
-  const matched = rawConfig.match(
-    /v\.parse\(awsConfigSchema,\s*([\s\S]*?)\s*satisfies AwsConfig\);/,
-  );
-  if (matched == null || matched[1] == null) {
-    throw new Error(
-      "Could not extract awsConfig JSON payload from aws.config.ts.",
-    );
-  }
-  const parsedConfig = JSON.parse(matched[1]) as {
+  const typesPath =
+    props.typesPath ?? join(dirname(props.configPath), "aws.config.types.ts");
+  const parsedConfig = (await loadAwsConfigModelFromTsFile({
+    configPath: props.configPath,
+    typesPath,
+  })) as {
     organizationalUnits: Array<{
       name: string;
       parentName: string | null;
@@ -953,9 +1012,12 @@ async function updateConfigModel(props: {
     }>;
   };
   props.update(parsedConfig);
-  const nextConfig = rawConfig.replace(
-    matched[1],
-    JSON.stringify(parsedConfig, null, 2),
-  );
+  const nextConfig = `import * as v from "valibot";
+import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
+
+const awsConfig: AwsConfig = v.parse(awsConfigSchema, ${JSON.stringify(parsedConfig, null, 2)} satisfies AwsConfig);
+
+export default awsConfig;
+`;
   await writeFile(props.configPath, nextConfig, "utf8");
 }

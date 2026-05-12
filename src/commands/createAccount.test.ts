@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   CreateAccountCommand,
   DescribeCreateAccountStatusCommand,
@@ -9,7 +9,10 @@ import {
   MoveAccountCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
-import { writeAwsConfigFromState } from "../awsConfig.js";
+import {
+  loadAwsConfigModelFromTsFile,
+  writeAwsConfigFromState,
+} from "../awsConfig.js";
 import { createTestWorkspace } from "../helpers.test.js";
 import { noopLogger, type Logger } from "../logger.js";
 import { runCreateAccountCommand } from "./createAccount.js";
@@ -313,7 +316,7 @@ test("runCreateAccountCommand creates account, waits for success, and updates co
     const configRaw = await readFile(paths.configPath, "utf8");
     const typesRaw = await readFile(paths.typesPath, "utf8");
     const stateRaw = await readFile(paths.statePath, "utf8");
-    assert.match(configRaw, /"name": "BrandNew"/);
+    assert.match(configRaw, /\bname: "BrandNew"/);
     assert.match(typesRaw, /BrandNew/);
     assert.notEqual(stateRaw, beforeState);
     assert.match(stateRaw, /"id": "555555555555"/);
@@ -562,6 +565,7 @@ function createOrganizationsClientMock(props: OrganizationsMockProps): Organizat
 
 async function updateConfigModel(props: {
   configPath: string;
+  typesPath?: string;
   update: (config: {
     organizationalUnits: Array<{
       name: string;
@@ -579,14 +583,12 @@ async function updateConfigModel(props: {
     }>;
   }) => void;
 }): Promise<void> {
-  const rawConfig = await readFile(props.configPath, "utf8");
-  const matched = rawConfig.match(
-    /v\.parse\(awsConfigSchema,\s*([\s\S]*?)\s*satisfies AwsConfig\);/,
-  );
-  if (matched == null || matched[1] == null) {
-    throw new Error("Could not extract awsConfig JSON payload from aws.config.ts.");
-  }
-  const parsedConfig = JSON.parse(matched[1]) as {
+  const typesPath =
+    props.typesPath ?? join(dirname(props.configPath), "aws.config.types.ts");
+  const parsedConfig = (await loadAwsConfigModelFromTsFile({
+    configPath: props.configPath,
+    typesPath,
+  })) as {
     organizationalUnits: Array<{
       name: string;
       parentName: string | null;
@@ -603,10 +605,13 @@ async function updateConfigModel(props: {
     }>;
   };
   props.update(parsedConfig);
-  const nextConfig = rawConfig.replace(
-    matched[1],
-    JSON.stringify(parsedConfig, null, 2),
-  );
+  const nextConfig = `import * as v from "valibot";
+import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
+
+const awsConfig: AwsConfig = v.parse(awsConfigSchema, ${JSON.stringify(parsedConfig, null, 2)} satisfies AwsConfig);
+
+export default awsConfig;
+`;
   await writeFile(props.configPath, nextConfig, "utf8");
 }
 

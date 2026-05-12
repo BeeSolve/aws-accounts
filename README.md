@@ -21,6 +21,10 @@ import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
 Action: [iam.s3("GetObject"), iam.identitystore("CreateGroupMembership")];
 ```
 
+When `init` rewrites `aws.config.ts`, it now emits those helper expressions for
+recognized IAM actions inside inline policies. `scan` still updates only
+`state.json`.
+
 ## Plan/apply safety
 
 - `plan` is local-only in increment 1 and does not require AWS IAM permissions.
@@ -159,6 +163,8 @@ npm run cli -- init
 (`npm run cli -- init --yes` for non-interactive runs.)
 
 Reason: `scan` updates only `state.json`, while `aws.config.ts` is rewritten from live AWS state only during `init`.
+When possible, the generated inline policy actions are rendered back as
+`iam.*(...)` helper calls instead of raw strings.
 
 ### Why not `scan` only?
 

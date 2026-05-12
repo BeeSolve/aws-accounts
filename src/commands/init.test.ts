@@ -72,6 +72,8 @@ test("runInitCommand writes context/state/config/types in sequence", async () =>
     assert.match(contextRaw, /"pendingOuId": "ou-pending"/);
     assert.match(stateRaw, /"rootId": "r-root"/);
     assert.match(configRaw, /const awsConfig:/);
+    assert.match(configRaw, /iam\.s3\("GetObject"\)/);
+    assert.match(configRaw, /iam\["sso-directory"\]\("SearchUsers"\)/);
     assert.match(typesRaw, /export const awsConfigSchema/);
     assert.match(typesRaw, /iamPolicyDocumentSchema/);
     assert.match(typesRaw, /isIamPolicyDocument/);
@@ -203,7 +205,18 @@ function createSsoAdminClientMock(): SSOAdminClient {
         };
       }
       if (command instanceof GetInlinePolicyForPermissionSetCommand) {
-        return {};
+        return {
+          InlinePolicy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Action: ["s3:GetObject", "sso-directory:SearchUsers"],
+                Resource: "*",
+              },
+            ],
+          }),
+        };
       }
       if (command instanceof ListManagedPoliciesInPermissionSetCommand) {
         return {
