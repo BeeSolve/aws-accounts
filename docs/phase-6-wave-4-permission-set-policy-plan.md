@@ -1,7 +1,10 @@
 # Phase 6 Wave 4: IAM Identity Center Permission Set Policy Management Plan
 
-This document captures the proposed next v1 feature after Wave 3 group
+This document captures the implemented Wave 4 follow-up after Wave 3 group
 membership management.
+
+Status: implemented in repository head. This document now serves as the design
+record for the shipped permission set policy wave.
 
 Cloud-backed execution (`Lambda` / `S3` / saved remote plans) remains **v2**.
 This wave stays in the current local-first v1 model:
@@ -369,6 +372,7 @@ Update after implementation:
 
 - [`README.md`](../README.md)
 - [`docs/phase-6-wave-3-group-membership-plan.md`](./phase-6-wave-3-group-membership-plan.md)
+- [`docs/phase-6-wave-5-idc-removal-plan.md`](./phase-6-wave-5-idc-removal-plan.md) as the next planned follow-up
 - the remaining v1 backlog doc
 
 Expected IAM permissions:
