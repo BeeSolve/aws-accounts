@@ -1,12 +1,16 @@
-# Increment 1 Plan (Local-Only)
+# Increment 1 plan (local-only) — **v1 complete**
 
-Scope for this increment:
+This file is the historical plan for the **local-first v1** CLI. The original “increment 1” scope excluded destructive mutations and IAM Identity Center writes; **v1 as shipped** adds gated destructive operations (for example empty OU deletion and parking removed accounts in `Graveyard`), full IAM Identity Center reconciliation in `apply`, account tags and display-name reconciliation, `plan --json` destructive summaries, and the `graveyard` command. **v2** is still expected to add Lambda/S3-backed execution and saved plan artifacts (see README “Deferred after v1” and `docs/v1-backlog-priority.md`).
+
+---
+
+Scope for the original increment (superseded in places by v1 as noted above):
 - Run locally via `npm run cli`.
-- No Lambda deployment/invocation.
-- No S3 usage.
-- No destructive operations (assume administrator privileges, but avoid any action that mutates existing AWS resources unexpectedly).
+- No Lambda deployment/invocation (v2).
+- No S3 usage (v2).
+- Destructive AWS changes are **opt-in** via explicit flags and confirmations (`apply --allow-destructive`, interactive preview); v1 does not auto-apply destructive work.
 - Build foundations so cloud-backed flow can be layered in later increments.
-- Repository-root files for increment 1: `state.json`, `aws.config.ts`, `aws.context.json`.
+- Repository-root files for v1: `state.json`, `aws.config.ts`, `aws.context.json`.
 
 ## Phase 1: Implement scanning (local execution)
 
@@ -89,23 +93,23 @@ Scope for this increment:
 
 - [x] Define reconciliation command pair for local mode:
   - [x] `plan` (load `aws.config.ts` → transform to next `state.json` shape → diff current `state.json` vs next; emit operations list).
-  - [x] `apply` (execute approved operations directly via AWS SDK in CLI for increment 1).
+  - [x] `apply` (execute approved operations directly via AWS SDK in the CLI for v1).
 - [x] Implement `mapAwsConfigToState` transform:
   - [x] load `aws.config.ts` via the phase 3 loader.
   - [x] resolve names to AWS-issued ids using current `state.json` (entities present in both keep their existing ids; entities only in config get placeholder ids interpreted by the diff as "to be created").
 - [x] Implement state-vs-state diff engine producing human-readable and machine-readable plan.
-- [x] Define operation model for supported mutations in increment 1:
+- [x] Define operation model for supported mutations (see README for the full v1 list).
   - [x] move account between OUs
   - [x] create OU under a known parent OU
   - [x] rename OU via strict same-parent one-to-one heuristic
   - [x] create account directly in a known target OU
-- [x] Exclude IAM Identity Center assignment mutations from increment 1 apply scope.
-- [x] Exclude account metadata reconciliation (tags, alternate contacts, account-name drift) from increment 1 apply scope; deferred to a later increment.
+- [x] IAM Identity Center mutations in `apply` (users, groups, memberships, permission sets, policies, assignments, provisioning, gated removals, metadata updates — see README)
+- [x] Account metadata in `apply` for tags and member account display name (alternate contacts remain post-v1)
 - [x] Implement safety policy:
-  - [x] default no destructive actions
+  - [x] supported destructive operations are off by default (`apply` requires `--allow-destructive` where applicable)
   - [x] strict default: refuse apply when any unsupported diff is present
   - [x] `--ignore-unsupported` flag proceeds past non-destructive unsupported diffs only
-  - [x] destructive unsupported diffs (account removal from config, OU deletion) always refuse, no flag override
+  - [x] destructive unsupported diffs always refuse `apply` (no override); supported destructive operations require `--allow-destructive`
   - [x] require confirmation before apply (interactive prompt)
   - [x] support non-interactive approval via `--yes`
 - [x] Implement apply executor with per-operation progress + final outcome summary.
@@ -116,20 +120,19 @@ Scope for this increment:
   - [x] plan generation (state-vs-state diff engine + `plan` command output modes)
   - [x] apply sequencing and failure persistence
 
-## Out of scope for increment 1
+## Out of scope for v1 (deferred to v2+)
 
 - Drift detection / sync from AWS into `aws.config.ts` after init. Manual changes made in the AWS Console outside this tool are not detected or merged. A future "sync" feature may address this.
 - Automatic re-scan in the normal `apply` loop. State updates after apply come from the planned-next-state, not a fresh scan.
-- Watcher mode for `regenerate`. A future `watch` command will run `regenerate` on `aws.config.ts` change; for increment 1 the user runs it manually.
-- IAM Identity Center mutation operations in `apply` (creating users / groups / assignments).
-- Cloud-backed flow: Lambda deployment, S3 state storage, signed-URL state download. Increment 1 is local-only.
-- Saved plan artifact (Terraform-style `plan.json` for separate `plan` then `apply` runs across sessions / pipelines). `apply` recomputes the plan inline in increment 1. Deferred to increment 2 alongside the cloud-backed flow.
-- Account metadata reconciliation in `apply` (tags, alternate contacts, primary contact info, account-name drift). Phase 4 sets `name` / `email` at create time; subsequent edits are not applied in increment 1. Tags are the natural next-up but require schema additions and a follow-up increment.
+- Watcher mode for `regenerate`. A future `watch` command will run `regenerate` on `aws.config.ts` change; for v1 the user runs it manually.
+- Cloud-backed flow: Lambda deployment, S3 state storage, signed-URL state download.
+- Saved plan artifact (Terraform-style `plan.json` for separate `plan` then `apply` runs across sessions / pipelines). `apply` recomputes the plan inline in v1.
+- Alternate contacts and other account metadata not yet modeled in `aws.config.ts` / `apply` (see `docs/v1-backlog-priority.md`).
 
 ## Cross-cutting implementation checklist
 
 - [x] Keep CLI logic in one primary file (helpers extracted only when reused).
-- [x] Keep Lambda handler code in one file (placeholder deferred to increment 2 with cloud-backed flow; intentionally not implemented in increment 1).
+- [x] Keep Lambda handler code in one file (placeholder deferred to v2 with cloud-backed flow; intentionally not implemented in v1).
 - [x] Use esbuild for build outputs and local run wiring.
 - [x] Use TypeScript 6+ conventions and camelCase naming.
 - [x] Avoid barrel files.

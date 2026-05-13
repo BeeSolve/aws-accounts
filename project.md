@@ -1,5 +1,8 @@
 # 0. Architecture
 
+> **v1 (shipped):** this repository implements the **local-first CLI** described in the README (`scan`, `bootstrap`, `init`, `regenerate`, `plan`, `apply`, `graveyard`). State lives in `state.json`; desired shape in `aws.config.ts`; context in `aws.context.json`.  
+> **v2 (not built here yet):** the original design below (Lambda + S3 + remote plans) remains the long-term direction for cloud-backed execution.
+
 - nodejs `cli` installed through `npm i @beesolve/aws-accounts` (for testing purposes we will build the project and link it through filesystem eg. add dependency as `file:../...`)
 - simple nodejs24 `lambda` (created by cli - eg. bootstrap command) built with esbuild (esm modules) - this lambda uses AWS SDKs V3 to access aws resources - describe Organization OUs, IAM identity center users/groups/roles, access state persisted in S3 bucket
 - S3 bucket (created by CLI tool - eg. bootstrap command) - will contain state.json - `state.json` is derived from `aws.config.ts`
@@ -37,4 +40,4 @@ We want to show user feedback on what is going to be changed and what has change
 - the code should be simple and boring and explicit
 - name everything in camelCase
 - make sure the names are clear and descriptive
-- destructive actions should stay opt-in and heavily gated; currently only safe empty leaf OU deletion is allowed with explicit confirmation and a dedicated CLI flag
+- destructive actions stay opt-in and heavily gated; v1 supports gated destructive deletes (empty OU subtrees, IdC entity removal, parking removed accounts in `Graveyard`) with explicit confirmation and CLI flags as documented in the README

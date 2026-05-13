@@ -2,15 +2,21 @@
 
 Local-first AWS Organizations and IAM Identity Center management CLI.
 
+## v1 status
+
+**v1 is complete** for the agreed local-first scope: `bootstrap`, `scan`, `init`, `regenerate`, `plan`, `apply`, and `graveyard`, with config-driven reconciliation for Organizations (including gated destructive work such as empty OU deletes and parking removed accounts in `Graveyard`) and IAM Identity Center (assignments, permission set policies, metadata updates, and gated entity removal). Human `plan` / `apply` previews and `plan --json` (including destructive summary metadata) are supported.
+
+**Deferred after v1:** cloud-backed apply (Lambda / S3), cross-session saved plan files, automatic drift merge from the AWS Console into `aws.config.ts`, alternate account metadata (e.g. alternate contacts), and OU-level inherited default tags (see `docs/account-tag-inheritance-research.md`). Follow-ups are tracked in `docs/v1-backlog-priority.md`.
+
 ## Workflow
 
 The tool's lifecycle has three phases:
 
 1. **Init (one-time).** `init` runs `bootstrap` + `scan` and writes `aws.config.ts` + `aws.config.types.ts` from the resulting `state.json`. After this, AWS state is mirrored locally and `aws.config.ts` is your editable source of truth.
 2. **Edit (steady state).** Edit `aws.config.ts` to model the desired state. Run `regenerate` to refresh `aws.config.types.ts` (picklists / IDE autocomplete) after manual edits. A future `watch` command will run `regenerate` automatically.
-3. **Sync (phase 6 through Wave 6).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
+3. **Sync.** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
 
-`bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged in increment 1; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
+`bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged after init; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
 
 For IAM inline policies, `aws.config.types.ts` also exports `iam` helpers with
 service-scoped action autocomplete:
@@ -29,7 +35,7 @@ Those policy helpers and schemas are provided by the installed
 
 ## Plan/apply safety
 
-- `plan` is local-only in increment 1 and does not require AWS IAM permissions.
+- `plan` is local-only in v1 and does not require AWS IAM permissions.
 - `apply` recomputes the plan before executing any operations.
 - `apply --yes` skips the interactive confirmation prompt.
 - `apply --ignore-unsupported` proceeds only when unsupported diffs are non-destructive (`unsupportedMutation`).
@@ -74,7 +80,7 @@ Those policy helpers and schemas are provided by the installed
 
 ## Safe OU deletion boundary
 
-OU deletion is intentionally narrow in the current increment.
+OU deletion is intentionally narrow in v1.
 
 A removed OU can be reconciled with `deleteOu` only when all of the following are true:
 
@@ -135,12 +141,13 @@ Destructive operations detected: 1. Apply requires --allow-destructive.
   [destructive] delete IdC group "Admins"
 ```
 
-Still out of scope in the current increment:
+Beyond v1 (not implemented in this repo today):
 
 - deleting an OU that still has child OUs or accounts
 - deleting an OU subtree when any descendant is unresolved or unsafe to delete
 - deleting the reserved `Graveyard` OU (do that manually outside this tool)
-- account metadata reconciliation after creation (alternate contacts; tags and account display names are reconciled when authored in `aws.config.ts`)
+- alternate contacts and other account metadata not modeled in `aws.config.ts` (tags and member account display names are reconciled when authored in config; see `docs/v1-backlog-priority.md`)
+- cloud-backed `apply`, S3 state, Lambda runner, and Terraform-style saved plan artifacts
 
 `Graveyard` is bootstrap-managed internal state. Generated `aws.config.ts` intentionally omits `Graveyard` accounts and does not require a `Graveyard` OU entry.
 
@@ -194,7 +201,7 @@ catalog.
 - Wave 4 IAM action hinting follow-up plan: `docs/phase-6-wave-4-iam-action-hints-plan.md`
 - Wave 5 IdC entity removal plan: `docs/phase-6-wave-5-idc-removal-plan.md`
 - Wave 6 IdC metadata updates (shipped): `docs/phase-6-wave-6-idc-metadata-updates.md`
-- Current v1 backlog (remaining work after Wave 6): `docs/v1-backlog-priority.md`
+- Post-v1 backlog and deferred ideas: `docs/v1-backlog-priority.md`
 - Agreed repository structure: `docs/repository-structure.md`
 
 Tests compile with esbuild to `dist/*.test.js` and run with `node --test` (`npm test`).
@@ -320,5 +327,5 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
 
 ## Notes
 
-- The scan output in the current increment includes IAM Identity Center users, groups, group memberships, permission sets, permission set policy attachments, account assignments, and IAM role metadata from account assignment principals when available.
+- The scan output includes IAM Identity Center users, groups, group memberships, permission sets, permission set policy attachments, account assignments, and IAM role metadata from account assignment principals when available.
 - If multiple IAM Identity Center instances are present, CLI should fail and require `--instance-arn`.

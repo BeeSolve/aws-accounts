@@ -1,6 +1,6 @@
 # Phase 6 Plan: Expand `plan`/`apply` Supported Actions
 
-> Historical note: references to the old standalone `create-account` command and Pending-first behavior are superseded. Current behavior creates accounts directly in target OUs through `apply`.
+> Historical note: references to the old standalone `create-account` command and Pending-first behavior are superseded. Current behavior creates accounts directly in target OUs through `apply`. **Most Phase 6 waves are now shipped as v1**; see README **v1 status** and `docs/v1-backlog-priority.md` for what remains post‑v1.
 
 This plan defines how to extend reconciliation beyond increment 1 (`moveAccount` only) by implementing currently unsupported diffs detected in `src/diff.ts` / `src/operations.ts`.
 

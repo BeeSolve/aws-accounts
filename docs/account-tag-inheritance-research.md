@@ -1,5 +1,7 @@
 # Account Tag Inheritance Research
 
+**Status:** design research only; **not in v1** (see `docs/v1-backlog-priority.md`).
+
 ## Context
 
 Current implementation supports per-account tags only:

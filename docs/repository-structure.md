@@ -1,6 +1,6 @@
 # Repository Structure
 
-Agreed structure for implementation, with phase 1 emphasis.
+Agreed structure for the v1 codebase (historical phase-1 layout evolved with additional commands and tests).
 
 ```text
 .
@@ -13,6 +13,8 @@ Agreed structure for implementation, with phase 1 emphasis.
 │   ├── phase-1-decisions.md
 │   ├── phase-2-decisions.md
 │   ├── phase-3-decisions.md
+│   ├── v1-backlog-priority.md
+│   ├── account-tag-inheritance-research.md
 │   └── repository-structure.md
 ├── src/
 │   ├── cli.ts
@@ -30,9 +32,12 @@ Agreed structure for implementation, with phase 1 emphasis.
 │       ├── init.test.ts
 │       ├── regenerate.ts
 │       ├── regenerate.test.ts
-│       ├── createAccount.ts
+│       ├── graveyard.ts
+│       ├── graveyard.test.ts
 │       ├── plan.ts
-│       └── apply.ts
+│       ├── plan.test.ts
+│       ├── apply.ts
+│       └── apply.test.ts
 ```
 
 ## Conventions
