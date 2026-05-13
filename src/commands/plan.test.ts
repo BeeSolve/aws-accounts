@@ -675,6 +675,78 @@ test("runPlanCommand prints destructive IdC delete operations", async () => {
   }
 });
 
+test("runPlanCommand prints destructive account removal to Graveyard", async () => {
+  const workspace = await createTestWorkspace({ prefix: "plan-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        if (pending == null) {
+          throw new Error('Expected fixture OU "Pending".');
+        }
+        pending.accounts = pending.accounts.filter(
+          (account) => account.name !== "AppAccount",
+        );
+      },
+    });
+
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
+      output: "human",
+    });
+    assert.equal(result.plan.unsupported.length, 0);
+    assert.equal(result.plan.operations.length, 1);
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes("Destructive operations detected: 1"),
+      ),
+    );
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes(
+          '[destructive] move removed account "AppAccount" (111111111111) from Pending -> Graveyard',
+        ),
+      ),
+    );
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes("WARNING: this tool does not close AWS accounts."),
+      ),
+    );
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes('Manual action required: open AWS Organizations -> "Graveyard"'),
+      ),
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 function createCollectingLogger(): Logger & { logs: string[] } {
   const logs: string[] = [];
   const write = (...args: any[]): void => {

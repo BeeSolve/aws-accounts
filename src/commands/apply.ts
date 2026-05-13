@@ -385,6 +385,24 @@ async function applyOperation(props: {
       },
     });
   }
+  if (operation.kind === "removeAccount") {
+    props.logger.log(
+      `Moving removed account "${operation.accountName}" (${operation.accountId}) to ${operation.toOuName}...`,
+    );
+    await props.organizationsClient.send(
+      new MoveAccountCommand({
+        AccountId: operation.accountId,
+        SourceParentId: operation.fromOuId,
+        DestinationParentId: operation.toOuId,
+      }),
+    );
+    props.logger.log(`Done: "${operation.accountName}" -> ${operation.toOuName}`);
+    return moveAccountInWorkingState({
+      workingState: props.state,
+      accountId: operation.accountId,
+      parentId: operation.toOuId,
+    });
+  }
   if (operation.kind === "createIdcUser") {
     props.logger.log(`Creating IdC user "${operation.userName}"...`);
     const response = await props.identityStoreClient.send(
@@ -1067,12 +1085,14 @@ function isDestructiveOperation(
 ): operation is Extract<
   Operation,
   | { kind: "deleteOu" }
+  | { kind: "removeAccount" }
   | { kind: "deleteIdcUser" }
   | { kind: "deleteIdcGroup" }
   | { kind: "deleteIdcPermissionSet" }
 > {
   return (
     operation.kind === "deleteOu" ||
+    operation.kind === "removeAccount" ||
     operation.kind === "deleteIdcUser" ||
     operation.kind === "deleteIdcGroup" ||
     operation.kind === "deleteIdcPermissionSet"
@@ -1083,11 +1103,21 @@ function describeDestructiveOperation(
   operation: Extract<
     Operation,
     | { kind: "deleteOu" }
+    | { kind: "removeAccount" }
     | { kind: "deleteIdcUser" }
     | { kind: "deleteIdcGroup" }
     | { kind: "deleteIdcPermissionSet" }
   >,
 ): string {
+  if (operation.kind === "removeAccount") {
+    return [
+      `move removed account "${operation.accountName}" (${operation.accountId}) to ${operation.toOuName}`,
+      "WARNING: this tool does not close AWS accounts.",
+      `Manual action required: open AWS Organizations -> "${operation.toOuName}" and close "${operation.accountName}" when safe.`,
+      "Review parked accounts anytime: npm run cli -- graveyard",
+      `Suggested AWS CLI close command: aws organizations close-account --account-id ${operation.accountId}`,
+    ].join("\n");
+  }
   if (operation.kind === "deleteIdcUser") {
     return `delete IdC user "${operation.userName}"`;
   }
@@ -1115,6 +1145,15 @@ function formatApplyOperationLine(operation: Operation): string {
   }
   if (operation.kind === "createAccount") {
     return `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`;
+  }
+  if (operation.kind === "removeAccount") {
+    return [
+      `  [destructive] move removed account "${operation.accountName}" (${operation.accountId}) from ${operation.fromOuName} -> ${operation.toOuName}`,
+      "    WARNING: this tool does not close AWS accounts.",
+      `    Manual action required: open AWS Organizations -> "${operation.toOuName}" and close "${operation.accountName}" when safe.`,
+      "    Review parked accounts anytime: npm run cli -- graveyard",
+      `    Suggested AWS CLI close command: aws organizations close-account --account-id ${operation.accountId}`,
+    ].join("\n");
   }
   if (operation.kind === "createIdcUser") {
     return `  create IdC user "${operation.userName}"`;

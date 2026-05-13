@@ -92,8 +92,17 @@ test("diffStates emits createAccount operation for sentinel new account", () => 
   assert.deepEqual(plan.unsupported, []);
 });
 
-test("diffStates classifies removed account and removed OU as destructive", () => {
+test("diffStates emits removeAccount and classifies removed OU as destructive", () => {
   const current = createBaseState();
+  addOrganizationalUnit({
+    state: current,
+    organizationalUnit: {
+      id: "ou-graveyard",
+      parentId: "r-root",
+      arn: "arn:ou-graveyard",
+      name: "Graveyard",
+    },
+  });
   const next = cloneState(current);
   removeAccount({
     state: next,
@@ -107,17 +116,44 @@ test("diffStates classifies removed account and removed OU as destructive", () =
     current,
     next,
   });
-  assert.deepEqual(plan.operations, []);
-  assert.deepEqual(plan.unsupported, [
+  assert.deepEqual(plan.operations, [
     {
-      kind: "removedAccount",
-      category: "destructive",
-      description: 'removed account "app-b"',
+      kind: "removeAccount",
+      accountId: "222222222222",
+      accountName: "app-b",
+      fromOuId: "ou-data",
+      fromOuName: "Data",
+      toOuId: "ou-graveyard",
+      toOuName: "Graveyard",
     },
+  ]);
+  assert.deepEqual(plan.unsupported, [
     {
       kind: "removedOu",
       category: "destructive",
       description: 'removed OU "Data"',
+    },
+  ]);
+});
+
+test("diffStates keeps removed account destructive-unsupported without Graveyard OU", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  removeAccount({
+    state: next,
+    accountName: "app-b",
+  });
+  const plan = diffStates({
+    current,
+    next,
+  });
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, [
+    {
+      kind: "removedOu",
+      category: "destructive",
+      description:
+        'removed account "app-b" cannot be reconciled because reserved OU "Graveyard" was not found in state',
     },
   ]);
 });

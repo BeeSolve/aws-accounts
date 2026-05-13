@@ -394,6 +394,9 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
   );
   for (const organizationalUnit of props.state.organization
     .organizationalUnits) {
+    if (organizationalUnit.name === "Graveyard") {
+      continue;
+    }
     const parentName =
       organizationalUnit.parentId === props.state.organization.rootId
         ? "root"
@@ -414,6 +417,10 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     organizationalUnits,
     "name",
   );
+  const graveyardOrganizationalUnit = props.state.organization.organizationalUnits.find(
+    (organizationalUnit) => organizationalUnit.name === "Graveyard",
+  );
+  const graveyardOrganizationalUnitId = graveyardOrganizationalUnit?.id;
   for (const account of props.state.organization.accounts) {
     const ownerOuName =
       account.parentId === props.state.organization.rootId
@@ -423,6 +430,9 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       throw new Error(
         `Account "${account.name}" has unknown parentId "${account.parentId}".`,
       );
+    }
+    if (ownerOuName === "Graveyard") {
+      continue;
     }
     const ownerOu = organizationalUnitByName[ownerOuName];
     if (ownerOu == null) {
@@ -475,6 +485,13 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       throw new Error(
         `Could not resolve account name for assignment accountId "${assignment.accountId}".`,
       );
+    }
+    const accountParentId = accountById[assignment.accountId]?.parentId;
+    if (
+      graveyardOrganizationalUnitId != null &&
+      accountParentId === graveyardOrganizationalUnitId
+    ) {
+      continue;
     }
     const principal = mapAssignmentPrincipal({
       assignment,
@@ -687,6 +704,32 @@ export function mapAwsConfigToState(
       parentId,
       arn: matchedOrganizationalUnit?.arn ?? pendingCreationId,
       name: organizationalUnit.name,
+    });
+  }
+  for (const managedOrganizationalUnitName of ["Graveyard"] as const) {
+    const managedOuId = resolveOrganizationalUnitId({
+      organizationalUnitName: managedOrganizationalUnitName,
+      matchedOrganizationalUnit: organizationalUnitByName[managedOrganizationalUnitName],
+      context: props.context,
+    });
+    mappedOrganizationalUnitIdByName.set(
+      managedOrganizationalUnitName,
+      managedOuId,
+    );
+    if (
+      mappedOrganizationalUnits.some(
+        (organizationalUnit) => organizationalUnit.id === managedOuId,
+      )
+    ) {
+      continue;
+    }
+    const matchedManagedOrganizationalUnit =
+      organizationalUnitByName[managedOrganizationalUnitName];
+    mappedOrganizationalUnits.push({
+      id: managedOuId,
+      parentId: props.context.organization.rootId,
+      arn: matchedManagedOrganizationalUnit?.arn ?? pendingCreationId,
+      name: managedOrganizationalUnitName,
     });
   }
 
@@ -996,7 +1039,9 @@ import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
  * Generated inline policies use those helpers automatically when the action is
  * present in the installed @beesolve/iam-policy-ts catalog.
  * The synthetic { name: "root", parentName: null } entry represents organization root.
- * "Pending" and "Graveyard" are bootstrap-managed and tracked in aws.context.json.
+ * "Pending" is bootstrap-managed and tracked in aws.context.json.
+ * "Graveyard" is bootstrap-managed and used internally as the account-removal sink;
+ * it is intentionally omitted from generated organizationalUnits in this file.
  */
 const awsConfig: AwsConfig = v.parse(awsConfigSchema, ${serializedConfig} satisfies AwsConfig);
 

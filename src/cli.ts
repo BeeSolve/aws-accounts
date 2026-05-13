@@ -13,6 +13,7 @@ import { consoleLogger, type Logger } from "./logger.js";
 import { runBootstrapCommand } from "./commands/bootstrap.js";
 import { runApplyCommand } from "./commands/apply.js";
 import { runCreateAccountCommand } from "./commands/createAccount.js";
+import { runGraveyardCommand } from "./commands/graveyard.js";
 import { runInitCommand } from "./commands/init.js";
 import { runPlanCommand } from "./commands/plan.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
@@ -30,6 +31,7 @@ const commands = [
   "init",
   "regenerate",
   "create-account",
+  "graveyard",
   "plan",
   "apply",
 ] as const;
@@ -252,6 +254,20 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "graveyard") {
+    logger.log(
+      `Replay command: ${buildReplayCommand({
+        command,
+      })}`,
+    );
+    await runGraveyardCommand({
+      logger,
+      statePath,
+      contextPath,
+    });
+    return;
+  }
+
   if (command === "apply") {
     logger.log(
       `Replay command: ${buildReplayCommand({
@@ -369,6 +385,7 @@ function printHelp(logger: Logger): void {
   logger.log(
     "  npm run cli -- create-account [--email <email>] [--name <account-name>] [--profile <name>] [--region <region>]",
   );
+  logger.log("  npm run cli -- graveyard");
   logger.log("  npm run cli -- plan [--json]");
   logger.log(
     "  npm run cli -- apply [--yes] [--ignore-unsupported] [--allow-destructive]",

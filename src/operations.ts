@@ -42,6 +42,16 @@ const createAccountOperationSchema = v.strictObject({
   targetOuName: v.string(),
 });
 
+const removeAccountOperationSchema = v.strictObject({
+  kind: v.literal("removeAccount"),
+  accountId: v.string(),
+  accountName: v.string(),
+  fromOuId: v.string(),
+  fromOuName: v.string(),
+  toOuId: v.string(),
+  toOuName: v.string(),
+});
+
 const createIdcUserOperationSchema = v.strictObject({
   kind: v.literal("createIdcUser"),
   userName: v.string(),
@@ -174,6 +184,7 @@ export const operationSchema = v.variant("kind", [
   renameOuOperationSchema,
   deleteOuOperationSchema,
   createAccountOperationSchema,
+  removeAccountOperationSchema,
   createIdcUserOperationSchema,
   updateIdcUserOperationSchema,
   deleteIdcUserOperationSchema,
@@ -202,7 +213,6 @@ const unsupportedDiffKindSchema = v.picklist([
   "newOuWithUnknownParent",
   "newAccountWithUnknownOu",
   "removedOu",
-  "removedAccount",
 ]);
 
 const unsupportedDiffCategorySchema = v.picklist([
@@ -229,6 +239,9 @@ export type RenameOuOperation = v.InferOutput<typeof renameOuOperationSchema>;
 export type DeleteOuOperation = v.InferOutput<typeof deleteOuOperationSchema>;
 export type CreateAccountOperation = v.InferOutput<
   typeof createAccountOperationSchema
+>;
+export type RemoveAccountOperation = v.InferOutput<
+  typeof removeAccountOperationSchema
 >;
 export type CreateIdcUserOperation = v.InferOutput<
   typeof createIdcUserOperationSchema

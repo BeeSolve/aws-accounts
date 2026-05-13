@@ -56,7 +56,7 @@ import {
 import { noopLogger } from "../logger.js";
 import { runApplyCommand } from "./apply.js";
 
-test("runApplyCommand refuses destructive unsupported diffs regardless of flag", async () => {
+test("runApplyCommand refuses destructive account-removal operations without flag", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
     const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
@@ -100,14 +100,14 @@ test("runApplyCommand refuses destructive unsupported diffs regardless of flag",
           ignoreUnsupported: true,
           planConfirmation: async () => true,
         }),
-      /destructive unsupported diffs/,
+      /--allow-destructive/,
     );
   } finally {
     await workspace.cleanup();
   }
 });
 
-test("runApplyCommand refuses destructive unsupported diffs before createOu execution", async () => {
+test("runApplyCommand refuses destructive account-removal operations before createOu execution", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
     const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
@@ -163,7 +163,7 @@ test("runApplyCommand refuses destructive unsupported diffs before createOu exec
           ignoreUnsupported: true,
           planConfirmation: async () => true,
         }),
-      /destructive unsupported diffs/,
+      /--allow-destructive/,
     );
     assert.equal(createOuCalls, 0);
   } finally {
@@ -212,6 +212,7 @@ test("runApplyCommand refuses non-destructive unsupported diffs without flag", a
           statePath: paths.statePath,
           contextPath: paths.contextPath,
           runtime: createApplyRuntime(),
+          allowDestructive: true,
           ignoreUnsupported: false,
           planConfirmation: async () => true,
         }),
@@ -402,6 +403,128 @@ test("runApplyCommand applies one move and writes next state", async () => {
       (account) => account.name === "AppAccount",
     );
     assert.equal(appAccount?.parentId, "ou-engineering");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand removes account by moving it to Graveyard", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        if (pending == null) {
+          throw new Error('Expected fixture OU "Pending".');
+        }
+        pending.accounts = pending.accounts.filter(
+          (account) => account.name !== "AppAccount",
+        );
+      },
+    });
+
+    let sawMoveToGraveyard = false;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        onMoveAccount: async (input) => {
+          assert.equal(input.AccountId, "111111111111");
+          assert.equal(input.SourceParentId, "ou-pending");
+          assert.equal(input.DestinationParentId, "ou-graveyard");
+          sawMoveToGraveyard = true;
+        },
+      }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      allowDestructive: true,
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 1);
+    assert.equal(sawMoveToGraveyard, true);
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: { accounts: Array<{ name: string; parentId: string }> };
+    };
+    const appAccount = persisted.organization.accounts.find(
+      (account) => account.name === "AppAccount",
+    );
+    assert.equal(appAccount?.parentId, "ou-graveyard");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand refuses removeAccount without allowDestructive", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        if (pending == null) {
+          throw new Error('Expected fixture OU "Pending".');
+        }
+        pending.accounts = pending.accounts.filter(
+          (account) => account.name !== "AppAccount",
+        );
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        runApplyCommand({
+          organizationsClient: createOrganizationsClientMock({}),
+          ssoAdminClient: createSsoAdminClientMock({}),
+          identityStoreClient: createIdentityStoreClientMock({}),
+          logger: noopLogger,
+          configPath: paths.configPath,
+          typesPath: paths.typesPath,
+          statePath: paths.statePath,
+          contextPath: paths.contextPath,
+          runtime: createApplyRuntime(),
+          ignoreUnsupported: false,
+          planConfirmation: async () => true,
+        }),
+      /--allow-destructive/,
+    );
   } finally {
     await workspace.cleanup();
   }
@@ -1206,14 +1329,8 @@ test("runApplyCommand persists partial state on operation failure", async () => 
           (account) => account.name !== "AppAccount",
         );
 
-        const graveyard = config.organizationalUnits.find(
-          (organizationalUnit) => organizationalUnit.name === "Graveyard",
-        );
-        if (graveyard == null) {
-          throw new Error("Expected Graveyard OU.");
-        }
-        graveyard.accounts = [
-          ...graveyard.accounts,
+        engineering.accounts = [
+          ...engineering.accounts,
           ...pending.accounts.filter(
             (account) => account.name === "DataAccount",
           ),
@@ -1244,6 +1361,7 @@ test("runApplyCommand persists partial state on operation failure", async () => 
           statePath: paths.statePath,
           contextPath: paths.contextPath,
           runtime: createApplyRuntime(),
+          allowDestructive: true,
           ignoreUnsupported: false,
           planConfirmation: async () => true,
         }),
@@ -1297,22 +1415,13 @@ test("runApplyCommand persists mixed successful operations before later failure"
         const pending = config.organizationalUnits.find(
           (organizationalUnit) => organizationalUnit.name === "Pending",
         );
-        const graveyard = config.organizationalUnits.find(
-          (organizationalUnit) => organizationalUnit.name === "Graveyard",
-        );
-        if (engineering == null || pending == null || graveyard == null) {
-          throw new Error("Expected Engineering, Pending, and Graveyard OUs.");
+        if (engineering == null || pending == null) {
+          throw new Error("Expected Engineering and Pending OUs.");
         }
 
         engineering.accounts = [
           ...engineering.accounts,
           { name: "BrandNew", email: "brandnew@example.com" },
-        ];
-        graveyard.accounts = [
-          ...graveyard.accounts,
-          ...pending.accounts.filter(
-            (account) => account.name === "AppAccount",
-          ),
         ];
         pending.accounts = pending.accounts.filter(
           (account) => account.name !== "AppAccount",
@@ -1374,6 +1483,7 @@ test("runApplyCommand persists mixed successful operations before later failure"
           statePath: paths.statePath,
           contextPath: paths.contextPath,
           runtime: createApplyRuntime(),
+          allowDestructive: true,
           ignoreUnsupported: false,
           planConfirmation: async () => true,
         }),

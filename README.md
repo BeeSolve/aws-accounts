@@ -48,6 +48,7 @@ Those policy helpers and schemas are provided by the installed
 - rename OU when the diff resolves to a strict one-to-one same-parent rename
 - delete an OU subtree with `apply --allow-destructive` when every removed OU becomes empty and nested deletes can run deepest-first
 - create account in a known target OU
+- remove accounts from authored config by moving them into the reserved `Graveyard` OU with `apply --allow-destructive` (manual AWS account closure remains required)
 
 `plan` and `apply` also support these IAM Identity Center mutations:
 
@@ -134,11 +135,12 @@ Destructive operations detected: 1. Apply requires --allow-destructive.
 
 Still out of scope in the current increment:
 
-- account removals
 - deleting an OU that still has child OUs or accounts
 - deleting an OU subtree when any descendant is unresolved or unsafe to delete
 - deleting the reserved `Pending` or `Graveyard` OUs (do that manually outside this tool)
 - account metadata reconciliation after creation (tags, alternate contacts, account-name drift)
+
+`Graveyard` is bootstrap-managed internal state. Generated `aws.config.ts` intentionally omits `Graveyard` accounts and does not require a `Graveyard` OU entry.
 
 ## Recovery after failed destructive apply
 

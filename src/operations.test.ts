@@ -13,6 +13,15 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       parentOuName: "root",
     },
     {
+      kind: "removeAccount",
+      accountId: "111111111111",
+      accountName: "AppAccount",
+      fromOuId: "ou-eng",
+      fromOuName: "Engineering",
+      toOuId: "ou-graveyard",
+      toOuName: "Graveyard",
+    },
+    {
       kind: "createIdcUser",
       userName: "alice",
       displayName: "Alice",
@@ -136,9 +145,9 @@ test("unsupportedDiffSchema accepts remaining unsupported diff kinds", () => {
       description: 'new OU "Platform" has unresolved parent "unknown" (__pending_creation__)',
     },
     {
-      kind: "removedAccount",
+      kind: "removedOu",
       category: "destructive",
-      description: 'removed account "AppAccount"',
+      description: 'removed OU "Platform"',
     },
   ];
 

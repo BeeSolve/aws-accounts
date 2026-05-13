@@ -13,27 +13,28 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   renameOu: 2,
   createAccount: 3,
   moveAccount: 4,
-  createIdcUser: 5,
-  updateIdcUser: 6,
-  createIdcGroup: 7,
-  updateIdcGroupDescription: 8,
-  addIdcGroupMembership: 9,
-  createIdcPermissionSet: 10,
-  updateIdcPermissionSetDescription: 11,
-  putIdcPermissionSetInlinePolicy: 12,
-  deleteIdcPermissionSetInlinePolicy: 13,
-  attachIdcManagedPolicyToPermissionSet: 14,
-  detachIdcManagedPolicyFromPermissionSet: 15,
-  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 16,
-  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 17,
-  provisionIdcPermissionSet: 18,
-  grantIdcAccountAssignment: 19,
-  removeIdcGroupMembership: 20,
-  revokeIdcAccountAssignment: 21,
-  deleteIdcUser: 22,
-  deleteIdcGroup: 23,
-  deleteIdcPermissionSet: 24,
-  deleteOu: 25,
+  removeAccount: 5,
+  createIdcUser: 6,
+  updateIdcUser: 7,
+  createIdcGroup: 8,
+  updateIdcGroupDescription: 9,
+  addIdcGroupMembership: 10,
+  createIdcPermissionSet: 11,
+  updateIdcPermissionSetDescription: 12,
+  putIdcPermissionSetInlinePolicy: 13,
+  deleteIdcPermissionSetInlinePolicy: 14,
+  attachIdcManagedPolicyToPermissionSet: 15,
+  detachIdcManagedPolicyFromPermissionSet: 16,
+  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 17,
+  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 18,
+  provisionIdcPermissionSet: 19,
+  grantIdcAccountAssignment: 20,
+  removeIdcGroupMembership: 21,
+  revokeIdcAccountAssignment: 22,
+  deleteIdcUser: 23,
+  deleteIdcGroup: 24,
+  deleteIdcPermissionSet: 25,
+  deleteOu: 26,
 };
 
 type DiffStatesProps = {
@@ -166,14 +167,36 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
+  const graveyardOrganizationalUnit =
+    currentOrganization.organizationalUnitByName.get("Graveyard");
   for (const currentAccount of currentOrganization.accounts) {
     if (nextOrganization.accountByName.has(currentAccount.name)) {
       continue;
     }
-    unsupported.push({
-      kind: "removedAccount",
-      category: "destructive",
-      description: `removed account "${currentAccount.name}"`,
+    if (graveyardOrganizationalUnit == null) {
+      unsupported.push({
+        kind: "removedOu",
+        category: "destructive",
+        description: `removed account "${currentAccount.name}" cannot be reconciled because reserved OU "Graveyard" was not found in state`,
+      });
+      continue;
+    }
+    if (currentAccount.parentId === graveyardOrganizationalUnit.id) {
+      continue;
+    }
+    const fromOuName = resolveOrganizationalUnitName({
+      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
+      rootId: currentOrganization.rootId,
+      organizationalUnitId: currentAccount.parentId,
+    });
+    operations.push({
+      kind: "removeAccount",
+      accountId: currentAccount.id,
+      accountName: currentAccount.name,
+      fromOuId: currentAccount.parentId,
+      fromOuName,
+      toOuId: graveyardOrganizationalUnit.id,
+      toOuName: graveyardOrganizationalUnit.name,
     });
   }
 
@@ -895,6 +918,9 @@ function getOperationSortKey(operation: Operation): string {
   }
   if (operation.kind === "createAccount") {
     return `${operation.kind}|${operation.accountName}|${operation.targetOuName}`;
+  }
+  if (operation.kind === "removeAccount") {
+    return `${operation.kind}|${operation.accountName}|${operation.accountId}`;
   }
   if (operation.kind === "deleteOu") {
     return `${operation.kind}|${operation.ouName}|${operation.parentOuName}`;

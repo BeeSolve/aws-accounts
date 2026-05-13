@@ -97,6 +97,15 @@ function formatHumanOperationLine(operation: Plan["operations"][number]): string
   if (operation.kind === "createAccount") {
     return `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`;
   }
+  if (operation.kind === "removeAccount") {
+    return [
+      `  [destructive] move removed account "${operation.accountName}" (${operation.accountId}) from ${operation.fromOuName} -> ${operation.toOuName}`,
+      "    WARNING: this tool does not close AWS accounts.",
+      `    Manual action required: open AWS Organizations -> "${operation.toOuName}" and close "${operation.accountName}" when safe.`,
+      "    Review parked accounts anytime: npm run cli -- graveyard",
+      `    Suggested AWS CLI close command: aws organizations close-account --account-id ${operation.accountId}`,
+    ].join("\n");
+  }
   if (operation.kind === "createIdcUser") {
     return `  create IdC user "${operation.userName}"`;
   }
@@ -178,12 +187,14 @@ function isDestructiveOperation(
 ): operation is Extract<
   Plan["operations"][number],
   | { kind: "deleteOu" }
+  | { kind: "removeAccount" }
   | { kind: "deleteIdcUser" }
   | { kind: "deleteIdcGroup" }
   | { kind: "deleteIdcPermissionSet" }
 > {
   return (
     operation.kind === "deleteOu" ||
+    operation.kind === "removeAccount" ||
     operation.kind === "deleteIdcUser" ||
     operation.kind === "deleteIdcGroup" ||
     operation.kind === "deleteIdcPermissionSet"
