@@ -27,12 +27,25 @@ Scope:
 
 Why first among remaining work:
 
-- it is destructive, organization-wide work
-- the expected safety model is stricter than OU deletion because account closure
-  / detachment semantics are much harder
-- it should wait until the remaining high-value IdC surface is finished
+- it is the largest functional gap versus “`aws.config.ts` is source of truth”
+  for the organization tree
+- it is destructive, organization-wide work, so the safety model must be
+  explicit before implementation (closure vs detach, gating, preflight)
 
-### 2. Account metadata reconciliation after creation
+### 2. Machine-readable destructive plan metadata (polish)
+
+Scope:
+
+- enrich `plan --json` so consumers can distinguish supported destructive
+  operations from safe mutations without parsing formatted text
+
+Why second (after account removal):
+
+- agreed sequencing: ship the risky lifecycle feature first, then make automated
+  consumers of `plan --json` reliable without scraping human-readable lines
+- current human-readable output already exposes destructive intent clearly
+
+### 3. Account metadata reconciliation after creation
 
 Scope:
 
@@ -41,32 +54,14 @@ Scope:
 - alternate contacts
 - similar post-create metadata
 
-Why second:
+Why third:
 
 - useful, but not a blocker for the core org / IdC access workflow
 - likely involves broader AWS Organizations / Account Management API surface
-- fits better after the access-management backlog is materially complete
-
-### 3. Machine-readable destructive plan metadata
-
-Scope:
-
-- enrich `plan --json` so consumers can distinguish supported destructive
-  operations from safe mutations without parsing formatted text
-
-Why third:
-
-- this is polish rather than a missing core reconciliation capability
-- current human-readable output already exposes destructive intent clearly
-- it is still worth doing before v1 finalization if automation consumers need it
 
 ## Recommended implementation sequence
 
-1. Decide whether account removal belongs in strict v1 or a guarded v1.1 slice.
-2. Finish account metadata parity where it matters for operations.
-3. Finish lower-priority polish (`plan --json` destructive metadata).
-
-## Notes
-
-- If a strong operational need appears for machine-readable plan metadata, item
-  3 can move earlier without affecting the core reconciliation design.
+1. Decide whether account removal belongs in strict v1 or a guarded v1.1 slice,
+   then implement with explicit destructive gating and preflight.
+2. Enrich `plan --json` with structured destructive-operation metadata.
+3. Finish account metadata parity where it matters for operations.
