@@ -25,12 +25,12 @@ Scope for this increment:
 - [x] Add node test runner coverage for `runScanCommand` via mocked AWS SDK clients.
 - [x] Add CLI output summarizing discovered resources and output file path.
 
-## Phase 2: Bootstrap OUs (Pending, Graveyard) locally-first flow
+## Phase 2: Bootstrap OUs (Graveyard) locally-first flow
 
 - [x] Define bootstrap command contract (`bootstrap`) for local-first mode (no Lambda/S3 setup in increment 1).
-- [x] Define idempotent logic to ensure required OUs exist: `Pending`, `Graveyard`.
+- [x] Define idempotent logic to ensure required OUs exist: `Graveyard`.
 - [x] Implement read-before-write checks to avoid duplicate OU creation.
-- [x] Implement OU creation in AWS Organizations for missing required OUs (`Pending`, `Graveyard`).
+- [x] Implement OU creation in AWS Organizations for missing required OUs (`Graveyard`).
 - [x] Implement safe guards:
   - [x] no deletion
   - [x] no re-parenting except explicitly required by command scope
@@ -56,7 +56,7 @@ Scope for this increment:
 - [x] Define deterministic codegen format for `aws.config.ts` (stable key ordering, readable structure).
 - [x] Implement state → config transform (`mapStateToAwsConfig`):
   - [x] load and validate `state.json`.
-  - [x] cross-validate against `aws.context.json` (rootId, Pending/Graveyard OU ids, Identity Center ids); fail-fast on disagreement (no auto-repair — bootstrap's job).
+  - [x] cross-validate against `aws.context.json` (rootId, Graveyard OU id, Identity Center ids); fail-fast on disagreement (no auto-repair — bootstrap's job).
   - [x] map to domain model with name-uniqueness assertions (accounts globally, OU names globally for picklist validity, groups, users, permission sets).
 - [x] Implement codegen for `aws.config.ts` and `aws.config.types.ts` with deterministic ordering (OUs depth-first then alphabetical; everything else alphabetical).
 - [x] Implement `aws.config.ts` loader (esbuild compile to temporary `.mjs` → dynamic `import()` → validate against `awsConfigSchema` → cleanup).
@@ -76,18 +76,12 @@ Scope for this increment:
 - [x] Add tests for `regenerate` command (loads fixture config, re-emits types, no-op when unchanged, confirmation rejected paths).
 - [x] Add CLI summary showing per-file change status (written / unchanged / would-write).
 
-## Phase 4: Implement account creation (local CLI direct AWS calls)
+## Phase 4: Implement account creation (config-driven through plan/apply)
 
-- [x] Define create-account command contract (`create-account --email --name`).
-- [x] Implement input validation via valibot (email format in CLI) plus command-level non-empty checks.
-- [x] Resolve `Pending` OU ID from `aws.context.json` (or fail with actionable error).
-- [x] Implement direct AWS Organizations create account flow (local CLI call in increment 1).
-- [x] Implement polling until account status is terminal; surface progress to user.
-- [x] Enforce create-account polling timeout at 15 minutes with clear timeout error.
-- [x] On success, update local `aws.config.ts` with newly created account in `Pending`.
-- [x] Ensure operation is idempotent-safe for retries (detect already-created account by email/name where possible).
-- [x] Add tests for command validation and config update logic.
-- [x] Add clear terminal feedback: started, waiting, created, config updated.
+- [x] Account creation is emitted by `plan` as `createAccount` for newly authored config accounts.
+- [x] `apply` executes account creation directly in the target OU (no Pending staging OU).
+- [x] Creation path uses polling and clear progress/failure feedback.
+- [x] Add tests for command validation and config/state update logic.
 
 ## Phase 5: Implement add/modify flow (config-driven reconciliation)
 

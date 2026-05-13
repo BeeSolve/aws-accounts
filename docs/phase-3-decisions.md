@@ -44,7 +44,7 @@ The tool's lifecycle has three phases:
 
 - Default-exports an `AwsConfig` object.
 - Imports the schema and type from `./aws.config.types.js`.
-- Header comment lists the file's purpose, the `init` / `regenerate` workflow, and a note that the synthetic `{ name: "root", parentName: null }` entry represents the organization root and that `Pending` / `Graveyard` OUs are managed by `bootstrap` and tracked in `aws.context.json` (do not rename).
+- Header comment lists the file's purpose, the `init` / `regenerate` workflow, and a note that the synthetic `{ name: "root", parentName: null }` entry represents the organization root and that `Graveyard` OU is managed by `bootstrap` and tracked in `aws.context.json` (do not rename).
 - Edited by humans. Manual edits survive `regenerate` (which only touches the types file). Manual edits would be overwritten by re-running `init`, gated by confirmation.
 
 ### `aws.config.types.ts`
@@ -61,7 +61,7 @@ The tool's lifecycle has three phases:
 - Each entry: `{ name: string, parentName: <picklist of OU names> | null, accounts: AccountRef[] }`.
 - Exactly one entry has `parentName: null`. Its `name` is the reserved string `"root"`. That entry holds accounts that live directly under the organization root in AWS.
 - Top-level OUs (e.g. `Sandbox`, `Security`) have `parentName: "root"`.
-- `Pending` and `Graveyard` are included as regular OU entries, same as any other OU.
+- `Graveyard` is intentionally omitted from generated `aws.config.ts`; it remains bootstrap-managed/internal and available in state/context.
 - Account refs: `{ name: string, email: string }`. Email is carried inline because it is the AWS-meaningful identity for new account creation in phase 4 and useful documentation for readers.
 
 ### Identity Center
@@ -110,7 +110,7 @@ Entity *definition* fields (e.g. `organizationalUnits[].name`, `users[].userName
 ### Cross-file consistency (`init` only)
 
 - `state.json.organization.rootId` must equal `aws.context.json.organization.rootId`.
-- The OU named `"Pending"` in `state.json` must have id equal to `aws.context.json.organization.pendingOuId`. Same for `"Graveyard"` / `graveyardOuId`.
+- The OU named `"Graveyard"` in `state.json` must have id equal to `aws.context.json.organization.graveyardOuId`.
 - `state.json.identityCenter.instanceArn` and `identityStoreId` must match `aws.context.json.identityCenter`.
 - Mismatch → fail with descriptive error pointing at the conflicting field; user fixes by re-running `bootstrap` or correcting AWS.
 

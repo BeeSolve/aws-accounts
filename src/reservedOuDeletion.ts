@@ -7,7 +7,6 @@ export function applyReservedOuDeletionGuard(props: {
   context: AwsContextFile;
 }): Plan {
   const reservedOuNamesById = new Map<string, string>([
-    [props.context.organization.pendingOuId, "Pending"],
     [props.context.organization.graveyardOuId, "Graveyard"],
   ]);
   const operations = props.plan.operations.filter((operation) => {

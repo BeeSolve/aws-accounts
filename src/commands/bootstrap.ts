@@ -13,7 +13,6 @@ import { readFile, writeFile } from "node:fs/promises";
 import * as v from "valibot";
 import type { Logger } from "../logger.js";
 
-const pendingOuName = "Pending";
 const graveyardOuName = "Graveyard";
 
 const contextFilePath = "aws.context.json";
@@ -31,9 +30,7 @@ type BootstrapCommandInput = {
 
 type BootstrapCommandResult = {
   outputPath: string;
-  pendingOuId: string;
   graveyardOuId: string;
-  pendingCreated: boolean;
   graveyardCreated: boolean;
   identityCenterCaptured: boolean;
 };
@@ -94,12 +91,9 @@ export async function runBootstrapCommand(
   if (finalDiscovery.analysis.ok === false) {
     throw new Error(finalDiscovery.analysis.reason);
   }
-  if (
-    finalDiscovery.analysis.pendingOuId == null ||
-    finalDiscovery.analysis.graveyardOuId == null
-  ) {
+  if (finalDiscovery.analysis.graveyardOuId == null) {
     throw new Error(
-      "Bootstrap failed: Pending and Graveyard organizational units must exist under root after bootstrap.",
+      'Bootstrap failed: "Graveyard" organizational unit must exist under root after bootstrap.',
     );
   }
 
@@ -117,7 +111,6 @@ export async function runBootstrapCommand(
   const nextContext = buildAwsContextFile({
     managementAccountId: masterAccountId,
     rootId,
-    pendingOuId: finalDiscovery.analysis.pendingOuId,
     graveyardOuId: finalDiscovery.analysis.graveyardOuId,
     identityCenter,
     profile: props.profile,
@@ -140,9 +133,7 @@ export async function runBootstrapCommand(
 
   return {
     outputPath: resolvedOutputPath,
-    pendingOuId: finalDiscovery.analysis.pendingOuId,
     graveyardOuId: finalDiscovery.analysis.graveyardOuId,
-    pendingCreated: initialDiscovery.analysis.needsPendingCreate,
     graveyardCreated: initialDiscovery.analysis.needsGraveyardCreate,
     identityCenterCaptured: identityCenter != null,
   };
@@ -153,7 +144,6 @@ const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
 const organizationContextSchema = v.strictObject({
   managementAccountId: nonEmptyString,
   rootId: nonEmptyString,
-  pendingOuId: nonEmptyString,
   graveyardOuId: nonEmptyString,
 });
 
@@ -192,9 +182,7 @@ type RootChildOu = {
 type BootstrapOuAnalysis =
   | {
       ok: true;
-      pendingOuId: string | undefined;
       graveyardOuId: string | undefined;
-      needsPendingCreate: boolean;
       needsGraveyardCreate: boolean;
     }
   | {
@@ -205,18 +193,9 @@ type BootstrapOuAnalysis =
 function analyzeRootChildrenForBootstrap(props: {
   children: RootChildOu[];
 }): BootstrapOuAnalysis {
-  const pending = props.children.filter(
-    (child) => child.name === pendingOuName,
-  );
   const graveyard = props.children.filter(
     (child) => child.name === graveyardOuName,
   );
-  if (pending.length > 1) {
-    return {
-      ok: false,
-      reason: `Multiple organizational units named "${pendingOuName}" under root: ${pending.map((child) => `${child.id} (${child.arn})`).join("; ")}`,
-    };
-  }
   if (graveyard.length > 1) {
     return {
       ok: false,
@@ -225,9 +204,7 @@ function analyzeRootChildrenForBootstrap(props: {
   }
   return {
     ok: true,
-    pendingOuId: pending[0]?.id,
     graveyardOuId: graveyard[0]?.id,
-    needsPendingCreate: pending.length === 0,
     needsGraveyardCreate: graveyard.length === 0,
   };
 }
@@ -239,7 +216,6 @@ function assertAwsContextCompatibleWithExisting(props: {
   const keys = [
     "managementAccountId",
     "rootId",
-    "pendingOuId",
     "graveyardOuId",
   ] as const;
   for (const key of keys) {
@@ -311,10 +287,6 @@ function buildBootstrapPlanLines(props: {
   analysis: Exclude<BootstrapOuAnalysis, { ok: false }>;
 }): string[] {
   const lines: string[] = [];
-  if (props.analysis.needsPendingCreate) {
-    lines.push(`Root organizational unit id: ${props.rootId}`);
-    lines.push(`Will create OU "${pendingOuName}" under root.`);
-  }
   if (props.analysis.needsGraveyardCreate) {
     if (lines.length === 0) {
       lines.push(`Root organizational unit id: ${props.rootId}`);
@@ -330,15 +302,6 @@ async function createMissingRequiredOus(props: {
   rootId: string;
   analysis: Exclude<BootstrapOuAnalysis, { ok: false }>;
 }): Promise<void> {
-  if (props.analysis.needsPendingCreate) {
-    props.logger.log(`Creating organizational unit "${pendingOuName}"...`);
-    await props.organizationsClient.send(
-      new CreateOrganizationalUnitCommand({
-        ParentId: props.rootId,
-        Name: pendingOuName,
-      }),
-    );
-  }
   if (props.analysis.needsGraveyardCreate) {
     props.logger.log(`Creating organizational unit "${graveyardOuName}"...`);
     await props.organizationsClient.send(
@@ -415,7 +378,6 @@ async function readExistingAwsContext(props: {
 type BuildAwsContextFileProps = {
   managementAccountId: string;
   rootId: string;
-  pendingOuId: string;
   graveyardOuId: string;
   identityCenter: { instanceArn: string; identityStoreId: string };
   profile: string;
@@ -430,7 +392,6 @@ function buildAwsContextFile(props: BuildAwsContextFileProps): AwsContextFile {
     organization: {
       managementAccountId: props.managementAccountId,
       rootId: props.rootId,
-      pendingOuId: props.pendingOuId,
       graveyardOuId: props.graveyardOuId,
     },
     identityCenter: props.identityCenter,

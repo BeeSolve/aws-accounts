@@ -1,6 +1,6 @@
 # Phase 2 Decisions
 
-This file records agreed behaviour before implementing phase 2 (`bootstrap`): ensure **`Pending`** and **`Graveyard`** organizational units exist and persist context locally.
+This file records agreed behaviour before implementing phase 2 (`bootstrap`): ensure **`Graveyard`** organizational unit exists and persist context locally.
 
 ## Lifecycle position
 
@@ -9,8 +9,8 @@ This file records agreed behaviour before implementing phase 2 (`bootstrap`): en
 ## Scope
 
 - **OU-only**: `bootstrap` creates or discovers OUs only. It does **not** create or edit `aws.config.ts`, `state.json`, or deploy Lambda/S3.
-- **Parent OU**: **`Pending`** and **`Graveyard`** are always created as **direct children of the organization root** (no `--parent-ou-id`).
-- **Names**: fixed **`Pending`** and **`Graveyard`** (exact name match). No configurable names in this phase.
+- **Parent OU**: **`Graveyard`** is always created as a **direct child of the organization root** (no `--parent-ou-id`).
+- **Name**: fixed **`Graveyard`** (exact name match). No configurable names in this phase.
 
 ## CLI contract
 
@@ -31,13 +31,13 @@ This file records agreed behaviour before implementing phase 2 (`bootstrap`): en
 - **No merging** of ambiguous or partial updates.
 - If **`aws.context.json` already exists**:
   - After resolving the authoritative picture from AWS (and after any creates requested in this run), compare persisted **`organization`** / **`identityCenter`** identifiers against what we resolved.
-  - If any stored identifier **disagrees** with live resolution (for example stored `pendingOuId` does not match the live OU named `Pending` under root), **fail** with a descriptive error. User must fix the file or AWS manually.
+  - If any stored identifier **disagrees** with live resolution (for example stored `graveyardOuId` does not match the live OU named `Graveyard` under root), **fail** with a descriptive error. User must fix the file or AWS manually.
 
 ## AWS behaviour
 
 ### Reads
 
-- Use Organizations APIs to resolve **root id**, **management account id**, and **child OUs of root** matching `Pending` / `Graveyard`.
+- Use Organizations APIs to resolve **root id**, **management account id**, and **child OUs of root** matching `Graveyard`.
 
 ### Writes
 
@@ -72,7 +72,6 @@ Proposed minimal schema for phase 2:
   "organization": {
     "managementAccountId": "string",
     "rootId": "string",
-    "pendingOuId": "string",
     "graveyardOuId": "string"
   },
   "identityCenter": {

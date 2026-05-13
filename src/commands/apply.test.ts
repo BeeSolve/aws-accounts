@@ -887,7 +887,7 @@ test("runApplyCommand passes destructive warning into confirmation lines", async
   }
 });
 
-test("runApplyCommand refuses Pending OU deletion and explains it must be manual", async () => {
+test("runApplyCommand allows deleting non-reserved Pending OU", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
     const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
@@ -923,29 +923,26 @@ test("runApplyCommand refuses Pending OU deletion and explains it must be manual
     });
 
     let deleteCalls = 0;
-    await assert.rejects(
-      () =>
-        runApplyCommand({
-          organizationsClient: createOrganizationsClientMock({
-            onDeleteOu: async () => {
-              deleteCalls += 1;
-            },
-          }),
-          ssoAdminClient: createSsoAdminClientMock({}),
-          identityStoreClient: createIdentityStoreClientMock({}),
-          logger: noopLogger,
-          configPath: paths.configPath,
-          typesPath: paths.typesPath,
-          statePath: paths.statePath,
-          contextPath: paths.contextPath,
-          runtime: createApplyRuntime(),
-          allowDestructive: true,
-          ignoreUnsupported: false,
-          planConfirmation: async () => true,
-        }),
-      /delete it manually in AWS/,
-    );
-    assert.equal(deleteCalls, 0);
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        onDeleteOu: async () => {
+          deleteCalls += 1;
+        },
+      }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      allowDestructive: true,
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+    assert.equal(result.status, "applied");
+    assert.equal(deleteCalls, 1);
   } finally {
     await workspace.cleanup();
   }
@@ -3525,7 +3522,6 @@ async function writeFixtureFiles(props: {
     organization: {
       managementAccountId: "999999999999",
       rootId: "r-root",
-      pendingOuId: "ou-pending",
       graveyardOuId: "ou-graveyard",
     },
     identityCenter: {

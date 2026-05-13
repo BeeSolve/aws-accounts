@@ -369,7 +369,7 @@ Locked Step 4 decisions:
 
 ### Polling model
 
-Wave 2 should mirror the existing create-account runtime pattern:
+Wave 2 should mirror the existing account-creation helper runtime pattern:
 
 - runtime-configured timeout
 - runtime-configured poll interval

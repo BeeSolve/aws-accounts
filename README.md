@@ -84,7 +84,7 @@ A removed OU can be reconciled with `deleteOu` only when all of the following ar
 
 These cases are still blocked:
 
-- deleting `Pending` or `Graveyard`,
+- deleting `Graveyard`,
 - deleting an OU subtree when any descendant is unresolved or not being removed,
 - deleting an OU that still has live child OUs or live accounts,
 - deleting accounts themselves.
@@ -137,7 +137,7 @@ Still out of scope in the current increment:
 
 - deleting an OU that still has child OUs or accounts
 - deleting an OU subtree when any descendant is unresolved or unsafe to delete
-- deleting the reserved `Pending` or `Graveyard` OUs (do that manually outside this tool)
+- deleting the reserved `Graveyard` OU (do that manually outside this tool)
 - account metadata reconciliation after creation (tags, alternate contacts, account-name drift)
 
 `Graveyard` is bootstrap-managed internal state. Generated `aws.config.ts` intentionally omits `Graveyard` accounts and does not require a `Graveyard` OU entry.
@@ -260,17 +260,6 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "identitystore:ListUsers",
         "identitystore:ListGroups",
         "identitystore:ListGroupMemberships"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CreateAccountCommand",
-      "Effect": "Allow",
-      "Action": [
-        "organizations:ListAccounts",
-        "organizations:CreateAccount",
-        "organizations:DescribeCreateAccountStatus",
-        "organizations:MoveAccount"
       ],
       "Resource": "*"
     },

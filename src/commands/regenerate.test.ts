@@ -162,7 +162,6 @@ async function writeFixtureFiles(props: {
     organization: {
       managementAccountId: "999999999999",
       rootId: "r-root",
-      pendingOuId: "ou-pending",
       graveyardOuId: "ou-graveyard",
     },
     identityCenter: {

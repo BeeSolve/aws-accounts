@@ -7,7 +7,7 @@
 
 # 1. Bootstrap management account
 
-The package `@beesolve/aws-account` should come with prebuilt lambda.zip file. When user calls `npx aws-accounts bootstrap` it should deploy Lambda and S3 bucket in the management account - it should also persist s3 bucket name and aws lambda arn in aws.context.json file. The aws.config.ts should be also generated. The profile and region should be provided by arguments or env variables. Also create `Pending` OU and `Graveyard` OU. Note their "ids" in `aws.context.json` as well.
+The package `@beesolve/aws-account` should come with prebuilt lambda.zip file. When user calls `npx aws-accounts bootstrap` it should deploy Lambda and S3 bucket in the management account - it should also persist s3 bucket name and aws lambda arn in aws.context.json file. The aws.config.ts should be also generated. The profile and region should be provided by arguments or env variables. Also create `Graveyard` OU. Note its "id" in `aws.context.json` as well.
 
 # 2. Scan for existing resources
 
@@ -15,7 +15,7 @@ After running `npx aws-accounts scan` the Lambda function should be invoked with
 
 # 3. Create new account
 
-After running `npx aws-accounts create-account` user should be able to provide email address, and account name. The `lambda` should be invoked with an instruction to create acccount. The lambda should synchronously create account in Pending OU - the ID should be passed as argument to lambda. Lambda should also wait for the account to became active (poll for the status) - once it is active it should return it's ID. Then the `cli` should add this account into `aws.config.ts`.
+Account creation is config-driven through `plan` / `apply`. When a new account is added to `aws.config.ts` under a target OU, `plan` emits `createAccount` and `apply` creates it directly in that OU.
 
 # 4. Add/modify existing resources
 

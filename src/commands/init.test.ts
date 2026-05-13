@@ -69,7 +69,7 @@ test("runInitCommand writes context/state/config/types in sequence", async () =>
       readFile(configPath, "utf8"),
       readFile(typesPath, "utf8"),
     ]);
-    assert.match(contextRaw, /"pendingOuId": "ou-pending"/);
+    assert.match(contextRaw, /"graveyardOuId": "ou-graveyard"/);
     assert.match(stateRaw, /"rootId": "r-root"/);
     assert.match(configRaw, /const awsConfig:/);
     assert.match(configRaw, /iam\.s3\("GetObject"\)/);
@@ -167,7 +167,7 @@ function createOrganizationsClientMock(): OrganizationsClient {
       }
       if (command instanceof ListParentsCommand) {
         return {
-          Parents: [{ Id: "ou-pending" }],
+          Parents: [{ Id: rootId }],
         };
       }
       throw new Error("Unexpected Organizations command in init test.");

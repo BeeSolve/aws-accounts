@@ -180,9 +180,9 @@ test("writeAwsConfigFromState fails on context mismatch", async () => {
     });
     const contextRaw = await readFile(contextPath, "utf8");
     const context = JSON.parse(contextRaw) as {
-      organization: { pendingOuId: string };
+      organization: { graveyardOuId: string };
     };
-    context.organization.pendingOuId = "ou-pending-mismatch";
+    context.organization.graveyardOuId = "ou-graveyard-mismatch";
     await writeFile(
       contextPath,
       `${JSON.stringify(context, null, 2)}\n`,
@@ -199,7 +199,7 @@ test("writeAwsConfigFromState fails on context mismatch", async () => {
           logger: noopLogger,
           overwriteConfirmation: async () => true,
         }),
-      /Pending OU id/,
+      /Graveyard OU id/,
     );
   } finally {
     await workspace.cleanup();
@@ -936,7 +936,6 @@ async function writeFixtureFiles(props: {
     organization: {
       managementAccountId: "999999999999",
       rootId: "r-root",
-      pendingOuId: "ou-pending",
       graveyardOuId: "ou-graveyard",
     },
     identityCenter: {

@@ -252,7 +252,7 @@ test("runPlanCommand prints human-readable deleteOu operations", async () => {
   }
 });
 
-test("runPlanCommand refuses Pending OU deletion and explains it must be manual", async () => {
+test("runPlanCommand allows deleting non-reserved Pending OU", async () => {
   const workspace = await createTestWorkspace({ prefix: "plan-test-" });
   try {
     const statePath = join(workspace.workspacePath, "state.json");
@@ -301,15 +301,11 @@ test("runPlanCommand refuses Pending OU deletion and explains it must be manual"
       contextPath,
       output: "human",
     });
-    assert.equal(result.plan.operations.length, 1);
-    assert.equal(result.plan.unsupported.length, 1);
-    assert.ok(
-      logger.logs.some((line) =>
-        line.includes('reserved OU "Pending" cannot be deleted by this tool'),
-      ),
-    );
-    assert.ok(
+    assert.equal(result.plan.operations.length, 2);
+    assert.equal(result.plan.unsupported.length, 0);
+    assert.equal(
       logger.logs.some((line) => line.includes("delete it manually in AWS")),
+      false,
     );
   } finally {
     await workspace.cleanup();
@@ -901,7 +897,6 @@ async function writeFixtureFiles(props: {
     organization: {
       managementAccountId: "999999999999",
       rootId: "r-root",
-      pendingOuId: "ou-pending",
       graveyardOuId: "ou-graveyard",
     },
     identityCenter: {

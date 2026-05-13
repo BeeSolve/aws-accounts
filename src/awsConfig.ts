@@ -28,7 +28,6 @@ const awsContextSchema = v.strictObject({
   organization: v.strictObject({
     managementAccountId: nonEmptyString,
     rootId: nonEmptyString,
-    pendingOuId: nonEmptyString,
     graveyardOuId: nonEmptyString,
   }),
   identityCenter: v.strictObject({
@@ -1039,7 +1038,6 @@ import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
  * Generated inline policies use those helpers automatically when the action is
  * present in the installed @beesolve/iam-policy-ts catalog.
  * The synthetic { name: "root", parentName: null } entry represents organization root.
- * "Pending" is bootstrap-managed and tracked in aws.context.json.
  * "Graveyard" is bootstrap-managed and used internally as the account-removal sink;
  * it is intentionally omitted from generated organizationalUnits in this file.
  */
@@ -1321,18 +1319,6 @@ function assertStateMatchesContext(props: {
     );
   }
 
-  const pendingOrganizationalUnit =
-    props.state.organization.organizationalUnits.find(
-      (ou) => ou.name === "Pending",
-    );
-  if (
-    pendingOrganizationalUnit?.id !== props.context.organization.pendingOuId
-  ) {
-    throw new Error(
-      `state/context mismatch for Pending OU id: state has "${pendingOrganizationalUnit?.id ?? "<missing>"}" but context has "${props.context.organization.pendingOuId}".`,
-    );
-  }
-
   const graveyardOrganizationalUnit =
     props.state.organization.organizationalUnits.find(
       (ou) => ou.name === "Graveyard",
@@ -1491,9 +1477,6 @@ function resolveOrganizationalUnitId(props: {
 }): string {
   if (props.organizationalUnitName === "root") {
     return props.context.organization.rootId;
-  }
-  if (props.organizationalUnitName === "Pending") {
-    return props.context.organization.pendingOuId;
   }
   if (props.organizationalUnitName === "Graveyard") {
     return props.context.organization.graveyardOuId;

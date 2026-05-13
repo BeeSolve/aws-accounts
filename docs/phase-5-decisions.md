@@ -1,6 +1,6 @@
 # Phase 5 Decisions
 
-This file records decisions agreed before implementing phase 5: introduce `plan` and `apply` to reconcile AWS Organizations state to `aws.config.ts`. Phase 3 shipped the `aws.config.ts` loader and the state→config transform that phase 5 reuses; phase 4 ships account creation as a separate command, not via `apply`.
+This file records decisions agreed before implementing phase 5: introduce `plan` and `apply` to reconcile AWS Organizations state to `aws.config.ts`. Phase 3 shipped the `aws.config.ts` loader and the state→config transform that phase 5 reuses.
 
 ## Lifecycle (recap)
 
@@ -188,8 +188,8 @@ The schema is left open for additive growth: `account: { name, email, /* future:
 
 - **Saved plan artifact.** Deferred to increment 2 (cloud flow).
 - **Account metadata reconciliation.** Tags, alternate contacts, primary contact info, account-name drift correction. `aws.config.ts` keeps `account: { name, email }`.
-- **New account creation in `apply`.** Goes through phase 4 `create-account` instead.
-- **OU creation / rename / deletion in `apply`.** Bootstrap creates `Pending` and `Graveyard`; further OU lifecycle is out of scope for the phase.
+- **New account creation in `apply`.** Now supported in later phases via `createAccount` operation.
+- **OU creation / rename / deletion in `apply`.** OU create/rename and safe delete are now supported in later phases; only reserved `Graveyard` deletion remains blocked.
 - **IdC mutations** (users, groups, permission sets, assignments).
 - **Automatic rollback** on apply failure. Not feasible without transaction primitives in the AWS API.
 - **Automatic re-scan** in the normal apply loop. State updates after apply come from the planned-next-state.
@@ -203,6 +203,6 @@ Once phase 5 ships, `README.md` must cover:
 - The `--yes` and `--ignore-unsupported` flags and what each does.
 - The destructive-diff-always-refuses rule with examples.
 - The partial-failure recovery loop: `scan` then re-`apply`.
-- That `apply` does not create or remove accounts in increment 1 (refer to `create-account` for creation).
+- That historical phase-5 constraints have been superseded by later shipped phases (see README for current capabilities).
 
 Tracked under the existing cross-cutting "Add README usage notes" item in `plan.md`.

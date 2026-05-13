@@ -42,7 +42,7 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
   - For entities present in both config and state (matched by name), copy AWS-issued ids from current state.
   - For entities only in config, emit a sentinel id via `pendingCreationId = "__pending_creation__" as const`. Diff engine treats sentinel ids as "to-create" markers.
   - Synthetic `{ name: 'root', parentName: null }` OU resolves to `context.organization.rootId`.
-  - `Pending` and `Graveyard` resolved from `context` (not state) for stability.
+  - `Graveyard` resolved from `context` (not state) for stability.
   - Account assignments are flattened back from `(principal, permissionSet, accounts[])` into one row per `(principal, permissionSet, accountId)`.
 - [x] Validation: name uniqueness re-checked (defense in depth even though `awsConfigSchema` enforces picklists).
 - [x] Returns a `StateFile` shaped like `state.json` but with sentinel ids where AWS ids are unknown.
@@ -159,8 +159,8 @@ Full reasoning lives in `docs/phase-5-decisions.md`. Quick reference:
 
   ```
   Plan: 2 operations, 1 unsupported diff
-    move account "dev-sandbox" (123…) from Pending → Engineering
-    move account "data-prod"   (456…) from Pending → Data
+    move account "dev-sandbox" (123…) from root → Engineering
+    move account "data-prod"   (456…) from root → Data
   Unsupported diffs (will not apply):
     new OU "Marketing" (creation not supported in increment 1)
   ```

@@ -44,19 +44,16 @@ test(
         },
       });
 
-      assert.equal(result.pendingCreated, true);
       assert.equal(result.graveyardCreated, true);
       assert.equal(result.identityCenterCaptured, true);
-      assert.equal(result.pendingOuId, "ou-pending");
       assert.equal(result.graveyardOuId, "ou-graveyard");
       assert.equal(planLinesSeen.length, 1);
-      assert.equal(planLinesSeen[0].length, 3);
+      assert.equal(planLinesSeen[0].length, 2);
 
       const raw = await readFile(outputPath, "utf8");
       const parsed = JSON.parse(raw) as {
-        organization: { pendingOuId: string; graveyardOuId: string };
+        organization: { graveyardOuId: string };
       };
-      assert.equal(parsed.organization.pendingOuId, "ou-pending");
       assert.equal(parsed.organization.graveyardOuId, "ou-graveyard");
     } finally {
       await workspace.cleanup();
@@ -100,7 +97,7 @@ test(
 );
 
 test(
-  "runBootstrapCommand reuses existing Pending and Graveyard OUs",
+  "runBootstrapCommand reuses existing Graveyard OU",
   async () => {
     const workspace = await createTestWorkspace({ prefix: "bootstrap-test-" });
     try {
@@ -110,11 +107,6 @@ test(
         organizationsClient: createOrganizationsClientMock({
           rootId: "r-root",
           initialRootChildren: [
-            {
-              id: "ou-pending",
-              name: "Pending",
-              arn: "arn:aws:organizations:::ou/pending",
-            },
             {
               id: "ou-graveyard",
               name: "Graveyard",
@@ -140,17 +132,14 @@ test(
         },
       });
 
-      assert.equal(result.pendingCreated, false);
       assert.equal(result.graveyardCreated, false);
-      assert.equal(result.pendingOuId, "ou-pending");
       assert.equal(result.graveyardOuId, "ou-graveyard");
       assert.equal(confirmationCalls, 0);
 
       const raw = await readFile(outputPath, "utf8");
       const parsed = JSON.parse(raw) as {
-        organization: { pendingOuId: string; graveyardOuId: string };
+        organization: { graveyardOuId: string };
       };
-      assert.equal(parsed.organization.pendingOuId, "ou-pending");
       assert.equal(parsed.organization.graveyardOuId, "ou-graveyard");
     } finally {
       await workspace.cleanup();
@@ -159,7 +148,7 @@ test(
 );
 
 test(
-  "runBootstrapCommand creates only the missing Graveyard OU when Pending exists",
+  "runBootstrapCommand creates missing Graveyard OU when absent",
   async () => {
     const workspace = await createTestWorkspace({ prefix: "bootstrap-test-" });
     try {
@@ -194,18 +183,12 @@ test(
         },
       });
 
-      assert.equal(result.pendingCreated, false);
       assert.equal(result.graveyardCreated, true);
-      assert.equal(result.pendingOuId, "ou-pending");
       assert.equal(result.graveyardOuId, "ou-graveyard");
       assert.equal(planLinesSeen.length, 1);
       const planLines = planLinesSeen[0];
       assert.equal(planLines.length, 2);
       assert.equal(planLines.some((line) => line.includes("Graveyard")), true);
-      assert.equal(
-        planLines.some((line) => line.includes(`Will create OU "Pending"`)),
-        false,
-      );
     } finally {
       await workspace.cleanup();
     }
@@ -213,7 +196,7 @@ test(
 );
 
 test(
-  "runBootstrapCommand fails when multiple Pending OUs exist under root",
+  "runBootstrapCommand fails when multiple Graveyard OUs exist under root",
   async () => {
     await assert.rejects(
       () =>
@@ -222,14 +205,14 @@ test(
             rootId: "r-root",
             initialRootChildren: [
               {
-                id: "ou-pending-1",
-                name: "Pending",
-                arn: "arn:aws:organizations:::ou/pending-1",
+                id: "ou-graveyard-1",
+                name: "Graveyard",
+                arn: "arn:aws:organizations:::ou/graveyard-1",
               },
               {
-                id: "ou-pending-2",
-                name: "Pending",
-                arn: "arn:aws:organizations:::ou/pending-2",
+                id: "ou-graveyard-2",
+                name: "Graveyard",
+                arn: "arn:aws:organizations:::ou/graveyard-2",
               },
             ],
           }),
@@ -246,7 +229,7 @@ test(
           region: "eu-central-1",
           planConfirmation: async () => true,
         }),
-      /Multiple organizational units named "Pending"/,
+      /Multiple organizational units named "Graveyard"/,
     );
   },
 );
@@ -263,7 +246,6 @@ test(
         organization: {
           managementAccountId: "111111111111",
           rootId: "r-different",
-          pendingOuId: "ou-pending-stale",
           graveyardOuId: "ou-graveyard-stale",
         },
         identityCenter: {
@@ -289,11 +271,6 @@ test(
             organizationsClient: createOrganizationsClientMock({
               rootId: "r-root",
               initialRootChildren: [
-                {
-                  id: "ou-pending",
-                  name: "Pending",
-                  arn: "arn:aws:organizations:::ou/pending",
-                },
                 {
                   id: "ou-graveyard",
                   name: "Graveyard",
@@ -335,11 +312,6 @@ test(
             organizationsClient: createOrganizationsClientMock({
               rootId: "r-root",
               initialRootChildren: [
-                {
-                  id: "ou-pending",
-                  name: "Pending",
-                  arn: "arn:aws:organizations:::ou/pending",
-                },
                 {
                   id: "ou-graveyard",
                   name: "Graveyard",
@@ -383,11 +355,6 @@ test(
         organizationsClient: createOrganizationsClientMock({
           rootId: "r-root",
           initialRootChildren: [
-            {
-              id: "ou-pending",
-              name: "Pending",
-              arn: "arn:aws:organizations:::ou/pending",
-            },
             {
               id: "ou-graveyard",
               name: "Graveyard",

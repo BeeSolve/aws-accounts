@@ -16,7 +16,7 @@ This is an implementation + test checklist for step 5.2 only. It is written so a
 - Name matching is exact and case-sensitive.
 - For new entities (present in config, absent in current state), emit sentinel ids/arns.
 - `root` OU resolves to `context.organization.rootId`.
-- `Pending` and `Graveyard` OU ids resolve from context for stability.
+- `Graveyard` OU id resolves from context for stability.
 - Preserve deterministic behavior in transform output (no fresh timestamp generation in transform).
 - Keep Valibot schema-first patterns; validate returned state shape.
 - Do not export internals only used in the same module.
@@ -38,7 +38,7 @@ This is an implementation + test checklist for step 5.2 only. It is written so a
 5. Map organizational units from config:
    - preserve existing id/arn on name match
    - emit sentinel id/arn when no match
-   - resolve `root`/`Pending`/`Graveyard` ids from context
+   - resolve `root`/`Graveyard` ids from context
    - if non-root OU references parentName that does not exist in config OU names, throw invariant error
    - keep root only in `organization.rootId` (do not add a root row to `organization.organizationalUnits`)
 6. Flatten accounts from config OUs into state account rows:
@@ -59,17 +59,15 @@ This is an implementation + test checklist for step 5.2 only. It is written so a
 
 Add focused tests for `mapAwsConfigToState` with minimal fixtures.
 
-### Test 1 — Root/Pending/Graveyard resolution from context
+### Test 1 — Root/Graveyard resolution from context
 
 **Given:**
 - `context.organization.rootId = "r-root"`
-- `context.organization.pendingOuId = "ou-pending"`
 - `context.organization.graveyardOuId = "ou-graveyard"`
-- config includes OUs: `root`, `Pending`, `Graveyard`
+- config includes OUs: `root`, `Graveyard`
 
 **Expect:**
 - mapped `root` OU id is `"r-root"`
-- mapped `Pending` OU id is `"ou-pending"`
 - mapped `Graveyard` OU id is `"ou-graveyard"`
 
 ### Test 2 — Existing entities keep real identifiers
@@ -124,7 +122,6 @@ const currentState: StateFile = {
     rootId: "r-root",
     organizationalUnits: [
       { id: "ou-eng", parentId: "r-root", arn: "arn:ou-eng", name: "Engineering" },
-      { id: "ou-pending", parentId: "r-root", arn: "arn:ou-pending", name: "Pending" },
       { id: "ou-graveyard", parentId: "r-root", arn: "arn:ou-graveyard", name: "Graveyard" }
     ],
     accounts: [

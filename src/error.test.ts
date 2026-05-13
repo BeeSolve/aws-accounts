@@ -21,20 +21,22 @@ test("classifyCliError returns typed kind for CliError", () => {
 test("classifyCliError classifies usage message fallback", () => {
   const classified = classifyCliError(
     new Error(
-      "Missing required --email for create-account in non-interactive mode.",
+      "Missing required --instance-arn for bootstrap in non-interactive mode.",
     ),
   );
   assert.equal(classified.kind, "usage");
 });
 
 test("classifyCliError classifies validation message fallback", () => {
-  const classified = classifyCliError(new Error('Invalid --email value: "x".'));
+  const classified = classifyCliError(
+    new Error('Invalid --instance-arn value: "x".'),
+  );
   assert.equal(classified.kind, "validation");
 });
 
 test("classifyCliError classifies precondition message fallback", () => {
   const classified = classifyCliError(
-    new Error('Could not find "Pending" OU in aws.config.ts.'),
+    new Error('Could not find "Graveyard" OU in aws.config.ts.'),
   );
   assert.equal(classified.kind, "precondition");
 });

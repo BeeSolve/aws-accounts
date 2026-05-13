@@ -12,7 +12,7 @@ This document covers the remaining OU deletion work after the current safe miles
 - `apply` re-checks live AWS state before delete and refuses if the OU still contains:
   - any child OU,
   - any account.
-- `Pending` and `Graveyard` are hard-blocked from tool-driven deletion.
+- `Graveyard` is hard-blocked from tool-driven deletion.
 - Human-readable `plan` / `apply` output marks destructive deletes explicitly and the apply confirmation prompt warns when destructive work is present.
 - README now documents the supported OU deletion boundary, a concrete `apply --allow-destructive` example, and the recovery flow after partial destructive failure.
 
