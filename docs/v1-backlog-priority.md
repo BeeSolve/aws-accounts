@@ -15,40 +15,36 @@ Repository head has now shipped:
   reprovisioning when that permission set has desired account assignments)
 - Account removal boundary in v1: removing an account from `aws.config.ts`
   plans a destructive move to the reserved `Graveyard` OU
+- `plan --json` summary metadata for destructive vs safe changes (operation and
+  unsupported counts, `hasDestructiveChanges`)
+- Account metadata: resource tags and member account display name reconciliation
+  (`organizations:TagResource` / `UntagResource`, `account:PutAccountName`)
 
 Cloud-backed execution (`Lambda` / `S3` / remote saved plans) remains **v2** and
 is intentionally excluded from this backlog.
 
 ## Remaining priorities
 
-### 1. Machine-readable destructive plan metadata (polish)
+### 1. Account metadata (continued)
 
 Scope:
 
-- enrich `plan --json` so consumers can distinguish supported destructive
-  operations from safe mutations without parsing formatted text
+- alternate contacts and similar post-create account metadata
 
-Why first among remaining work:
+Why next:
 
-- agreed sequencing: ship the risky lifecycle feature first, then make automated
-  consumers of `plan --json` reliable without scraping human-readable lines
-- current human-readable output already exposes destructive intent clearly
+- useful for operations and compliance, but not a blocker for the core org /
+  IdC access workflow
+- broader AWS Account Management / Organizations surface than tags and display
+  name
 
-### 2. Account metadata reconciliation after creation
+### 2. Optional: inherited / “global” default tags (research only for now)
 
-Scope:
-
-- account-name drift
-- tags
-- alternate contacts
-- similar post-create metadata
-
-Why second:
-
-- useful, but not a blocker for the core org / IdC access workflow
-- likely involves broader AWS Organizations / Account Management API surface
+Design notes: [`account-tag-inheritance-research.md`](./account-tag-inheritance-research.md).
+Not scheduled until explicitly prioritized.
 
 ## Recommended implementation sequence
 
-1. Enrich `plan --json` with structured destructive-operation metadata.
-2. Finish account metadata parity where it matters for operations.
+1. Alternate contacts (or other chosen account metadata) via the same plan /
+   apply pattern.
+2. Revisit inherited OU-level default tags if product need is confirmed.

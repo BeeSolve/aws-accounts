@@ -347,6 +347,17 @@ export function upsertAccountInWorkingState(props: {
   ) {
     return props.workingState;
   }
+  let accountsByName = {
+    ...props.workingState.organization.accountsByName,
+  };
+  if (currentAccount != null && currentAccount.name !== props.account.name) {
+    const { [currentAccount.name]: _removed, ...rest } = accountsByName;
+    accountsByName = rest;
+  }
+  accountsByName = {
+    ...accountsByName,
+    [props.account.name]: props.account,
+  };
   return {
     ...props.workingState,
     organization: {
@@ -355,10 +366,7 @@ export function upsertAccountInWorkingState(props: {
         ...props.workingState.organization.accountsById,
         [props.account.id]: props.account,
       },
-      accountsByName: {
-        ...props.workingState.organization.accountsByName,
-        [props.account.name]: props.account,
-      },
+      accountsByName,
     },
   };
 }

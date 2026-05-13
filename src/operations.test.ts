@@ -30,6 +30,12 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       },
     },
     {
+      kind: "updateAccountName",
+      accountId: "111111111111",
+      fromAccountName: "OldApp",
+      toAccountName: "NewApp",
+    },
+    {
       kind: "createIdcUser",
       userName: "alice",
       displayName: "Alice",

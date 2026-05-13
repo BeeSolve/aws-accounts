@@ -13,29 +13,30 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   renameOu: 2,
   createAccount: 3,
   updateAccountTags: 4,
-  moveAccount: 5,
-  removeAccount: 6,
-  createIdcUser: 7,
-  updateIdcUser: 8,
-  createIdcGroup: 9,
-  updateIdcGroupDescription: 10,
-  addIdcGroupMembership: 11,
-  createIdcPermissionSet: 12,
-  updateIdcPermissionSetDescription: 13,
-  putIdcPermissionSetInlinePolicy: 14,
-  deleteIdcPermissionSetInlinePolicy: 15,
-  attachIdcManagedPolicyToPermissionSet: 16,
-  detachIdcManagedPolicyFromPermissionSet: 17,
-  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 18,
-  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 19,
-  provisionIdcPermissionSet: 20,
-  grantIdcAccountAssignment: 21,
-  removeIdcGroupMembership: 22,
-  revokeIdcAccountAssignment: 23,
-  deleteIdcUser: 24,
-  deleteIdcGroup: 25,
-  deleteIdcPermissionSet: 26,
-  deleteOu: 27,
+  updateAccountName: 5,
+  moveAccount: 6,
+  removeAccount: 7,
+  createIdcUser: 8,
+  updateIdcUser: 9,
+  createIdcGroup: 10,
+  updateIdcGroupDescription: 11,
+  addIdcGroupMembership: 12,
+  createIdcPermissionSet: 13,
+  updateIdcPermissionSetDescription: 14,
+  putIdcPermissionSetInlinePolicy: 15,
+  deleteIdcPermissionSetInlinePolicy: 16,
+  attachIdcManagedPolicyToPermissionSet: 17,
+  detachIdcManagedPolicyFromPermissionSet: 18,
+  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 19,
+  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 20,
+  provisionIdcPermissionSet: 21,
+  grantIdcAccountAssignment: 22,
+  removeIdcGroupMembership: 23,
+  revokeIdcAccountAssignment: 24,
+  deleteIdcUser: 25,
+  deleteIdcGroup: 26,
+  deleteIdcPermissionSet: 27,
+  deleteOu: 28,
 };
 
 type DiffStatesProps = {
@@ -56,6 +57,7 @@ type NormalizedOrganizationView = {
     StateFile["organization"]["organizationalUnits"][number]
   >;
   accountByName: Map<string, StateFile["organization"]["accounts"][number]>;
+  accountById: Map<string, StateFile["organization"]["accounts"][number]>;
   organizationalUnitNameById: Map<string, string>;
   organizationalUnitsByParentId: Map<
     string,
@@ -103,8 +105,17 @@ export function diffStates(props: DiffStatesProps): Plan {
     state: props.next,
   });
 
+  const nextAccountIds = new Set(
+    nextOrganization.accounts
+      .filter((account) => account.id !== pendingCreationId)
+      .map((account) => account.id),
+  );
+
   for (const nextAccount of nextOrganization.accounts) {
-    const currentAccount = currentOrganization.accountByName.get(nextAccount.name);
+    const currentAccount =
+      nextAccount.id !== pendingCreationId
+        ? currentOrganization.accountById.get(nextAccount.id)
+        : undefined;
     if (currentAccount == null) {
       if (nextAccount.id === pendingCreationId) {
         const targetOuName = resolveOrganizationalUnitName({
@@ -137,6 +148,14 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     if (nextAccount.parentId === currentAccount.parentId) {
+      if (currentAccount.name !== nextAccount.name) {
+        operations.push({
+          kind: "updateAccountName",
+          accountId: nextAccount.id,
+          fromAccountName: currentAccount.name,
+          toAccountName: nextAccount.name,
+        });
+      }
       const currentTags = normalizeAccountTags(currentAccount.tags);
       const nextTags = normalizeAccountTags(nextAccount.tags);
       if (JSON.stringify(currentTags) !== JSON.stringify(nextTags)) {
@@ -169,6 +188,14 @@ export function diffStates(props: DiffStatesProps): Plan {
       rootId: nextOrganization.rootId,
       organizationalUnitId: nextAccount.parentId,
     });
+    if (currentAccount.name !== nextAccount.name) {
+      operations.push({
+        kind: "updateAccountName",
+        accountId: nextAccount.id,
+        fromAccountName: currentAccount.name,
+        toAccountName: nextAccount.name,
+      });
+    }
     operations.push({
       kind: "moveAccount",
       accountId: nextAccount.id,
@@ -183,7 +210,10 @@ export function diffStates(props: DiffStatesProps): Plan {
   const graveyardOrganizationalUnit =
     currentOrganization.organizationalUnitByName.get("Graveyard");
   for (const currentAccount of currentOrganization.accounts) {
-    if (nextOrganization.accountByName.has(currentAccount.name)) {
+    if (
+      currentAccount.id !== pendingCreationId &&
+      nextAccountIds.has(currentAccount.id)
+    ) {
       continue;
     }
     if (graveyardOrganizationalUnit == null) {
@@ -797,6 +827,12 @@ function normalizeOrganizationState(props: {
   const accountByName = new Map(
     props.state.organization.accounts.map((account) => [account.name, account]),
   );
+  const accountById = new Map<string, StateFile["organization"]["accounts"][number]>();
+  for (const account of props.state.organization.accounts) {
+    if (account.id !== pendingCreationId) {
+      accountById.set(account.id, account);
+    }
+  }
   const organizationalUnitNameById = new Map(
     props.state.organization.organizationalUnits.map((organizationalUnit) => [
       organizationalUnit.id,
@@ -816,6 +852,7 @@ function normalizeOrganizationState(props: {
     accounts: props.state.organization.accounts,
     organizationalUnitByName,
     accountByName,
+    accountById,
     organizationalUnitNameById,
     organizationalUnitsByParentId,
     accountsByParentId,
@@ -934,6 +971,9 @@ function getOperationSortKey(operation: Operation): string {
   }
   if (operation.kind === "updateAccountTags") {
     return `${operation.kind}|${operation.accountName}|${operation.accountId}`;
+  }
+  if (operation.kind === "updateAccountName") {
+    return `${operation.kind}|${operation.accountId}|${operation.toAccountName}`;
   }
   if (operation.kind === "removeAccount") {
     return `${operation.kind}|${operation.accountName}|${operation.accountId}`;

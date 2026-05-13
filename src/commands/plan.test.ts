@@ -206,6 +206,74 @@ test("runPlanCommand prints human-readable account tag update operations", async
   }
 });
 
+test("runPlanCommand prints human-readable account rename operations", async () => {
+  const workspace = await createTestWorkspace({ prefix: "plan-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        const appAccount = pending?.accounts.find(
+          (account) => account.name === "AppAccount",
+        );
+        if (appAccount == null) {
+          throw new Error('Expected account "AppAccount".');
+        }
+        appAccount.name = "RenamedInPlan";
+        for (const assignment of config.assignments) {
+          assignment.accounts = assignment.accounts.map((accountName) =>
+            accountName === "AppAccount" ? "RenamedInPlan" : accountName,
+          );
+        }
+      },
+    });
+    await regenerateAwsConfigTypes({
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    const logger = createCollectingLogger();
+    const result = await runPlanCommand({
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
+      output: "human",
+    });
+    assert.equal(result.plan.operations.length, 1);
+    assert.ok(
+      logger.logs.some((line) =>
+        line.includes(
+          'rename account (111111111111): "AppAccount" -> "RenamedInPlan"',
+        ),
+      ),
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runPlanCommand prints human-readable renameOu operations", async () => {
   const workspace = await createTestWorkspace({ prefix: "plan-test-" });
   try {

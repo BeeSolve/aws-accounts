@@ -124,6 +124,74 @@ test("diffStates emits updateAccountTags when desired tags change", () => {
   assert.deepEqual(plan.unsupported, []);
 });
 
+test("diffStates emits updateAccountName when desired name differs for the same account id", () => {
+  const current = createBaseState();
+  current.identityCenter.accountAssignments = [];
+  current.identityCenter.accessRoles = [];
+  const next = cloneState(current);
+  const account = next.organization.accounts.find(
+    (candidate) => candidate.name === "app-a",
+  );
+  if (account == null) {
+    throw new Error('Expected fixture account "app-a".');
+  }
+  account.name = "app-a-renamed";
+  const plan = diffStates({
+    current,
+    next,
+  });
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "updateAccountName",
+      accountId: "111111111111",
+      fromAccountName: "app-a",
+      toAccountName: "app-a-renamed",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates emits updateAccountName before moveAccount when renaming and moving together", () => {
+  const current = createBaseState();
+  current.identityCenter.accountAssignments = [];
+  current.identityCenter.accessRoles = [];
+  const next = cloneState(current);
+  const account = next.organization.accounts.find(
+    (candidate) => candidate.name === "app-a",
+  );
+  if (account == null) {
+    throw new Error('Expected fixture account "app-a".');
+  }
+  account.name = "app-a-renamed";
+  setAccountParentId({
+    state: next,
+    accountName: "app-a-renamed",
+    parentId: "ou-data",
+  });
+  const plan = diffStates({
+    current,
+    next,
+  });
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "updateAccountName",
+      accountId: "111111111111",
+      fromAccountName: "app-a",
+      toAccountName: "app-a-renamed",
+    },
+    {
+      kind: "moveAccount",
+      accountId: "111111111111",
+      accountName: "app-a-renamed",
+      fromOuId: "ou-eng",
+      fromOuName: "Engineering",
+      toOuId: "ou-data",
+      toOuName: "Data",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
 test("diffStates emits removeAccount and classifies removed OU as destructive", () => {
   const current = createBaseState();
   addOrganizationalUnit({

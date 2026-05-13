@@ -19,6 +19,7 @@
   "license": "MIT",
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-account": "^3.1045.0",
     "@aws-sdk/client-identitystore": "^3.1043.0",
     "@aws-sdk/client-organizations": "^3.1043.0",
     "@aws-sdk/client-sso-admin": "^3.1043.0",

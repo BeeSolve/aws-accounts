@@ -22,6 +22,26 @@ import type { Logger } from "./logger.js";
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
 const pendingCreationId = "__pending_creation__" as const;
 
+function resolveAccountStateMatchForConfigEntry(props: {
+  account: { name: string; email: string };
+  accountByName: Record<string, StateFile["organization"]["accounts"][number]>;
+  accounts: StateFile["organization"]["accounts"];
+}): StateFile["organization"]["accounts"][number] | undefined {
+  const matchedByName = props.accountByName[props.account.name];
+  if (matchedByName != null) {
+    return matchedByName;
+  }
+  const emailMatches = props.accounts.filter(
+    (candidate) => candidate.email === props.account.email,
+  );
+  if (emailMatches.length > 1) {
+    throw new Error(
+      `Cannot map config account "${props.account.name}": multiple member accounts use email "${props.account.email}".`,
+    );
+  }
+  return emailMatches[0];
+}
+
 const awsContextSchema = v.strictObject({
   version: nonEmptyString,
   generatedAt: nonEmptyString,
@@ -44,7 +64,7 @@ const awsContextSchema = v.strictObject({
 
 export type AwsContextFile = v.InferOutput<typeof awsContextSchema>;
 
-const awsConfigModelSchema = v.strictObject({
+export const awsConfigModelSchema = v.strictObject({
   organizationalUnits: v.array(
     v.strictObject({
       name: v.string(),
@@ -751,7 +771,11 @@ export function mapAwsConfigToState(
       );
     }
     for (const account of organizationalUnit.accounts) {
-      const matchedAccount = accountByName[account.name];
+      const matchedAccount = resolveAccountStateMatchForConfigEntry({
+        account,
+        accountByName,
+        accounts: props.currentState.organization.accounts,
+      });
       const mappedId = matchedAccount?.id ?? pendingCreationId;
       mappedAccounts.push({
         id: mappedId,

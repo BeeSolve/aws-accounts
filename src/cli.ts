@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline/promises";
 import { IdentitystoreClient } from "@aws-sdk/client-identitystore";
+import { AccountClient } from "@aws-sdk/client-account";
 import { OrganizationsClient } from "@aws-sdk/client-organizations";
 import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import {
@@ -81,6 +82,7 @@ async function main(): Promise<void> {
     region,
   });
   const organizationsClient = new OrganizationsClient(clientConfig);
+  const accountClient = new AccountClient(clientConfig);
   const ssoAdminClient = new SSOAdminClient(clientConfig);
   const identityStoreClient = new IdentitystoreClient(clientConfig);
 
@@ -272,6 +274,7 @@ async function main(): Promise<void> {
     });
     const result = await runApplyCommand({
       organizationsClient,
+      accountClient,
       ssoAdminClient,
       identityStoreClient,
       logger,

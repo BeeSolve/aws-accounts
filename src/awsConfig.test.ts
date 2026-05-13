@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import * as v from "valibot";
 import {
+  awsConfigModelSchema,
   loadAwsConfigModelFromTsFile,
   mapAwsConfigToState,
   readAwsContextFromFile,
@@ -568,6 +570,69 @@ test("mapAwsConfigToState keeps existing ids for unchanged config entities", asy
       ),
       false,
     );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("mapAwsConfigToState matches existing member account by email when config name differs", async () => {
+  const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    const [config, currentState, context] = await Promise.all([
+      loadAwsConfigModelFromTsFile({
+        configPath,
+        typesPath,
+      }),
+      readStateFile(statePath),
+      readAwsContextFromFile(contextPath),
+    ]);
+
+    const renamedConfig = structuredClone(config);
+    const pendingOu = renamedConfig.organizationalUnits.find(
+      (organizationalUnit) => organizationalUnit.name === "Pending",
+    );
+    const appAccount = pendingOu?.accounts.find(
+      (account) => account.name === "AppAccount",
+    );
+    if (appAccount == null) {
+      throw new Error('Expected account "AppAccount".');
+    }
+    appAccount.name = "RenamedInConfigOnly";
+    for (const assignment of renamedConfig.assignments) {
+      assignment.accounts = assignment.accounts.map((accountName) =>
+        accountName === "AppAccount" ? "RenamedInConfigOnly" : accountName,
+      );
+    }
+
+    const parsedConfig = v.parse(awsConfigModelSchema, renamedConfig);
+    const mapped = mapAwsConfigToState({
+      config: parsedConfig,
+      currentState,
+      context,
+    });
+
+    const mappedAccount = mapped.organization.accounts.find(
+      (account) => account.id === "111111111111",
+    );
+    assert.equal(mappedAccount?.name, "RenamedInConfigOnly");
+    assert.equal(mappedAccount?.email, "app@example.com");
   } finally {
     await workspace.cleanup();
   }

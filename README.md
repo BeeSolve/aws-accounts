@@ -48,6 +48,8 @@ Those policy helpers and schemas are provided by the installed
 - rename OU when the diff resolves to a strict one-to-one same-parent rename
 - delete an OU subtree with `apply --allow-destructive` when every removed OU becomes empty and nested deletes can run deepest-first
 - create account in a known target OU
+- rename member accounts to match `aws.config.ts` (AWS Account Management `account:PutAccountName`; requires trusted access for Account Management on the organization). When you change an account’s `name` in config, also update every `assignments` entry (and any other references) that list that account by name so the model stays consistent; the tool resolves existing members by **account id** (falling back to matching by **email** when the config name no longer matches AWS) before planning the rename.
+- reconcile member account resource tags with `organizations:TagResource` / `organizations:UntagResource`
 - remove accounts from authored config by moving them into the reserved `Graveyard` OU with `apply --allow-destructive` (manual AWS account closure remains required)
 
 `plan` and `apply` also support these IAM Identity Center mutations:
@@ -138,7 +140,7 @@ Still out of scope in the current increment:
 - deleting an OU that still has child OUs or accounts
 - deleting an OU subtree when any descendant is unresolved or unsafe to delete
 - deleting the reserved `Graveyard` OU (do that manually outside this tool)
-- account metadata reconciliation after creation (tags, alternate contacts, account-name drift)
+- account metadata reconciliation after creation (alternate contacts; tags and account display names are reconciled when authored in `aws.config.ts`)
 
 `Graveyard` is bootstrap-managed internal state. Generated `aws.config.ts` intentionally omits `Graveyard` accounts and does not require a `Graveyard` OU entry.
 
@@ -213,6 +215,7 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "organizations:ListAccounts",
         "organizations:ListParents",
         "organizations:ListOrganizationalUnitsForParent",
+        "organizations:ListTagsForResource",
         "sso:ListInstances",
         "sso:ListPermissionSets",
         "sso:DescribePermissionSet",
@@ -248,6 +251,7 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "organizations:ListAccounts",
         "organizations:ListParents",
         "organizations:ListOrganizationalUnitsForParent",
+        "organizations:ListTagsForResource",
         "organizations:CreateOrganizationalUnit",
         "sso:ListInstances",
         "sso:ListPermissionSets",
@@ -276,6 +280,9 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "organizations:ListOrganizationalUnitsForParent",
         "organizations:CreateAccount",
         "organizations:DescribeCreateAccountStatus",
+        "organizations:TagResource",
+        "organizations:UntagResource",
+        "account:PutAccountName",
         "identitystore:CreateUser",
         "identitystore:CreateGroup",
         "identitystore:CreateGroupMembership",

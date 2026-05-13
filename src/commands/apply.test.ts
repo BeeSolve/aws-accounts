@@ -33,6 +33,10 @@ import {
   UpdatePermissionSetCommand,
 } from "@aws-sdk/client-sso-admin";
 import {
+  AccountClient,
+  PutAccountNameCommand,
+} from "@aws-sdk/client-account";
+import {
   CreateOrganizationalUnitCommand,
   CreateAccountCommand,
   DescribeCreateAccountStatusCommand,
@@ -90,6 +94,7 @@ test("runApplyCommand refuses destructive account-removal operations without fla
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({}),
           ssoAdminClient: createSsoAdminClientMock({}),
           identityStoreClient: createIdentityStoreClientMock({}),
@@ -149,6 +154,7 @@ test("runApplyCommand refuses destructive account-removal operations before crea
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({
             onCreateOu: async () => {
               createOuCalls += 1;
@@ -205,6 +211,7 @@ test("runApplyCommand refuses non-destructive unsupported diffs without flag", a
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({}),
           ssoAdminClient: createSsoAdminClientMock({}),
           identityStoreClient: createIdentityStoreClientMock({}),
@@ -265,6 +272,7 @@ test("runApplyCommand proceeds with ignoreUnsupported for supported operations",
       DestinationParentId?: string;
     }> = [];
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         onMoveAccount: async (input) => {
           seenMoveInputs.push(input);
@@ -325,6 +333,7 @@ test("runApplyCommand returns cancelled when confirmation is rejected", async ()
     let moveCalls = 0;
     const beforeState = await readFile(paths.statePath, "utf8");
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         onMoveAccount: async () => {
           moveCalls += 1;
@@ -384,6 +393,7 @@ test("runApplyCommand applies one move and writes next state", async () => {
     });
 
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({}),
       ssoAdminClient: createSsoAdminClientMock({}),
       identityStoreClient: createIdentityStoreClientMock({}),
@@ -443,6 +453,7 @@ test("runApplyCommand removes account by moving it to Graveyard", async () => {
 
     let sawMoveToGraveyard = false;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         onMoveAccount: async (input) => {
           assert.equal(input.AccountId, "111111111111");
@@ -513,6 +524,7 @@ test("runApplyCommand refuses removeAccount without allowDestructive", async () 
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({}),
           ssoAdminClient: createSsoAdminClientMock({}),
           identityStoreClient: createIdentityStoreClientMock({}),
@@ -566,6 +578,7 @@ test("runApplyCommand applies createAccount using shared helper and persists rea
 
     let movedToTargetOu = false;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         createAccountResponse: {
           CreateAccountStatus: {
@@ -677,6 +690,7 @@ test("runApplyCommand applies updateAccountTags and persists tags in state", asy
 
     let tagged = false;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         onTagResource: async (input) => {
           tagged = true;
@@ -719,6 +733,86 @@ test("runApplyCommand applies updateAccountTags and persists tags in state", asy
   }
 });
 
+test("runApplyCommand applies updateAccountName and persists name in state", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        const appAccount = pending?.accounts.find(
+          (account) => account.name === "AppAccount",
+        );
+        if (appAccount == null) {
+          throw new Error('Expected account "AppAccount".');
+        }
+        appAccount.name = "RenamedAfterApply";
+        for (const assignment of config.assignments) {
+          assignment.accounts = assignment.accounts.map((accountName) =>
+            accountName === "AppAccount" ? "RenamedAfterApply" : accountName,
+          );
+        }
+      },
+    });
+    await regenerateAwsConfigTypes({
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    let sawPutName = false;
+    const result = await runApplyCommand({
+      accountClient: createAccountClientMock({
+        onPutAccountName: async (input) => {
+          sawPutName = true;
+          assert.equal(input.AccountId, "111111111111");
+          assert.equal(input.AccountName, "RenamedAfterApply");
+        },
+      }),
+      organizationsClient: createOrganizationsClientMock({}),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+    assert.equal(result.status, "applied");
+    assert.equal(sawPutName, true);
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        accounts: Array<{ id: string; name: string }>;
+      };
+    };
+    const appAccount = persisted.organization.accounts.find(
+      (account) => account.id === "111111111111",
+    );
+    assert.equal(appAccount?.name, "RenamedAfterApply");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand applies createOu and persists created OU with AWS id", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
@@ -748,6 +842,7 @@ test("runApplyCommand applies createOu and persists created OU with AWS id", asy
 
     let createOuCalls = 0;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         createOuResponse: {
           OrganizationalUnit: {
@@ -826,6 +921,7 @@ test("runApplyCommand applies renameOu and persists renamed OU in state", async 
 
     let renameCalls = 0;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         onRenameOu: async (input) => {
           renameCalls += 1;
@@ -892,6 +988,7 @@ test("runApplyCommand refuses destructive deleteOu operations without flag", asy
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({}),
           ssoAdminClient: createSsoAdminClientMock({}),
           identityStoreClient: createIdentityStoreClientMock({}),
@@ -940,6 +1037,7 @@ test("runApplyCommand passes destructive warning into confirmation lines", async
       | { planLines: string[]; hasDestructiveChanges: boolean }
       | undefined;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({}),
       ssoAdminClient: createSsoAdminClientMock({}),
       identityStoreClient: createIdentityStoreClientMock({}),
@@ -1011,6 +1109,7 @@ test("runApplyCommand allows deleting non-reserved Pending OU", async () => {
 
     let deleteCalls = 0;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         onDeleteOu: async () => {
           deleteCalls += 1;
@@ -1062,6 +1161,7 @@ test("runApplyCommand deletes empty leaf OU with allowDestructive and persists s
 
     let deletedOuId: string | undefined;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         onDeleteOu: async (input) => {
           deletedOuId = input.OrganizationalUnitId;
@@ -1169,6 +1269,7 @@ test("runApplyCommand moves the last account out and deletes the OU in the same 
 
     const callOrder: string[] = [];
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         onMoveAccount: async (input) => {
           callOrder.push(`move:${input.AccountId}`);
@@ -1272,6 +1373,7 @@ test("runApplyCommand deletes nested OUs deepest first", async () => {
 
     const callOrder: string[] = [];
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         onDeleteOu: async (input) => {
           callOrder.push(`delete:${input.OrganizationalUnitId}`);
@@ -1340,6 +1442,7 @@ test("runApplyCommand refuses deleteOu when live AWS still has child accounts", 
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({
             listAccountsForParentPages: [
               {
@@ -1429,6 +1532,7 @@ test("runApplyCommand persists partial state on operation failure", async () => 
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({
             onMoveAccount: async () => {
               moveCallCount += 1;
@@ -1517,6 +1621,7 @@ test("runApplyCommand persists mixed successful operations before later failure"
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({
             createAccountResponse: {
               CreateAccountStatus: {
@@ -1670,6 +1775,7 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
     let sawCreateGroupMembership = false;
     let sawCreatePermissionSet = false;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({}),
       ssoAdminClient: createSsoAdminClientMock({
         onCreatePermissionSet: async (input) => {
@@ -1832,6 +1938,7 @@ test("runApplyCommand applies IdC metadata updates and persists state", async ()
     let sawUpdatePermissionSet = false;
 
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({}),
       ssoAdminClient: createSsoAdminClientMock({
         onUpdatePermissionSet: async (input) => {
@@ -1967,6 +2074,7 @@ test("runApplyCommand omits empty permission set description on create", async (
 
     let sawCreatePermissionSet = false;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({}),
       ssoAdminClient: createSsoAdminClientMock({
         onCreatePermissionSet: async (input) => {
@@ -2107,6 +2215,7 @@ test("runApplyCommand applies permission set policy updates and provisioning", a
 
     const seenCalls: string[] = [];
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({}),
       ssoAdminClient: createSsoAdminClientMock({
         onPutInlinePolicy: async (input) => {
@@ -2268,6 +2377,7 @@ test("runApplyCommand resolves mixed dependency batches from working state", asy
 
     let sawGrant = false;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({
         createAccountResponse: {
           CreateAccountStatus: {
@@ -2448,6 +2558,7 @@ test("runApplyCommand revokes IdC assignments and persists state", async () => {
 
     let sawRevoke = false;
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({}),
       ssoAdminClient: createSsoAdminClientMock({
         onDeleteAccountAssignment: async (input) => {
@@ -2515,6 +2626,7 @@ test("runApplyCommand refuses destructive IdC delete operations without flag", a
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({}),
           ssoAdminClient: createSsoAdminClientMock({}),
           identityStoreClient: createIdentityStoreClientMock({}),
@@ -2592,6 +2704,7 @@ test("runApplyCommand applies IdC entity removals with prerequisite cleanup", as
 
     const callOrder: string[] = [];
     const result = await runApplyCommand({
+      accountClient: createAccountClientMock({}),
       organizationsClient: createOrganizationsClientMock({}),
       ssoAdminClient: createSsoAdminClientMock({
         onDeleteAccountAssignment: async (input) => {
@@ -2714,6 +2827,7 @@ test("runApplyCommand persists successful IdC operations before later assignment
     await assert.rejects(
       () =>
         runApplyCommand({
+          accountClient: createAccountClientMock({}),
           organizationsClient: createOrganizationsClientMock({}),
           ssoAdminClient: createSsoAdminClientMock({
             creationStatuses: [
@@ -2795,6 +2909,26 @@ function createApplyRuntime(): {
       pollIntervalInMs: 1,
     },
   };
+}
+
+function createAccountClientMock(props: {
+  onPutAccountName?: (input: {
+    AccountId?: string;
+    AccountName?: string;
+  }) => Promise<void>;
+}): AccountClient {
+  const mock = {
+    async send(command: unknown) {
+      if (command instanceof PutAccountNameCommand) {
+        if (props.onPutAccountName != null) {
+          await props.onPutAccountName(command.input);
+        }
+        return {};
+      }
+      throw new Error("Unexpected Account command in test.");
+    },
+  };
+  return mock as AccountClient;
 }
 
 function createOrganizationsClientMock(props: {

@@ -1,4 +1,8 @@
 import {
+  AccountClient,
+  PutAccountNameCommand,
+} from "@aws-sdk/client-account";
+import {
   CreateOrganizationalUnitCommand,
   DeleteOrganizationalUnitCommand,
   ListAccountsForParentCommand,
@@ -78,6 +82,7 @@ import type { Logger } from "../logger.js";
 
 type ApplyCommandInput = {
   organizationsClient: OrganizationsClient;
+  accountClient: AccountClient;
   ssoAdminClient: SSOAdminClient;
   identityStoreClient: IdentitystoreClient;
   logger: Logger;
@@ -230,6 +235,7 @@ export async function runApplyCommand(
       progressedState = await applyOperation({
         state: progressedState,
         organizationsClient: props.organizationsClient,
+        accountClient: props.accountClient,
         ssoAdminClient: props.ssoAdminClient,
         identityStoreClient: props.identityStoreClient,
         logger: props.logger,
@@ -272,6 +278,7 @@ export async function runApplyCommand(
 async function applyOperation(props: {
   state: WorkingState;
   organizationsClient: OrganizationsClient;
+  accountClient: AccountClient;
   ssoAdminClient: SSOAdminClient;
   identityStoreClient: IdentitystoreClient;
   logger: Logger;
@@ -431,6 +438,33 @@ async function applyOperation(props: {
       account: {
         ...account,
         tags: Object.entries(operation.tags).map(([key, value]) => ({ key, value })),
+      },
+    });
+  }
+  if (operation.kind === "updateAccountName") {
+    props.logger.log(
+      `Renaming account (${operation.accountId}): "${operation.fromAccountName}" -> "${operation.toAccountName}"...`,
+    );
+    await props.accountClient.send(
+      new PutAccountNameCommand({
+        AccountId: operation.accountId,
+        AccountName: operation.toAccountName,
+      }),
+    );
+    props.logger.log(
+      `Done: account "${operation.toAccountName}" (${operation.accountId})`,
+    );
+    const account = props.state.organization.accountsById[operation.accountId];
+    if (account == null) {
+      throw new Error(
+        `Could not resolve account (${operation.accountId}) in working state after rename.`,
+      );
+    }
+    return upsertAccountInWorkingState({
+      workingState: props.state,
+      account: {
+        ...account,
+        name: operation.toAccountName,
       },
     });
   }
@@ -1197,6 +1231,9 @@ function formatApplyOperationLine(operation: Operation): string {
   }
   if (operation.kind === "updateAccountTags") {
     return `  update account tags "${operation.accountName}" (${operation.accountId})`;
+  }
+  if (operation.kind === "updateAccountName") {
+    return `  rename account (${operation.accountId}): "${operation.fromAccountName}" -> "${operation.toAccountName}"`;
   }
   if (operation.kind === "removeAccount") {
     return [
