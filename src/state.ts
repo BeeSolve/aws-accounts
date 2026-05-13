@@ -12,6 +12,11 @@ const organizationalUnitSchema = v.strictObject({
   name: nonEmptyString,
 });
 
+const accountTagSchema = v.strictObject({
+  key: nonEmptyString,
+  value: v.string(),
+});
+
 const accountSchema = v.strictObject({
   id: nonEmptyString,
   arn: nonEmptyString,
@@ -19,6 +24,7 @@ const accountSchema = v.strictObject({
   email: nonEmptyString,
   status: nonEmptyString,
   parentId: nonEmptyString,
+  tags: v.array(accountTagSchema),
 });
 
 const userSchema = v.strictObject({
@@ -148,7 +154,10 @@ export function normalizeState(state: StateFile): StateFile {
       ),
       accounts: [...state.organization.accounts].sort((a, b) =>
         compareByKeys(a.id, b.id, a.arn, b.arn, a.name, b.name),
-      ),
+      ).map((account) => ({
+        ...account,
+        tags: normalizeAccountTags(account.tags),
+      })),
     },
     identityCenter: {
       ...state.identityCenter,
@@ -332,7 +341,9 @@ export function upsertAccountInWorkingState(props: {
     currentAccount.name === props.account.name &&
     currentAccount.email === props.account.email &&
     currentAccount.status === props.account.status &&
-    currentAccount.parentId === props.account.parentId
+    currentAccount.parentId === props.account.parentId &&
+    JSON.stringify(normalizeAccountTags(currentAccount.tags)) ===
+      JSON.stringify(normalizeAccountTags(props.account.tags))
   ) {
     return props.workingState;
   }
@@ -925,6 +936,17 @@ function normalizeInlinePolicyString(value: string | null): string | null {
   } catch {
     return value;
   }
+}
+
+function normalizeAccountTags(
+  tags: Array<{ key: string; value: string }> | undefined,
+): Array<{ key: string; value: string }> {
+  if (tags == null || tags.length === 0) {
+    return [];
+  }
+  return [...tags].sort((left, right) =>
+    compareByKeys(left.key, right.key, left.value, right.value),
+  );
 }
 
 function sortJsonValue(value: unknown): unknown {

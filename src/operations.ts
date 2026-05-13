@@ -42,6 +42,13 @@ const createAccountOperationSchema = v.strictObject({
   targetOuName: v.string(),
 });
 
+const updateAccountTagsOperationSchema = v.strictObject({
+  kind: v.literal("updateAccountTags"),
+  accountId: v.string(),
+  accountName: v.string(),
+  tags: v.record(v.string(), v.string()),
+});
+
 const removeAccountOperationSchema = v.strictObject({
   kind: v.literal("removeAccount"),
   accountId: v.string(),
@@ -184,6 +191,7 @@ export const operationSchema = v.variant("kind", [
   renameOuOperationSchema,
   deleteOuOperationSchema,
   createAccountOperationSchema,
+  updateAccountTagsOperationSchema,
   removeAccountOperationSchema,
   createIdcUserOperationSchema,
   updateIdcUserOperationSchema,
@@ -239,6 +247,9 @@ export type RenameOuOperation = v.InferOutput<typeof renameOuOperationSchema>;
 export type DeleteOuOperation = v.InferOutput<typeof deleteOuOperationSchema>;
 export type CreateAccountOperation = v.InferOutput<
   typeof createAccountOperationSchema
+>;
+export type UpdateAccountTagsOperation = v.InferOutput<
+  typeof updateAccountTagsOperationSchema
 >;
 export type RemoveAccountOperation = v.InferOutput<
   typeof removeAccountOperationSchema

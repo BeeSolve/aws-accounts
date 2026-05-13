@@ -12,29 +12,30 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   createOu: 1,
   renameOu: 2,
   createAccount: 3,
-  moveAccount: 4,
-  removeAccount: 5,
-  createIdcUser: 6,
-  updateIdcUser: 7,
-  createIdcGroup: 8,
-  updateIdcGroupDescription: 9,
-  addIdcGroupMembership: 10,
-  createIdcPermissionSet: 11,
-  updateIdcPermissionSetDescription: 12,
-  putIdcPermissionSetInlinePolicy: 13,
-  deleteIdcPermissionSetInlinePolicy: 14,
-  attachIdcManagedPolicyToPermissionSet: 15,
-  detachIdcManagedPolicyFromPermissionSet: 16,
-  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 17,
-  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 18,
-  provisionIdcPermissionSet: 19,
-  grantIdcAccountAssignment: 20,
-  removeIdcGroupMembership: 21,
-  revokeIdcAccountAssignment: 22,
-  deleteIdcUser: 23,
-  deleteIdcGroup: 24,
-  deleteIdcPermissionSet: 25,
-  deleteOu: 26,
+  updateAccountTags: 4,
+  moveAccount: 5,
+  removeAccount: 6,
+  createIdcUser: 7,
+  updateIdcUser: 8,
+  createIdcGroup: 9,
+  updateIdcGroupDescription: 10,
+  addIdcGroupMembership: 11,
+  createIdcPermissionSet: 12,
+  updateIdcPermissionSetDescription: 13,
+  putIdcPermissionSetInlinePolicy: 14,
+  deleteIdcPermissionSetInlinePolicy: 15,
+  attachIdcManagedPolicyToPermissionSet: 16,
+  detachIdcManagedPolicyFromPermissionSet: 17,
+  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 18,
+  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 19,
+  provisionIdcPermissionSet: 20,
+  grantIdcAccountAssignment: 21,
+  removeIdcGroupMembership: 22,
+  revokeIdcAccountAssignment: 23,
+  deleteIdcUser: 24,
+  deleteIdcGroup: 25,
+  deleteIdcPermissionSet: 26,
+  deleteOu: 27,
 };
 
 type DiffStatesProps = {
@@ -136,6 +137,18 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     if (nextAccount.parentId === currentAccount.parentId) {
+      const currentTags = normalizeAccountTags(currentAccount.tags);
+      const nextTags = normalizeAccountTags(nextAccount.tags);
+      if (JSON.stringify(currentTags) !== JSON.stringify(nextTags)) {
+        operations.push({
+          kind: "updateAccountTags",
+          accountId: nextAccount.id,
+          accountName: nextAccount.name,
+          tags: Object.fromEntries(
+            (nextTags ?? []).map((tag) => [tag.key, tag.value] as const),
+          ),
+        });
+      }
       continue;
     }
     if (
@@ -919,6 +932,9 @@ function getOperationSortKey(operation: Operation): string {
   if (operation.kind === "createAccount") {
     return `${operation.kind}|${operation.accountName}|${operation.targetOuName}`;
   }
+  if (operation.kind === "updateAccountTags") {
+    return `${operation.kind}|${operation.accountName}|${operation.accountId}`;
+  }
   if (operation.kind === "removeAccount") {
     return `${operation.kind}|${operation.accountName}|${operation.accountId}`;
   }
@@ -997,6 +1013,17 @@ function getOperationSortKey(operation: Operation): string {
     ].join("|");
   }
   return "zzzz";
+}
+
+function normalizeAccountTags(
+  tags: Array<{ key: string; value: string }> | undefined,
+): Array<{ key: string; value: string }> {
+  if (tags == null || tags.length === 0) {
+    return [];
+  }
+  return [...tags].sort((left, right) =>
+    [left.key, left.value].join("|").localeCompare([right.key, right.value].join("|")),
+  );
 }
 
 function normalizeIdentityCenterState(props: {

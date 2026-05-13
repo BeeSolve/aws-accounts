@@ -13,6 +13,7 @@ import {
   ListOrganizationalUnitsForParentCommand,
   ListParentsCommand,
   ListRootsCommand,
+  ListTagsForResourceCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import {
@@ -57,6 +58,9 @@ test(
       assert.equal(result.state.organization.rootId, "r-root");
       assert.equal(result.state.organization.organizationalUnits.length, 1);
       assert.equal(result.state.organization.accounts.length, 1);
+      assert.deepEqual(result.state.organization.accounts[0]?.tags, [
+        { key: "owner", value: "platform" },
+      ]);
       assert.equal(result.state.identityCenter.users.length, 1);
       assert.equal(result.state.identityCenter.groups.length, 1);
       assert.equal(result.state.identityCenter.groupMemberships.length, 1);
@@ -183,6 +187,16 @@ function createOrganizationsClientMock(props: {
       if (command instanceof ListParentsCommand) {
         return {
           Parents: [{ Id: "ou-pending" }],
+        };
+      }
+      if (command instanceof ListTagsForResourceCommand) {
+        return {
+          Tags: [
+            {
+              Key: "owner",
+              Value: "platform",
+            },
+          ],
         };
       }
       throw new Error("Unexpected Organizations command in test.");

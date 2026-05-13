@@ -374,7 +374,7 @@ test("mapAwsConfigToState emits sentinel ids for entities missing in current sta
     config.organizationalUnits.push({
       name: "Sandbox",
       parentName: "root",
-      accounts: [{ name: "SandboxAccount", email: "sandbox@example.com" }],
+      accounts: [{ name: "SandboxAccount", email: "sandbox@example.com", tags: [] }],
     });
     config.users.push({
       userName: "bob",
@@ -769,6 +769,7 @@ const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
         {
           name: "AppAccount",
           email: "app@example.com",
+          tags: [],
         },
       ],
     },
@@ -881,6 +882,7 @@ async function writeFixtureFiles(props: {
           name: "AppAccount",
           email: "app@example.com",
           status: "ACTIVE",
+          tags: [],
           parentId: "ou-pending",
         },
       ],
@@ -966,7 +968,11 @@ async function updateConfigModel(props: {
     organizationalUnits: Array<{
       name: string;
       parentName: string | null;
-      accounts: Array<{ name: string; email: string }>;
+      accounts: Array<{
+        name: string;
+        email: string;
+        tags: Array<{ key: string; value: string }>;
+      }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string; members: string[] }>;
@@ -994,7 +1000,11 @@ async function updateConfigModel(props: {
     organizationalUnits: Array<{
       name: string;
       parentName: string | null;
-      accounts: Array<{ name: string; email: string }>;
+      accounts: Array<{
+        name: string;
+        email: string;
+        tags: Array<{ key: string; value: string }>;
+      }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string; members: string[] }>;

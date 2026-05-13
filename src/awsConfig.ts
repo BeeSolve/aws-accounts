@@ -53,6 +53,12 @@ const awsConfigModelSchema = v.strictObject({
         v.strictObject({
           name: v.string(),
           email: v.string(),
+          tags: v.array(
+            v.strictObject({
+              key: v.string(),
+              value: v.string(),
+            }),
+          ),
         }),
       ),
     }),
@@ -442,6 +448,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     ownerOu.accounts.push({
       name: account.name,
       email: account.email,
+      tags: account.tags ?? [],
     });
   }
 
@@ -753,6 +760,7 @@ export function mapAwsConfigToState(
         email: account.email,
         status: matchedAccount?.status ?? "ACTIVE",
         parentId: ownerParentId,
+        tags: account.tags,
       });
       mappedAccountIdByName.set(account.name, mappedId);
     }
@@ -1263,6 +1271,12 @@ export const awsConfigSchema = v.strictObject({
         v.strictObject({
           name: v.string(),
           email: v.string(),
+          tags: v.array(
+            v.strictObject({
+              key: v.string(),
+              value: v.string(),
+            }),
+          ),
         }),
       ),
     }),

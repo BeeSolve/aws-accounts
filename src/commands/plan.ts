@@ -127,6 +127,9 @@ function formatHumanOperationLine(operation: Plan["operations"][number]): string
   if (operation.kind === "createAccount") {
     return `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`;
   }
+  if (operation.kind === "updateAccountTags") {
+    return `  update account tags "${operation.accountName}" (${operation.accountId})`;
+  }
   if (operation.kind === "removeAccount") {
     return [
       `  [destructive] move removed account "${operation.accountName}" (${operation.accountId}) from ${operation.fromOuName} -> ${operation.toOuName}`,

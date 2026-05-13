@@ -5,6 +5,8 @@ import {
   ListOrganizationalUnitsForParentCommand,
   MoveAccountCommand,
   OrganizationsClient,
+  TagResourceCommand,
+  UntagResourceCommand,
   UpdateOrganizationalUnitCommand,
 } from "@aws-sdk/client-organizations";
 import {
@@ -382,6 +384,53 @@ async function applyOperation(props: {
         email: result.account.email,
         status: result.account.status,
         parentId: operation.targetOuId,
+        tags: [],
+      },
+    });
+  }
+  if (operation.kind === "updateAccountTags") {
+    const account = props.state.organization.accountsById[operation.accountId];
+    if (account == null) {
+      throw new Error(
+        `Could not resolve account "${operation.accountName}" (${operation.accountId}) in working state.`,
+      );
+    }
+    const currentTags = new Map(
+      (account.tags ?? []).map((tag) => [tag.key, tag.value] as const),
+    );
+    const desiredTags = new Map(Object.entries(operation.tags));
+    const tagsToApply = [...desiredTags.entries()]
+      .filter(([key, value]) => currentTags.get(key) !== value)
+      .map(([Key, Value]) => ({ Key, Value }));
+    const tagKeysToRemove = [...currentTags.keys()].filter(
+      (key) => desiredTags.has(key) === false,
+    );
+
+    props.logger.log(
+      `Updating account tags "${operation.accountName}" (${operation.accountId})...`,
+    );
+    if (tagsToApply.length > 0) {
+      await props.organizationsClient.send(
+        new TagResourceCommand({
+          ResourceId: operation.accountId,
+          Tags: tagsToApply,
+        }),
+      );
+    }
+    if (tagKeysToRemove.length > 0) {
+      await props.organizationsClient.send(
+        new UntagResourceCommand({
+          ResourceId: operation.accountId,
+          TagKeys: tagKeysToRemove,
+        }),
+      );
+    }
+    props.logger.log(`Done: tags updated for "${operation.accountName}"`);
+    return upsertAccountInWorkingState({
+      workingState: props.state,
+      account: {
+        ...account,
+        tags: Object.entries(operation.tags).map(([key, value]) => ({ key, value })),
       },
     });
   }
@@ -1145,6 +1194,9 @@ function formatApplyOperationLine(operation: Operation): string {
   }
   if (operation.kind === "createAccount") {
     return `  create account "${operation.accountName}" (${operation.accountEmail}) in ${operation.targetOuName}`;
+  }
+  if (operation.kind === "updateAccountTags") {
+    return `  update account tags "${operation.accountName}" (${operation.accountId})`;
   }
   if (operation.kind === "removeAccount") {
     return [

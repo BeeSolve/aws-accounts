@@ -103,6 +103,7 @@ async function writeFixtureFiles(props: {
         name: account.name,
         email: account.email,
         status: account.status,
+        tags: [],
         parentId: "ou-graveyard",
       })),
     },

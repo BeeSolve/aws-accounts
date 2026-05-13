@@ -22,6 +22,14 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       toOuName: "Graveyard",
     },
     {
+      kind: "updateAccountTags",
+      accountId: "111111111111",
+      accountName: "AppAccount",
+      tags: {
+        owner: "platform",
+      },
+    },
+    {
       kind: "createIdcUser",
       userName: "alice",
       displayName: "Alice",

@@ -33,8 +33,8 @@ test("normalizeState sorts by ids/arns before names", () => {
         { id: "ou-a", parentId: "r-root", arn: "arn:1", name: "Alpha" }
       ],
       accounts: [
-        { id: "222222222222", arn: "arn:2", name: "B", email: "b@example.com", status: "ACTIVE", parentId: "ou-b" },
-        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", status: "ACTIVE", parentId: "ou-a" }
+        { id: "222222222222", arn: "arn:2", name: "B", email: "b@example.com", status: "ACTIVE", tags: [], parentId: "ou-b" },
+        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", status: "ACTIVE", tags: [], parentId: "ou-a" }
       ]
     },
     identityCenter: {
@@ -204,6 +204,7 @@ test("working state helpers update organization records immutably", () => {
       name: "C",
       email: "c@example.com",
       status: "ACTIVE",
+      tags: [],
       parentId: "ou-c"
     }
   });
@@ -366,8 +367,8 @@ function createSampleState() {
         { id: "ou-b", parentId: "r-root", arn: "arn:2", name: "Beta" }
       ],
       accounts: [
-        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", status: "ACTIVE", parentId: "ou-a" },
-        { id: "222222222222", arn: "arn:2", name: "B", email: "b@example.com", status: "ACTIVE", parentId: "ou-b" }
+        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", status: "ACTIVE", tags: [], parentId: "ou-a" },
+        { id: "222222222222", arn: "arn:2", name: "B", email: "b@example.com", status: "ACTIVE", tags: [], parentId: "ou-b" }
       ]
     },
     identityCenter: {

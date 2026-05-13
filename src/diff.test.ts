@@ -74,6 +74,7 @@ test("diffStates emits createAccount operation for sentinel new account", () => 
     name: "app-c",
     email: "app-c@example.com",
     status: "ACTIVE",
+    tags: [],
     parentId: "ou-eng",
   });
   const plan = diffStates({
@@ -87,6 +88,37 @@ test("diffStates emits createAccount operation for sentinel new account", () => 
       accountEmail: "app-c@example.com",
       targetOuId: "ou-eng",
       targetOuName: "Engineering",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates emits updateAccountTags when desired tags change", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  const account = next.organization.accounts.find(
+    (candidate) => candidate.name === "app-a",
+  );
+  if (account == null) {
+    throw new Error('Expected fixture account "app-a".');
+  }
+  account.tags = [
+    { key: "owner", value: "platform" },
+    { key: "cost-center", value: "eng" },
+  ];
+  const plan = diffStates({
+    current,
+    next,
+  });
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "updateAccountTags",
+      accountId: "111111111111",
+      accountName: "app-a",
+      tags: {
+        "cost-center": "eng",
+        owner: "platform",
+      },
     },
   ]);
   assert.deepEqual(plan.unsupported, []);
@@ -239,6 +271,7 @@ test("diffStates keeps OU delete unsupported when same-batch moves do not empty 
     name: "app-c",
     email: "app-c@example.com",
     status: "ACTIVE",
+    tags: [],
     parentId: "ou-eng",
   });
   const next = cloneState(current);
@@ -357,6 +390,7 @@ test("diffStates keeps nested OU delete unsupported when a descendant is not saf
     name: "app-c",
     email: "app-c@example.com",
     status: "ACTIVE",
+    tags: [],
     parentId: "ou-child",
   });
   const next = cloneState(current);
@@ -542,6 +576,7 @@ test("diffStates reports new account with unresolved target OU", () => {
     name: "app-d",
     email: "app-d@example.com",
     status: "ACTIVE",
+    tags: [],
     parentId: "__pending_creation__",
   });
   const plan = diffStates({
@@ -885,6 +920,7 @@ test("diffStates keeps deterministic mixed Organizations and IdC ordering", () =
     name: "app-c",
     email: "app-c@example.com",
     status: "ACTIVE",
+    tags: [],
     parentId: "ou-eng",
   });
   next.identityCenter.users.push({
@@ -951,6 +987,7 @@ function createBaseState(): StateFile {
           name: "app-a",
           email: "app-a@example.com",
           status: "ACTIVE",
+          tags: [],
           parentId: "ou-eng",
         },
         {
@@ -959,6 +996,7 @@ function createBaseState(): StateFile {
           name: "app-b",
           email: "app-b@example.com",
           status: "ACTIVE",
+          tags: [],
           parentId: "ou-data",
         },
       ],

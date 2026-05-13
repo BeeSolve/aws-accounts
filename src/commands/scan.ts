@@ -9,6 +9,7 @@ import {
   ListOrganizationalUnitsForParentCommand,
   ListParentsCommand,
   ListRootsCommand,
+  ListTagsForResourceCommand,
   OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import {
@@ -108,6 +109,11 @@ async function scanOrganization(props: {
         new ListParentsCommand({ ChildId: account.Id }),
       );
       const parentId = parents.Parents?.[0]?.Id ?? root.Id;
+      const tagsResponse = await props.organizationsClient.send(
+        new ListTagsForResourceCommand({
+          ResourceId: account.Id,
+        }),
+      );
       accounts.push({
         id: account.Id,
         arn: account.Arn,
@@ -115,6 +121,17 @@ async function scanOrganization(props: {
         email: account.Email,
         status: account.Status,
         parentId,
+        tags: (tagsResponse.Tags ?? []).flatMap((tag) => {
+          if (tag.Key == null) {
+            return [];
+          }
+          return [
+            {
+              key: tag.Key,
+              value: tag.Value ?? "",
+            },
+          ];
+        }),
       });
     }
     nextToken = response.NextToken;

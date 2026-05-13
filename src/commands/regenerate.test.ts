@@ -113,6 +113,7 @@ async function writeFixtureFiles(props: {
           name: "AppAccount",
           email: "app@example.com",
           status: "ACTIVE",
+          tags: [],
           parentId: "ou-pending",
         },
       ],

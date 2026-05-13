@@ -40,6 +40,8 @@ import {
   ListAccountsForParentCommand,
   ListOrganizationalUnitsForParentCommand,
   MoveAccountCommand,
+  TagResourceCommand,
+  UntagResourceCommand,
   DeleteOrganizationalUnitCommand,
   UpdateOrganizationalUnitCommand,
   type OrganizationsClient,
@@ -557,7 +559,7 @@ test("runApplyCommand applies createAccount using shared helper and persists rea
         }
         engineering.accounts = [
           ...engineering.accounts,
-          { name: "BrandNew", email: "brandnew@example.com" },
+          { name: "BrandNew", email: "brandnew@example.com", tags: [] },
         ];
       },
     });
@@ -627,6 +629,91 @@ test("runApplyCommand applies createAccount using shared helper and persists rea
     );
     assert.equal(brandNew?.id, "555555555555");
     assert.equal(brandNew?.parentId, "ou-engineering");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runApplyCommand applies updateAccountTags and persists tags in state", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        const appAccount = pending?.accounts.find(
+          (account) => account.name === "AppAccount",
+        );
+        if (appAccount == null) {
+          throw new Error('Expected account "AppAccount".');
+        }
+        appAccount.tags = [
+          { key: "owner", value: "platform" },
+          { key: "environment", value: "dev" },
+        ];
+      },
+    });
+    await regenerateAwsConfigTypes({
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+
+    let tagged = false;
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({
+        onTagResource: async (input) => {
+          tagged = true;
+          assert.equal(input.ResourceId, "111111111111");
+          assert.ok(
+            input.Tags?.some((tag) => tag.Key === "owner" && tag.Value === "platform"),
+          );
+        },
+      }),
+      ssoAdminClient: createSsoAdminClientMock({}),
+      identityStoreClient: createIdentityStoreClientMock({}),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+    assert.equal(result.status, "applied");
+    assert.equal(tagged, true);
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      organization: {
+        accounts: Array<{
+          id: string;
+          tags?: Array<{ key: string; value: string }>;
+        }>;
+      };
+    };
+    const appAccount = persisted.organization.accounts.find(
+      (account) => account.id === "111111111111",
+    );
+    assert.deepEqual(appAccount?.tags, [
+      { key: "environment", value: "dev" },
+      { key: "owner", value: "platform" },
+    ]);
   } finally {
     await workspace.cleanup();
   }
@@ -1418,7 +1505,7 @@ test("runApplyCommand persists mixed successful operations before later failure"
 
         engineering.accounts = [
           ...engineering.accounts,
-          { name: "BrandNew", email: "brandnew@example.com" },
+          { name: "BrandNew", email: "brandnew@example.com", tags: [] },
         ];
         pending.accounts = pending.accounts.filter(
           (account) => account.name !== "AppAccount",
@@ -2147,7 +2234,7 @@ test("runApplyCommand resolves mixed dependency batches from working state", asy
         }
         engineering.accounts = [
           ...engineering.accounts,
-          { name: "BrandNew", email: "brandnew@example.com" },
+          { name: "BrandNew", email: "brandnew@example.com", tags: [] },
         ];
         config.users.push({
           userName: "bob",
@@ -2726,6 +2813,14 @@ function createOrganizationsClientMock(props: {
     OrganizationalUnitId?: string;
     Name?: string;
   }) => Promise<void>;
+  onTagResource?: (input: {
+    ResourceId?: string;
+    Tags?: Array<{ Key?: string; Value?: string }>;
+  }) => Promise<void>;
+  onUntagResource?: (input: {
+    ResourceId?: string;
+    TagKeys?: string[];
+  }) => Promise<void>;
   createAccountResponse?: { CreateAccountStatus?: { Id?: string } };
   createOuResponse?: {
     OrganizationalUnit?: { Id?: string; Arn?: string; Name?: string };
@@ -2869,6 +2964,18 @@ function createOrganizationsClientMock(props: {
       if (command instanceof MoveAccountCommand) {
         if (props.onMoveAccount != null) {
           await props.onMoveAccount(command.input);
+        }
+        return {};
+      }
+      if (command instanceof TagResourceCommand) {
+        if (props.onTagResource != null) {
+          await props.onTagResource(command.input);
+        }
+        return {};
+      }
+      if (command instanceof UntagResourceCommand) {
+        if (props.onUntagResource != null) {
+          await props.onUntagResource(command.input);
         }
         return {};
       }
@@ -3383,7 +3490,11 @@ async function updateConfigModel(props: {
     organizationalUnits: Array<{
       name: string;
       parentName: string | null;
-      accounts: Array<{ name: string; email: string }>;
+      accounts: Array<{
+        name: string;
+        email: string;
+        tags: Array<{ key: string; value: string }>;
+      }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string; description?: string; members: string[] }>;
@@ -3411,7 +3522,11 @@ async function updateConfigModel(props: {
     organizationalUnits: Array<{
       name: string;
       parentName: string | null;
-      accounts: Array<{ name: string; email: string }>;
+      accounts: Array<{
+        name: string;
+        email: string;
+        tags: Array<{ key: string; value: string }>;
+      }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
     groups: Array<{ displayName: string; description?: string; members: string[] }>;
@@ -3472,6 +3587,7 @@ async function writeFixtureFiles(props: {
           name: "AppAccount",
           email: "app@example.com",
           status: "ACTIVE",
+          tags: [],
           parentId: "ou-pending",
         },
         {
@@ -3480,6 +3596,7 @@ async function writeFixtureFiles(props: {
           name: "DataAccount",
           email: "data@example.com",
           status: "ACTIVE",
+          tags: [],
           parentId: "ou-pending",
         },
       ],

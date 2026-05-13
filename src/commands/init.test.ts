@@ -14,6 +14,7 @@ import {
   ListOrganizationalUnitsForParentCommand,
   ListParentsCommand,
   ListRootsCommand,
+  ListTagsForResourceCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import {
@@ -169,6 +170,9 @@ function createOrganizationsClientMock(): OrganizationsClient {
         return {
           Parents: [{ Id: rootId }],
         };
+      }
+      if (command instanceof ListTagsForResourceCommand) {
+        return { Tags: [] };
       }
       throw new Error("Unexpected Organizations command in init test.");
     },
