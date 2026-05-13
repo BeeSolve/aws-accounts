@@ -68,6 +68,7 @@ const awsConfigModelSchema = v.strictObject({
   groups: v.array(
     v.strictObject({
       displayName: v.string(),
+      description: v.optional(v.string()),
       members: v.array(v.string()),
     }),
   ),
@@ -529,6 +530,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     })),
     groups: props.state.identityCenter.groups.map((group) => ({
       displayName: group.displayName,
+      description: group.description ?? "",
       members: membersByGroupDisplayName.get(group.displayName) ?? [],
     })),
     permissionSets: props.state.identityCenter.permissionSets.map(
@@ -735,6 +737,7 @@ export function mapAwsConfigToState(
       return {
         groupId: matchedGroup?.groupId ?? pendingCreationId,
         displayName: group.displayName,
+        description: group.description ?? "",
       };
     });
   const mappedGroupByDisplayName = toRecordByProperty(
@@ -1231,6 +1234,7 @@ export const awsConfigSchema = v.strictObject({
   groups: v.array(
     v.strictObject({
       displayName: v.string(),
+      description: v.optional(v.string()),
       members: v.array(userNameSchema),
     }),
   ),

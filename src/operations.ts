@@ -49,6 +49,13 @@ const createIdcUserOperationSchema = v.strictObject({
   email: v.string(),
 });
 
+const updateIdcUserOperationSchema = v.strictObject({
+  kind: v.literal("updateIdcUser"),
+  userName: v.string(),
+  displayName: v.string(),
+  email: v.string(),
+});
+
 const deleteIdcUserOperationSchema = v.strictObject({
   kind: v.literal("deleteIdcUser"),
   userName: v.string(),
@@ -57,6 +64,13 @@ const deleteIdcUserOperationSchema = v.strictObject({
 const createIdcGroupOperationSchema = v.strictObject({
   kind: v.literal("createIdcGroup"),
   groupDisplayName: v.string(),
+  description: v.string(),
+});
+
+const updateIdcGroupDescriptionOperationSchema = v.strictObject({
+  kind: v.literal("updateIdcGroupDescription"),
+  groupDisplayName: v.string(),
+  description: v.string(),
 });
 
 const deleteIdcGroupOperationSchema = v.strictObject({
@@ -78,6 +92,12 @@ const removeIdcGroupMembershipOperationSchema = v.strictObject({
 
 const createIdcPermissionSetOperationSchema = v.strictObject({
   kind: v.literal("createIdcPermissionSet"),
+  permissionSetName: v.string(),
+  description: v.string(),
+});
+
+const updateIdcPermissionSetDescriptionOperationSchema = v.strictObject({
+  kind: v.literal("updateIdcPermissionSetDescription"),
   permissionSetName: v.string(),
   description: v.string(),
 });
@@ -155,12 +175,15 @@ export const operationSchema = v.variant("kind", [
   deleteOuOperationSchema,
   createAccountOperationSchema,
   createIdcUserOperationSchema,
+  updateIdcUserOperationSchema,
   deleteIdcUserOperationSchema,
   createIdcGroupOperationSchema,
+  updateIdcGroupDescriptionOperationSchema,
   deleteIdcGroupOperationSchema,
   addIdcGroupMembershipOperationSchema,
   removeIdcGroupMembershipOperationSchema,
   createIdcPermissionSetOperationSchema,
+  updateIdcPermissionSetDescriptionOperationSchema,
   deleteIdcPermissionSetOperationSchema,
   putIdcPermissionSetInlinePolicyOperationSchema,
   deleteIdcPermissionSetInlinePolicyOperationSchema,
@@ -210,11 +233,17 @@ export type CreateAccountOperation = v.InferOutput<
 export type CreateIdcUserOperation = v.InferOutput<
   typeof createIdcUserOperationSchema
 >;
+export type UpdateIdcUserOperation = v.InferOutput<
+  typeof updateIdcUserOperationSchema
+>;
 export type DeleteIdcUserOperation = v.InferOutput<
   typeof deleteIdcUserOperationSchema
 >;
 export type CreateIdcGroupOperation = v.InferOutput<
   typeof createIdcGroupOperationSchema
+>;
+export type UpdateIdcGroupDescriptionOperation = v.InferOutput<
+  typeof updateIdcGroupDescriptionOperationSchema
 >;
 export type DeleteIdcGroupOperation = v.InferOutput<
   typeof deleteIdcGroupOperationSchema
@@ -227,6 +256,9 @@ export type RemoveIdcGroupMembershipOperation = v.InferOutput<
 >;
 export type CreateIdcPermissionSetOperation = v.InferOutput<
   typeof createIdcPermissionSetOperationSchema
+>;
+export type UpdateIdcPermissionSetDescriptionOperation = v.InferOutput<
+  typeof updateIdcPermissionSetDescriptionOperationSchema
 >;
 export type DeleteIdcPermissionSetOperation = v.InferOutput<
   typeof deleteIdcPermissionSetOperationSchema

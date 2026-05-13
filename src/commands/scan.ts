@@ -311,6 +311,7 @@ async function listIdentityStoreGroups(props: {
       groups.push({
         groupId: group.GroupId,
         displayName: group.DisplayName,
+        description: group.Description ?? "",
       });
     }
     nextToken = response.NextToken;

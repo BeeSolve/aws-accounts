@@ -100,11 +100,17 @@ function formatHumanOperationLine(operation: Plan["operations"][number]): string
   if (operation.kind === "createIdcUser") {
     return `  create IdC user "${operation.userName}"`;
   }
+  if (operation.kind === "updateIdcUser") {
+    return `  update IdC user "${operation.userName}"`;
+  }
   if (operation.kind === "deleteIdcUser") {
     return `  [destructive] delete IdC user "${operation.userName}"`;
   }
   if (operation.kind === "createIdcGroup") {
     return `  create IdC group "${operation.groupDisplayName}"`;
+  }
+  if (operation.kind === "updateIdcGroupDescription") {
+    return `  update IdC group description for "${operation.groupDisplayName}"`;
   }
   if (operation.kind === "deleteIdcGroup") {
     return `  [destructive] delete IdC group "${operation.groupDisplayName}"`;
@@ -114,6 +120,9 @@ function formatHumanOperationLine(operation: Plan["operations"][number]): string
   }
   if (operation.kind === "createIdcPermissionSet") {
     return `  create IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "updateIdcPermissionSetDescription") {
+    return `  update IdC permission set description for "${operation.permissionSetName}"`;
   }
   if (operation.kind === "deleteIdcPermissionSet") {
     return `  [destructive] delete IdC permission set "${operation.permissionSetName}"`;

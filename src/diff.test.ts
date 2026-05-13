@@ -558,11 +558,60 @@ test("diffStates emits IdC entity creation operations", () => {
     {
       kind: "createIdcGroup",
       groupDisplayName: "Security",
+      description: "",
     },
     {
       kind: "createIdcPermissionSet",
       permissionSetName: "ReadOnly",
       description: "Read only",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates emits IdC metadata update operations", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  next.identityCenter.users[0] = {
+    ...next.identityCenter.users[0],
+    displayName: "Alice Updated",
+    email: "alice-new@example.com",
+  };
+  next.identityCenter.groups[0] = {
+    ...next.identityCenter.groups[0],
+    description: "Platform access",
+  };
+  next.identityCenter.permissionSets[0] = {
+    ...next.identityCenter.permissionSets[0],
+    description: "Updated admin access",
+  };
+
+  const plan = diffStates({
+    current,
+    next,
+  });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "updateIdcUser",
+      userName: "alice",
+      displayName: "Alice Updated",
+      email: "alice-new@example.com",
+    },
+    {
+      kind: "updateIdcGroupDescription",
+      groupDisplayName: "Platform",
+      description: "Platform access",
+    },
+    {
+      kind: "updateIdcPermissionSetDescription",
+      permissionSetName: "Admin",
+      description: "Updated admin access",
+    },
+    {
+      kind: "provisionIdcPermissionSet",
+      permissionSetName: "Admin",
+      targetScope: "ALL_PROVISIONED_ACCOUNTS",
     },
   ]);
   assert.deepEqual(plan.unsupported, []);

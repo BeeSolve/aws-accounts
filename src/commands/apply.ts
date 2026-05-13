@@ -16,6 +16,9 @@ import {
   DeleteUserCommand,
   GetGroupMembershipIdCommand,
   IdentitystoreClient,
+  type AttributeOperation,
+  UpdateGroupCommand,
+  UpdateUserCommand,
 } from "@aws-sdk/client-identitystore";
 import {
   CreateAccountAssignmentCommand,
@@ -33,6 +36,7 @@ import {
   ProvisionPermissionSetCommand,
   PutInlinePolicyToPermissionSetCommand,
   SSOAdminClient,
+  UpdatePermissionSetCommand,
 } from "@aws-sdk/client-sso-admin";
 import { createAccountAndMoveToOu } from "../accountCreation.js";
 import {
@@ -420,6 +424,58 @@ async function applyOperation(props: {
       },
     });
   }
+  if (operation.kind === "updateIdcUser") {
+    const user = resolveUserByName({
+      state: props.state,
+      userName: operation.userName,
+    });
+    const operations: AttributeOperation[] = [];
+    if (user.displayName !== operation.displayName) {
+      operations.push({
+        AttributePath: "displayName",
+        AttributeValue: operation.displayName,
+      });
+      operations.push({
+        AttributePath: "name",
+        AttributeValue: buildIdentityStoreUserName({
+          userName: operation.userName,
+          displayName: operation.displayName,
+        }),
+      });
+    }
+    if (user.email !== operation.email && operation.email.length > 0) {
+      operations.push({
+        AttributePath: "emails",
+        AttributeValue: [
+          {
+            Value: operation.email,
+            Type: "Work",
+            Primary: true,
+          },
+        ],
+      });
+    }
+    if (operations.length === 0) {
+      return props.state;
+    }
+    props.logger.log(`Updating IdC user "${operation.userName}"...`);
+    await props.identityStoreClient.send(
+      new UpdateUserCommand({
+        IdentityStoreId: props.state.identityCenter.identityStoreId,
+        UserId: user.userId,
+        Operations: operations,
+      }),
+    );
+    props.logger.log(`Done: "${operation.userName}"`);
+    return upsertIdcUserInWorkingState({
+      workingState: props.state,
+      user: {
+        ...user,
+        displayName: operation.displayName,
+        email: operation.email.length > 0 ? operation.email : user.email,
+      },
+    });
+  }
   if (operation.kind === "deleteIdcUser") {
     const user = resolveUserByName({
       state: props.state,
@@ -444,6 +500,10 @@ async function applyOperation(props: {
       new CreateGroupCommand({
         IdentityStoreId: props.state.identityCenter.identityStoreId,
         DisplayName: operation.groupDisplayName,
+        Description:
+          operation.description.trim().length > 0
+            ? operation.description
+            : undefined,
       }),
     );
     if (response.GroupId == null) {
@@ -457,6 +517,36 @@ async function applyOperation(props: {
       group: {
         groupId: response.GroupId,
         displayName: operation.groupDisplayName,
+        description: operation.description,
+      },
+    });
+  }
+  if (operation.kind === "updateIdcGroupDescription") {
+    const group = resolveGroupByDisplayName({
+      state: props.state,
+      groupDisplayName: operation.groupDisplayName,
+    });
+    props.logger.log(
+      `Updating IdC group description for "${operation.groupDisplayName}"...`,
+    );
+    await props.identityStoreClient.send(
+      new UpdateGroupCommand({
+        IdentityStoreId: props.state.identityCenter.identityStoreId,
+        GroupId: group.groupId,
+        Operations: [
+          {
+            AttributePath: "description",
+            AttributeValue: operation.description,
+          },
+        ],
+      }),
+    );
+    props.logger.log(`Done: group "${operation.groupDisplayName}"`);
+    return upsertIdcGroupInWorkingState({
+      workingState: props.state,
+      group: {
+        ...group,
+        description: operation.description,
       },
     });
   }
@@ -541,6 +631,33 @@ async function applyOperation(props: {
         inlinePolicy: null,
         awsManagedPolicies: [],
         customerManagedPolicies: [],
+      },
+    });
+  }
+  if (operation.kind === "updateIdcPermissionSetDescription") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Updating IdC permission set description for "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new UpdatePermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+        Description:
+          operation.description.trim().length > 0
+            ? operation.description
+            : undefined,
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertIdcPermissionSetInWorkingState({
+      workingState: props.state,
+      permissionSet: {
+        ...permissionSet,
+        description: operation.description,
       },
     });
   }
@@ -1002,11 +1119,17 @@ function formatApplyOperationLine(operation: Operation): string {
   if (operation.kind === "createIdcUser") {
     return `  create IdC user "${operation.userName}"`;
   }
+  if (operation.kind === "updateIdcUser") {
+    return `  update IdC user "${operation.userName}"`;
+  }
   if (operation.kind === "deleteIdcUser") {
     return `  [destructive] delete IdC user "${operation.userName}"`;
   }
   if (operation.kind === "createIdcGroup") {
     return `  create IdC group "${operation.groupDisplayName}"`;
+  }
+  if (operation.kind === "updateIdcGroupDescription") {
+    return `  update IdC group description for "${operation.groupDisplayName}"`;
   }
   if (operation.kind === "deleteIdcGroup") {
     return `  [destructive] delete IdC group "${operation.groupDisplayName}"`;
@@ -1016,6 +1139,9 @@ function formatApplyOperationLine(operation: Operation): string {
   }
   if (operation.kind === "createIdcPermissionSet") {
     return `  create IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "updateIdcPermissionSetDescription") {
+    return `  update IdC permission set description for "${operation.permissionSetName}"`;
   }
   if (operation.kind === "deleteIdcPermissionSet") {
     return `  [destructive] delete IdC permission set "${operation.permissionSetName}"`;

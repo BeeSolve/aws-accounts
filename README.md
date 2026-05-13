@@ -8,7 +8,7 @@ The tool's lifecycle has three phases:
 
 1. **Init (one-time).** `init` runs `bootstrap` + `scan` and writes `aws.config.ts` + `aws.config.types.ts` from the resulting `state.json`. After this, AWS state is mirrored locally and `aws.config.ts` is your editable source of truth.
 2. **Edit (steady state).** Edit `aws.config.ts` to model the desired state. Run `regenerate` to refresh `aws.config.types.ts` (picklists / IDE autocomplete) after manual edits. A future `watch` command will run `regenerate` automatically.
-3. **Sync (phase 6 Wave 5).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
+3. **Sync (phase 6 through Wave 6).** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
 
 `bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged in increment 1; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
 
@@ -52,10 +52,13 @@ Those policy helpers and schemas are provided by the installed
 `plan` and `apply` also support these IAM Identity Center mutations:
 
 - create missing users
-- create missing groups
+- create missing groups (optional non-empty description)
+- update user display name and primary Work email (email updates apply only when the desired email is non-empty; clearing email in config alone is not reconciled)
+- update group description
 - add missing group memberships
 - remove stale group memberships
 - create missing permission sets
+- update permission set description (when that permission set has desired account assignments, a reprovision to all provisioned accounts is included in the plan)
 - delete removed users with `apply --allow-destructive`
 - delete removed groups with `apply --allow-destructive`
 - delete removed permission sets with `apply --allow-destructive`
@@ -135,9 +138,6 @@ Still out of scope in the current increment:
 - deleting an OU that still has child OUs or accounts
 - deleting an OU subtree when any descendant is unresolved or unsafe to delete
 - deleting the reserved `Pending` or `Graveyard` OUs (do that manually outside this tool)
-- editing IAM Identity Center user metadata after creation
-- editing IAM Identity Center group metadata after creation
-- editing IAM Identity Center permission set metadata after creation
 - account metadata reconciliation after creation (tags, alternate contacts, account-name drift)
 
 ## Recovery after failed destructive apply
@@ -189,7 +189,7 @@ catalog.
 - Wave 4 permission set policy plan: `docs/phase-6-wave-4-permission-set-policy-plan.md`
 - Wave 4 IAM action hinting follow-up plan: `docs/phase-6-wave-4-iam-action-hints-plan.md`
 - Wave 5 IdC entity removal plan: `docs/phase-6-wave-5-idc-removal-plan.md`
-- Current v1 backlog priority: `docs/v1-backlog-priority.md`
+- Current v1 backlog (remaining work after Wave 6): `docs/v1-backlog-priority.md`
 - Agreed repository structure: `docs/repository-structure.md`
 
 Tests compile with esbuild to `dist/*.test.js` and run with `node --test` (`npm test`).
@@ -291,8 +291,11 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "identitystore:DeleteGroup",
         "identitystore:DeleteGroupMembership",
         "identitystore:GetGroupMembershipId",
+        "identitystore:UpdateGroup",
+        "identitystore:UpdateUser",
         "sso:CreatePermissionSet",
         "sso:DeletePermissionSet",
+        "sso:UpdatePermissionSet",
         "sso:PutInlinePolicyToPermissionSet",
         "sso:DeleteInlinePolicyFromPermissionSet",
         "sso:AttachManagedPolicyToPermissionSet",

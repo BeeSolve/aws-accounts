@@ -31,6 +31,7 @@ const userSchema = v.strictObject({
 const groupSchema = v.strictObject({
   groupId: nonEmptyString,
   displayName: nonEmptyString,
+  description: v.optional(v.string()),
 });
 
 const groupMembershipSchema = v.strictObject({
@@ -530,7 +531,8 @@ export function upsertIdcGroupInWorkingState(props: {
   if (
     currentGroup != null &&
     currentGroup.groupId === props.group.groupId &&
-    currentGroup.displayName === props.group.displayName
+    currentGroup.displayName === props.group.displayName &&
+    (currentGroup.description ?? "") === (props.group.description ?? "")
   ) {
     return props.workingState;
   }

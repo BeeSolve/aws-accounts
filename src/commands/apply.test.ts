@@ -11,6 +11,8 @@ import {
   DeleteUserCommand,
   GetGroupMembershipIdCommand,
   type IdentitystoreClient,
+  UpdateGroupCommand,
+  UpdateUserCommand,
 } from "@aws-sdk/client-identitystore";
 import {
   AttachCustomerManagedPolicyReferenceToPermissionSetCommand,
@@ -28,6 +30,7 @@ import {
   ProvisionPermissionSetCommand,
   PutInlinePolicyToPermissionSetCommand,
   type SSOAdminClient,
+  UpdatePermissionSetCommand,
 } from "@aws-sdk/client-sso-admin";
 import {
   CreateOrganizationalUnitCommand,
@@ -1588,6 +1591,158 @@ test("runApplyCommand applies IdC entity creation and persists state", async () 
   }
 });
 
+test("runApplyCommand applies IdC metadata updates and persists state", async () => {
+  const workspace = await createTestWorkspace({ prefix: "apply-test-" });
+  try {
+    const paths = getFixturePaths({ workspacePath: workspace.workspacePath });
+    await writeFixtureFiles({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath: paths.configPath,
+      update: (config) => {
+        const alice = config.users.find((user) => user.userName === "alice");
+        if (alice == null) {
+          throw new Error('Expected fixture user "alice".');
+        }
+        alice.displayName = "Alice Jr";
+        alice.email = "alice-new@example.com";
+        const admins = config.groups.find(
+          (group) => group.displayName === "Admins",
+        );
+        if (admins == null) {
+          throw new Error('Expected fixture group "Admins".');
+        }
+        admins.description = "Production admins";
+        const adminAccess = config.permissionSets.find(
+          (permissionSet) => permissionSet.name === "AdminAccess",
+        );
+        if (adminAccess == null) {
+          throw new Error('Expected fixture permission set "AdminAccess".');
+        }
+        adminAccess.description = "Updated admin label";
+      },
+    });
+
+    let sawUpdateUser = false;
+    let sawUpdateGroup = false;
+    let sawUpdatePermissionSet = false;
+
+    const result = await runApplyCommand({
+      organizationsClient: createOrganizationsClientMock({}),
+      ssoAdminClient: createSsoAdminClientMock({
+        onUpdatePermissionSet: async (input) => {
+          sawUpdatePermissionSet = true;
+          assert.equal(input.InstanceArn, "arn:aws:sso:::instance/ssoins-123");
+          assert.equal(
+            input.PermissionSetArn,
+            "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+          );
+          assert.equal(input.Description, "Updated admin label");
+        },
+      }),
+      identityStoreClient: createIdentityStoreClientMock({
+        onUpdateUser: async (input) => {
+          sawUpdateUser = true;
+          assert.equal(input.IdentityStoreId, "d-123");
+          assert.equal(input.UserId, "u-123");
+          assert.ok(input.Operations != null && input.Operations.length >= 3);
+          const pathsSeen = new Set(
+            input.Operations?.map((operation) => operation.AttributePath) ?? [],
+          );
+          assert.equal(pathsSeen.has("displayName"), true);
+          assert.equal(pathsSeen.has("name"), true);
+          assert.equal(pathsSeen.has("emails"), true);
+          const emailsOp = input.Operations?.find(
+            (operation) => operation.AttributePath === "emails",
+          );
+          assert.deepEqual(emailsOp?.AttributeValue, [
+            { Value: "alice-new@example.com", Type: "Work", Primary: true },
+          ]);
+          const nameOp = input.Operations?.find(
+            (operation) => operation.AttributePath === "name",
+          );
+          assert.deepEqual(nameOp?.AttributeValue, {
+            Formatted: "Alice Jr",
+            GivenName: "Alice",
+            FamilyName: "Jr",
+          });
+        },
+        onUpdateGroup: async (input) => {
+          sawUpdateGroup = true;
+          assert.equal(input.IdentityStoreId, "d-123");
+          assert.equal(input.GroupId, "g-123");
+          assert.deepEqual(input.Operations, [
+            {
+              AttributePath: "description",
+              AttributeValue: "Production admins",
+            },
+          ]);
+        },
+      }),
+      logger: noopLogger,
+      configPath: paths.configPath,
+      typesPath: paths.typesPath,
+      statePath: paths.statePath,
+      contextPath: paths.contextPath,
+      runtime: createApplyRuntime(),
+      ignoreUnsupported: false,
+      planConfirmation: async () => true,
+    });
+
+    assert.equal(result.status, "applied");
+    assert.equal(result.appliedOperations, 3);
+    assert.equal(sawUpdateUser, true);
+    assert.equal(sawUpdateGroup, true);
+    assert.equal(sawUpdatePermissionSet, true);
+
+    const persisted = JSON.parse(await readFile(paths.statePath, "utf8")) as {
+      identityCenter: {
+        users: Array<{
+          userId: string;
+          userName: string;
+          displayName: string;
+          email: string;
+        }>;
+        groups: Array<{
+          groupId: string;
+          displayName: string;
+          description?: string;
+        }>;
+        permissionSets: Array<{
+          permissionSetArn: string;
+          name: string;
+          description: string;
+        }>;
+      };
+    };
+    const alice = persisted.identityCenter.users.find(
+      (user) => user.userName === "alice",
+    );
+    assert.equal(alice?.displayName, "Alice Jr");
+    assert.equal(alice?.email, "alice-new@example.com");
+    const admins = persisted.identityCenter.groups.find(
+      (group) => group.displayName === "Admins",
+    );
+    assert.equal(admins?.description, "Production admins");
+    const adminAccess = persisted.identityCenter.permissionSets.find(
+      (permissionSet) => permissionSet.name === "AdminAccess",
+    );
+    assert.equal(adminAccess?.description, "Updated admin label");
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 test("runApplyCommand omits empty permission set description on create", async () => {
   const workspace = await createTestWorkspace({ prefix: "apply-test-" });
   try {
@@ -2631,6 +2786,23 @@ function createIdentityStoreClientMock(props: {
   onCreateGroup?: (input: {
     IdentityStoreId?: string;
     DisplayName?: string;
+    Description?: string;
+  }) => Promise<void>;
+  onUpdateUser?: (input: {
+    IdentityStoreId?: string;
+    UserId?: string;
+    Operations?: Array<{
+      AttributePath?: string;
+      AttributeValue?: unknown;
+    }>;
+  }) => Promise<void>;
+  onUpdateGroup?: (input: {
+    IdentityStoreId?: string;
+    GroupId?: string;
+    Operations?: Array<{
+      AttributePath?: string;
+      AttributeValue?: unknown;
+    }>;
   }) => Promise<void>;
   onCreateGroupMembership?: (input: {
     IdentityStoreId?: string;
@@ -2689,6 +2861,7 @@ function createIdentityStoreClientMock(props: {
           await props.onCreateGroup({
             IdentityStoreId: command.input.IdentityStoreId,
             DisplayName: command.input.DisplayName,
+            Description: command.input.Description,
           });
         }
         return (
@@ -2696,6 +2869,32 @@ function createIdentityStoreClientMock(props: {
             GroupId: "g-created",
           }
         );
+      }
+      if (command instanceof UpdateUserCommand) {
+        if (props.onUpdateUser != null) {
+          await props.onUpdateUser({
+            IdentityStoreId: command.input.IdentityStoreId,
+            UserId: command.input.UserId,
+            Operations: command.input.Operations?.map((operation) => ({
+              AttributePath: operation.AttributePath,
+              AttributeValue: operation.AttributeValue,
+            })),
+          });
+        }
+        return {};
+      }
+      if (command instanceof UpdateGroupCommand) {
+        if (props.onUpdateGroup != null) {
+          await props.onUpdateGroup({
+            IdentityStoreId: command.input.IdentityStoreId,
+            GroupId: command.input.GroupId,
+            Operations: command.input.Operations?.map((operation) => ({
+              AttributePath: operation.AttributePath,
+              AttributeValue: operation.AttributeValue,
+            })),
+          });
+        }
+        return {};
       }
       if (command instanceof CreateGroupMembershipCommand) {
         if (props.onCreateGroupMembership != null) {
@@ -2807,6 +3006,11 @@ function createSsoAdminClientMock(props: {
   onDeletePermissionSet?: (input: {
     InstanceArn?: string;
     PermissionSetArn?: string;
+  }) => Promise<void>;
+  onUpdatePermissionSet?: (input: {
+    InstanceArn?: string;
+    PermissionSetArn?: string;
+    Description?: string;
   }) => Promise<void>;
   createPermissionSetResponse?: {
     PermissionSet?: {
@@ -2950,6 +3154,16 @@ function createSsoAdminClientMock(props: {
         }
         return {};
       }
+      if (command instanceof UpdatePermissionSetCommand) {
+        if (props.onUpdatePermissionSet != null) {
+          await props.onUpdatePermissionSet({
+            InstanceArn: command.input.InstanceArn,
+            PermissionSetArn: command.input.PermissionSetArn,
+            Description: command.input.Description,
+          });
+        }
+        return {};
+      }
       if (command instanceof ProvisionPermissionSetCommand) {
         if (props.onProvisionPermissionSet != null) {
           await props.onProvisionPermissionSet({
@@ -3065,7 +3279,7 @@ async function updateConfigModel(props: {
       accounts: Array<{ name: string; email: string }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string; members: string[] }>;
+    groups: Array<{ displayName: string; description?: string; members: string[] }>;
     permissionSets: Array<{
       name: string;
       description: string;
@@ -3093,7 +3307,7 @@ async function updateConfigModel(props: {
       accounts: Array<{ name: string; email: string }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string; members: string[] }>;
+    groups: Array<{ displayName: string; description?: string; members: string[] }>;
     permissionSets: Array<{
       name: string;
       description: string;

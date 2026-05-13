@@ -14,23 +14,26 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   createAccount: 3,
   moveAccount: 4,
   createIdcUser: 5,
-  createIdcGroup: 6,
-  addIdcGroupMembership: 7,
-  createIdcPermissionSet: 8,
-  putIdcPermissionSetInlinePolicy: 9,
-  deleteIdcPermissionSetInlinePolicy: 10,
-  attachIdcManagedPolicyToPermissionSet: 11,
-  detachIdcManagedPolicyFromPermissionSet: 12,
-  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 13,
-  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 14,
-  provisionIdcPermissionSet: 15,
-  grantIdcAccountAssignment: 16,
-  removeIdcGroupMembership: 17,
-  revokeIdcAccountAssignment: 18,
-  deleteIdcUser: 19,
-  deleteIdcGroup: 20,
-  deleteIdcPermissionSet: 21,
-  deleteOu: 22,
+  updateIdcUser: 6,
+  createIdcGroup: 7,
+  updateIdcGroupDescription: 8,
+  addIdcGroupMembership: 9,
+  createIdcPermissionSet: 10,
+  updateIdcPermissionSetDescription: 11,
+  putIdcPermissionSetInlinePolicy: 12,
+  deleteIdcPermissionSetInlinePolicy: 13,
+  attachIdcManagedPolicyToPermissionSet: 14,
+  detachIdcManagedPolicyFromPermissionSet: 15,
+  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 16,
+  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 17,
+  provisionIdcPermissionSet: 18,
+  grantIdcAccountAssignment: 19,
+  removeIdcGroupMembership: 20,
+  revokeIdcAccountAssignment: 21,
+  deleteIdcUser: 22,
+  deleteIdcGroup: 23,
+  deleteIdcPermissionSet: 24,
+  deleteOu: 25,
 };
 
 type DiffStatesProps = {
@@ -392,6 +395,24 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
+  for (const nextUser of props.next.identityCenter.users) {
+    const currentUser = currentIdcView.usersByUserName.get(nextUser.userName);
+    if (currentUser == null) {
+      continue;
+    }
+    const emailWouldChange =
+      currentUser.email !== nextUser.email && nextUser.email.length > 0;
+    if (currentUser.displayName === nextUser.displayName && emailWouldChange === false) {
+      continue;
+    }
+    operations.push({
+      kind: "updateIdcUser",
+      userName: nextUser.userName,
+      displayName: nextUser.displayName,
+      email: nextUser.email,
+    });
+  }
+
   for (const nextGroup of props.next.identityCenter.groups) {
     if (currentIdcView.groupsByDisplayName.has(nextGroup.displayName)) {
       continue;
@@ -399,6 +420,24 @@ export function diffStates(props: DiffStatesProps): Plan {
     operations.push({
       kind: "createIdcGroup",
       groupDisplayName: nextGroup.displayName,
+      description: nextGroup.description ?? "",
+    });
+  }
+
+  for (const nextGroup of props.next.identityCenter.groups) {
+    const currentGroup = currentIdcView.groupsByDisplayName.get(
+      nextGroup.displayName,
+    );
+    if (currentGroup == null) {
+      continue;
+    }
+    if ((currentGroup.description ?? "") === (nextGroup.description ?? "")) {
+      continue;
+    }
+    operations.push({
+      kind: "updateIdcGroupDescription",
+      groupDisplayName: nextGroup.displayName,
+      description: nextGroup.description ?? "",
     });
   }
 
@@ -473,7 +512,17 @@ export function diffStates(props: DiffStatesProps): Plan {
       });
     }
 
-    const policyOperationStartIndex = operations.length;
+    const permissionSetMutationStartIndex = operations.length;
+    if (currentPermissionSet != null) {
+      if (currentPermissionSet.description !== nextPermissionSet.description) {
+        operations.push({
+          kind: "updateIdcPermissionSetDescription",
+          permissionSetName: nextPermissionSet.name,
+          description: nextPermissionSet.description,
+        });
+      }
+    }
+
     const currentInlinePolicy = normalizeInlinePolicyString(
       currentPermissionSet?.inlinePolicy ?? null,
     );
@@ -556,7 +605,7 @@ export function diffStates(props: DiffStatesProps): Plan {
 
     if (
       currentPermissionSet != null &&
-      operations.length > policyOperationStartIndex &&
+      operations.length > permissionSetMutationStartIndex &&
       permissionSetNamesWithDesiredAssignments.has(nextPermissionSet.name)
     ) {
       operations.push({
@@ -853,10 +902,16 @@ function getOperationSortKey(operation: Operation): string {
   if (operation.kind === "createIdcUser") {
     return `${operation.kind}|${operation.userName}`;
   }
+  if (operation.kind === "updateIdcUser") {
+    return `${operation.kind}|${operation.userName}`;
+  }
   if (operation.kind === "deleteIdcUser") {
     return `${operation.kind}|${operation.userName}`;
   }
   if (operation.kind === "createIdcGroup") {
+    return `${operation.kind}|${operation.groupDisplayName}`;
+  }
+  if (operation.kind === "updateIdcGroupDescription") {
     return `${operation.kind}|${operation.groupDisplayName}`;
   }
   if (operation.kind === "deleteIdcGroup") {
@@ -877,6 +932,7 @@ function getOperationSortKey(operation: Operation): string {
   if (
     operation.kind === "putIdcPermissionSetInlinePolicy" ||
     operation.kind === "deleteIdcPermissionSetInlinePolicy" ||
+    operation.kind === "updateIdcPermissionSetDescription" ||
     operation.kind === "provisionIdcPermissionSet"
   ) {
     return `${operation.kind}|${operation.permissionSetName}`;

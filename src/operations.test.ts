@@ -19,12 +19,24 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       email: "alice@example.com",
     },
     {
+      kind: "updateIdcUser",
+      userName: "alice",
+      displayName: "Alice A",
+      email: "alice@example.com",
+    },
+    {
       kind: "deleteIdcUser",
       userName: "alice",
     },
     {
       kind: "createIdcGroup",
       groupDisplayName: "Admins",
+      description: "",
+    },
+    {
+      kind: "updateIdcGroupDescription",
+      groupDisplayName: "Admins",
+      description: "Administration",
     },
     {
       kind: "deleteIdcGroup",
@@ -44,6 +56,11 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       kind: "createIdcPermissionSet",
       permissionSetName: "AdminAccess",
       description: "Admin",
+    },
+    {
+      kind: "updateIdcPermissionSetDescription",
+      permissionSetName: "AdminAccess",
+      description: "Administrator",
     },
     {
       kind: "deleteIdcPermissionSet",
