@@ -189,6 +189,7 @@ catalog.
 - Wave 4 permission set policy plan: `docs/phase-6-wave-4-permission-set-policy-plan.md`
 - Wave 4 IAM action hinting follow-up plan: `docs/phase-6-wave-4-iam-action-hints-plan.md`
 - Wave 5 IdC entity removal plan: `docs/phase-6-wave-5-idc-removal-plan.md`
+- Wave 6 IdC metadata updates (shipped): `docs/phase-6-wave-6-idc-metadata-updates.md`
 - Current v1 backlog (remaining work after Wave 6): `docs/v1-backlog-priority.md`
 - Agreed repository structure: `docs/repository-structure.md`
 
