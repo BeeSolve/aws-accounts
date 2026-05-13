@@ -400,9 +400,79 @@ test("runPlanCommand prints machine-readable JSON with --json output", async () 
     const parsed = JSON.parse(logger.logs[0]) as {
       operations: unknown[];
       unsupported: unknown[];
+      summary: {
+        operationCount: number;
+        unsupportedCount: number;
+        destructiveOperationCount: number;
+        destructiveUnsupportedCount: number;
+        hasDestructiveChanges: boolean;
+      };
     };
     assert.ok(Array.isArray(parsed.operations));
     assert.ok(Array.isArray(parsed.unsupported));
+    assert.equal(parsed.summary.operationCount, parsed.operations.length);
+    assert.equal(parsed.summary.unsupportedCount, parsed.unsupported.length);
+    assert.equal(parsed.summary.destructiveOperationCount, 0);
+    assert.equal(parsed.summary.destructiveUnsupportedCount, 0);
+    assert.equal(parsed.summary.hasDestructiveChanges, false);
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+test("runPlanCommand includes destructive summary metadata in --json output", async () => {
+  const workspace = await createTestWorkspace({ prefix: "plan-test-" });
+  try {
+    const statePath = join(workspace.workspacePath, "state.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+    await writeFixtureFiles({
+      statePath,
+      contextPath,
+    });
+    await writeAwsConfigFromState({
+      statePath,
+      contextPath,
+      configPath,
+      typesPath,
+      logger: noopLogger,
+      overwriteConfirmation: async () => true,
+    });
+    await updateConfigModel({
+      configPath,
+      update: (config) => {
+        const pending = config.organizationalUnits.find(
+          (organizationalUnit) => organizationalUnit.name === "Pending",
+        );
+        if (pending == null) {
+          throw new Error('Expected fixture OU "Pending".');
+        }
+        pending.accounts = pending.accounts.filter(
+          (account) => account.name !== "AppAccount",
+        );
+      },
+    });
+
+    const logger = createCollectingLogger();
+    await runPlanCommand({
+      logger,
+      configPath,
+      typesPath,
+      statePath,
+      contextPath,
+      output: "json",
+    });
+    const parsed = JSON.parse(logger.logs[0]) as {
+      summary: {
+        destructiveOperationCount: number;
+        destructiveUnsupportedCount: number;
+        hasDestructiveChanges: boolean;
+      };
+    };
+    assert.equal(parsed.summary.destructiveOperationCount, 1);
+    assert.equal(parsed.summary.destructiveUnsupportedCount, 0);
+    assert.equal(parsed.summary.hasDestructiveChanges, true);
   } finally {
     await workspace.cleanup();
   }

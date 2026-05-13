@@ -23,6 +23,16 @@ type PlanCommandResult = {
   plan: Plan;
 };
 
+type JsonPlanOutput = Plan & {
+  summary: {
+    operationCount: number;
+    unsupportedCount: number;
+    destructiveOperationCount: number;
+    destructiveUnsupportedCount: number;
+    hasDestructiveChanges: boolean;
+  };
+};
+
 export async function runPlanCommand(
   props: PlanCommandInput,
 ): Promise<PlanCommandResult> {
@@ -49,7 +59,7 @@ export async function runPlanCommand(
   });
 
   if (props.output === "json") {
-    props.logger.log(JSON.stringify(plan, null, 2));
+    props.logger.log(JSON.stringify(toJsonPlanOutput(plan), null, 2));
     return {
       plan,
     };
@@ -78,6 +88,26 @@ export async function runPlanCommand(
 
   return {
     plan,
+  };
+}
+
+function toJsonPlanOutput(plan: Plan): JsonPlanOutput {
+  const destructiveOperationCount = plan.operations.filter((operation) =>
+    isDestructiveOperation(operation),
+  ).length;
+  const destructiveUnsupportedCount = plan.unsupported.filter(
+    (unsupportedDiff) => unsupportedDiff.category === "destructive",
+  ).length;
+  return {
+    ...plan,
+    summary: {
+      operationCount: plan.operations.length,
+      unsupportedCount: plan.unsupported.length,
+      destructiveOperationCount,
+      destructiveUnsupportedCount,
+      hasDestructiveChanges:
+        destructiveOperationCount > 0 || destructiveUnsupportedCount > 0,
+    },
   };
 }
 
