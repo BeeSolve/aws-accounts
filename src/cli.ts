@@ -18,6 +18,14 @@ import { runPlanCommand } from "./commands/plan.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
 import { runScanCommand } from "./commands/scan.js";
 import {
+  runRemoteBootstrap,
+  runRemoteScan,
+  runRemoteInit,
+  runRemotePlan,
+  runRemoteApply,
+  runRemoteUpgrade,
+} from "./commands/remote.js";
+import {
   classifyCliError,
   exitCodeForCliErrorKind,
   toUsageError,
@@ -31,10 +39,24 @@ const commands = [
   "graveyard",
   "plan",
   "apply",
+  "remote",
 ] as const;
 type CommandName = (typeof commands)[number];
 function isCommandName(value: any): value is CommandName {
   return commands.includes(value);
+}
+
+const remoteSubcommands = [
+  "bootstrap",
+  "scan",
+  "init",
+  "plan",
+  "apply",
+  "upgrade",
+] as const;
+type RemoteSubcommand = (typeof remoteSubcommands)[number];
+function isRemoteSubcommand(value: any): value is RemoteSubcommand {
+  return remoteSubcommands.includes(value);
 }
 
 const configPath = "aws.config.ts";
@@ -59,6 +81,7 @@ async function main(): Promise<void> {
       json: { type: "boolean", default: false },
       "ignore-unsupported": { type: "boolean", default: false },
       "allow-destructive": { type: "boolean", default: false },
+      refresh: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -306,6 +329,57 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "remote") {
+    const remoteSubcommand = args.positionals[1];
+    if (remoteSubcommand == null || !isRemoteSubcommand(remoteSubcommand)) {
+      printRemoteHelp(logger);
+      if (remoteSubcommand != null) {
+        throw toUsageError(`Unknown remote subcommand: "${remoteSubcommand}".`);
+      }
+      return;
+    }
+
+    const remoteInput = {
+      subcommand: remoteSubcommand,
+      profile,
+      region,
+      flags: {
+        yes: args.values.yes ?? false,
+        refresh: args.values.refresh ?? false,
+        allowDestructive: args.values["allow-destructive"] ?? false,
+        ignoreUnsupported: args.values["ignore-unsupported"] ?? false,
+      },
+      logger,
+    };
+
+    // todo: this shouldn't be switch, you should prefer assert unreachable pattern
+    switch (remoteSubcommand) {
+      case "bootstrap":
+        await runRemoteBootstrap(remoteInput);
+        return;
+      case "scan":
+        await runRemoteScan(remoteInput);
+        return;
+      case "init": {
+        const overwriteConfirmation = buildOverwriteConfirmation({
+          yes: args.values.yes ?? false,
+          isTty: process.stdin.isTTY,
+        });
+        await runRemoteInit({ ...remoteInput, overwriteConfirmation });
+        return;
+      }
+      case "plan":
+        await runRemotePlan(remoteInput);
+        return;
+      case "apply":
+        await runRemoteApply(remoteInput);
+        return;
+      case "upgrade":
+        await runRemoteUpgrade(remoteInput);
+        return;
+    }
+  }
+
   printHelp(logger);
   process.exitCode = 1;
 }
@@ -329,9 +403,44 @@ function printHelp(logger: Logger): void {
   logger.log(
     "  npm run cli -- apply [--yes] [--ignore-unsupported] [--allow-destructive]",
   );
+  logger.log(
+    "  npm run cli -- remote <subcommand> [--profile <name>] [--region <region>]",
+  );
   logger.log("");
   logger.log("Environment fallback:");
   logger.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
+}
+
+function printRemoteHelp(logger: Logger): void {
+  logger.log("@beesolve/aws-accounts remote");
+  logger.log("");
+  logger.log("Usage:");
+  logger.log(
+    "  npm run cli -- remote bootstrap [--profile <name>] [--region <region>] [--yes]",
+  );
+  logger.log(
+    "  npm run cli -- remote scan [--profile <name>] [--region <region>]",
+  );
+  logger.log(
+    "  npm run cli -- remote init [--profile <name>] [--region <region>] [--yes]",
+  );
+  logger.log(
+    "  npm run cli -- remote plan [--profile <name>] [--region <region>] [--refresh]",
+  );
+  logger.log(
+    "  npm run cli -- remote apply [--profile <name>] [--region <region>] [--yes] [--allow-destructive] [--ignore-unsupported]",
+  );
+  logger.log(
+    "  npm run cli -- remote upgrade [--profile <name>] [--region <region>]",
+  );
+  logger.log("");
+  logger.log("Subcommands:");
+  logger.log("  bootstrap   Deploy Lambda, S3 bucket, and IAM role");
+  logger.log("  scan        Trigger remote scan of AWS environment");
+  logger.log("  init        Remote scan + regenerate aws.config.ts from state");
+  logger.log("  plan        Compute plan using remote state");
+  logger.log("  apply       Send operations to Lambda for execution");
+  logger.log("  upgrade     Update deployed Lambda function code");
 }
 
 function quoteCliValue(value: string): string {

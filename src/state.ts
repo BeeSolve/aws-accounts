@@ -75,7 +75,7 @@ const accessRoleSchema = v.strictObject({
   roleName: nonEmptyString,
 });
 
-const stateSchema = v.strictObject({
+export const stateSchema = v.strictObject({
   version: nonEmptyString,
   generatedAt: nonEmptyString,
   organization: v.strictObject({

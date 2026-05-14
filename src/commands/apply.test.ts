@@ -3784,6 +3784,7 @@ async function writeFixtureFiles(props: {
       region: "eu-central-1",
       lambdaArn: "",
       stateBucketName: "",
+      stateCacheTtlSeconds: 300,
     },
   };
   await Promise.all([

@@ -321,9 +321,57 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
 }
 ```
 
+```
+
+### Remote commands
+
+The `remote` subcommands (`bootstrap`, `scan`, `plan`, `apply`, `upgrade`) require a separate set of permissions. Add this statement to the policy above (or use a dedicated role):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RemoteBootstrapCommand",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity",
+        "s3:CreateBucket",
+        "iam:GetRole",
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:PassRole",
+        "lambda:GetFunction",
+        "lambda:CreateFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:PutFunctionConcurrency"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RemoteScanPlanApplyCommands",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:InvokeFunction"
+      ],
+      "Resource": "arn:aws:lambda:*:*:function:beesolve-aws-accounts"
+    },
+    {
+      "Sid": "RemoteUpgradeCommand",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:UpdateFunctionCode"
+      ],
+      "Resource": "arn:aws:lambda:*:*:function:beesolve-aws-accounts"
+    }
+  ]
+}
+```
+
 **Notes on commands not in this policy:**
 - `regenerate` performs local code generation only (no AWS API calls); no permissions required.
-- `plan` compares local config against state file (no AWS API calls); no permissions required.
+- `plan` (local) compares local config against state file (no AWS API calls); no permissions required.
+- `remote plan` / `remote scan` / `remote apply` only need `lambda:InvokeFunction` — the Lambda's own execution role handles Organizations, Identity Center, and S3 access.
 
 ## Notes
 

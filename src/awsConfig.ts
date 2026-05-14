@@ -42,6 +42,16 @@ function resolveAccountStateMatchForConfigEntry(props: {
   return emailMatches[0];
 }
 
+const deploymentSchema = v.strictObject({
+  profile: v.string(),
+  region: v.string(),
+  lambdaArn: v.string(),
+  stateBucketName: v.string(),
+  stateCacheTtlSeconds: v.number(),
+});
+
+export type Deployment = v.InferOutput<typeof deploymentSchema>;
+
 const awsContextSchema = v.strictObject({
   version: nonEmptyString,
   generatedAt: nonEmptyString,
@@ -54,12 +64,7 @@ const awsContextSchema = v.strictObject({
     instanceArn: nonEmptyString,
     identityStoreId: nonEmptyString,
   }),
-  deployment: v.strictObject({
-    profile: v.string(),
-    region: v.string(),
-    lambdaArn: v.string(),
-    stateBucketName: v.string(),
-  }),
+  deployment: v.optional(deploymentSchema),
 });
 
 export type AwsContextFile = v.InferOutput<typeof awsContextSchema>;
@@ -1555,6 +1560,7 @@ export async function loadAwsConfigModelFromTsFile(props: {
 export async function readAwsContextFromFile(
   path: string,
 ): Promise<AwsContextFile> {
+  // todo: isn't this await unneccesary?
   return await readAwsContextFile(path);
 }
 

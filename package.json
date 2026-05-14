@@ -9,10 +9,11 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && esbuild $(find src -name '*.ts' ! -name '*.test.ts') --platform=node --target=node24 --format=esm --outdir=dist --outbase=src && chmod +x dist/cli.js",
+    "build:lambda": "node scripts/buildLambda.ts",
     "build:tests": "find dist -name '*.test.js' -delete && esbuild \"src/**/*.test.ts\" --platform=node --target=node24 --format=esm --outdir=dist --outbase=src",
     "cli": "npm run build && node dist/cli.js",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && npm run build:tests && node --test \"dist/**/*.test.js\""
+    "test": "npm run build && npm run build:tests && node --experimental-test-module-mocks --test \"dist/**/*.test.js\""
   },
   "keywords": [],
   "author": "",
@@ -20,16 +21,22 @@
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-account": "^3.1045.0",
+    "@aws-sdk/client-iam": "^3.1045.0",
     "@aws-sdk/client-identitystore": "^3.1043.0",
+    "@aws-sdk/client-lambda": "^3.1045.0",
     "@aws-sdk/client-organizations": "^3.1043.0",
+    "@aws-sdk/client-s3": "^3.1045.0",
     "@aws-sdk/client-sso-admin": "^3.1043.0",
+    "@aws-sdk/client-sts": "^3.1045.0",
     "@aws-sdk/credential-providers": "^3.1043.0",
+    "@aws-sdk/s3-request-presigner": "^3.1045.0",
     "@beesolve/iam-policy-ts": "^26.0.0",
     "esbuild": "^0.28.0",
     "valibot": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
+    "fast-check": "^4.8.0",
     "typescript": "^6.0.3"
   },
   "volta": {

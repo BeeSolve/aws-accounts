@@ -157,6 +157,7 @@ const deploymentContextSchema = v.strictObject({
   region: v.string(),
   lambdaArn: v.string(),
   stateBucketName: v.string(),
+  stateCacheTtlSeconds: v.number(),
 });
 
 const awsContextSchema = v.strictObject({
@@ -164,7 +165,7 @@ const awsContextSchema = v.strictObject({
   generatedAt: nonEmptyString,
   organization: organizationContextSchema,
   identityCenter: identityCenterContextSchema,
-  deployment: deploymentContextSchema,
+  deployment: v.optional(deploymentContextSchema),
 });
 
 type AwsContextFile = v.InferOutput<typeof awsContextSchema>;
@@ -400,6 +401,7 @@ function buildAwsContextFile(props: BuildAwsContextFileProps): AwsContextFile {
       region: props.region,
       lambdaArn: props.existingDeployment?.lambdaArn ?? "",
       stateBucketName: props.existingDeployment?.stateBucketName ?? "",
+      stateCacheTtlSeconds: props.existingDeployment?.stateCacheTtlSeconds ?? 300,
     },
   };
 }
