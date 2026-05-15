@@ -8,9 +8,3 @@ coverage/
 
 .env
 .env.*
-
-state.json
-aws.context.json
-aws.config.ts
-aws.config.types.ts
-.remote-state-cache.json
