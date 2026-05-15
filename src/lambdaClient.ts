@@ -5,10 +5,9 @@ import {
   type LambdaClient,
 } from "@aws-sdk/client-lambda";
 import * as v from "valibot";
+import { assertUnreachable } from "./helpers.js";
 import { operationSchema } from "./operations.js";
 import { stateSchema, type StateFile } from "./state.js";
-
-// --- Request Schema ---
 
 const scanRequestSchema = v.strictObject({
   action: v.literal("scan"),
@@ -31,8 +30,6 @@ export const lambdaRequestSchema = v.variant("action", [
 ]);
 
 export type LambdaRequestPayload = v.InferOutput<typeof lambdaRequestSchema>;
-
-// --- Response Schema ---
 
 const scanResponseSchema = v.strictObject({
   action: v.literal("scan"),
@@ -92,8 +89,6 @@ export const lambdaResponseSchema = v.union([
 
 export type LambdaResponsePayload = v.InferOutput<typeof lambdaResponseSchema>;
 
-// --- Error Types ---
-
 export type LambdaInvokeError =
   | { kind: "validation"; details: string }
   | { kind: "concurrencyConflict"; message: string }
@@ -106,13 +101,9 @@ export type LambdaInvokeError =
     }
   | { kind: "invocationError"; message: string };
 
-// --- Result Type ---
-
 export type LambdaInvokeResult =
   | { ok: true; response: LambdaResponsePayload }
   | { ok: false; error: LambdaInvokeError };
-
-// --- Invocation Props ---
 
 export type InvokeLambdaProps = {
   lambdaClient: LambdaClient;
@@ -120,23 +111,23 @@ export type InvokeLambdaProps = {
   payload: LambdaRequestPayload;
 };
 
-// --- Main Function ---
-
-export async function invokeLambda(
-  props: InvokeLambdaProps,
-): Promise<LambdaInvokeResult> {
-  const { lambdaClient, lambdaArn, payload } = props;
-
-  // todo: I don't like this pattern of `let` - refactor it
-  let rawResponse: InvokeCommandOutput;
+async function invokeLambdaCommand(
+  lambdaClient: LambdaClient,
+  lambdaArn: string,
+  payload: LambdaRequestPayload,
+): Promise<
+  | { ok: true; response: InvokeCommandOutput }
+  | { ok: false; error: LambdaInvokeError }
+> {
   try {
-    rawResponse = await lambdaClient.send(
+    const response = await lambdaClient.send(
       new InvokeCommand({
         FunctionName: lambdaArn,
         InvocationType: "RequestResponse",
         Payload: new TextEncoder().encode(JSON.stringify(payload)),
       }),
     );
+    return { ok: true, response };
   } catch (error: unknown) {
     if (error instanceof TooManyRequestsException) {
       return {
@@ -155,6 +146,23 @@ export async function invokeLambda(
       error: { kind: "invocationError", message },
     };
   }
+}
+
+function parseResponsePayload(payload: Uint8Array): { ok: true; value: unknown } | { ok: false } {
+  try {
+    const responseText = new TextDecoder().decode(payload);
+    return { ok: true, value: JSON.parse(responseText) as unknown };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function invokeLambda(
+  props: InvokeLambdaProps,
+): Promise<LambdaInvokeResult> {
+  const invokeResult = await invokeLambdaCommand(props.lambdaClient, props.lambdaArn, props.payload);
+  if (!invokeResult.ok) return invokeResult;
+  const rawResponse = invokeResult.response;
 
   // Check for Lambda execution error (FunctionError indicates the function threw)
   if (rawResponse.FunctionError) {
@@ -175,12 +183,9 @@ export async function invokeLambda(
     };
   }
 
-  // todo: I don't like this pattern of `let` - refactor it
-  let parsed: unknown;
-  try {
-    const responseText = new TextDecoder().decode(rawResponse.Payload);
-    parsed = JSON.parse(responseText);
-  } catch {
+  const parsed = parseResponsePayload(rawResponse.Payload);
+
+  if (!parsed.ok) {
     return {
       ok: false,
       error: {
@@ -191,7 +196,7 @@ export async function invokeLambda(
   }
 
   // Validate response against schema
-  const result = v.safeParse(lambdaResponseSchema, parsed);
+  const result = v.safeParse(lambdaResponseSchema, parsed.value);
   if (!result.success) {
     const issues = result.issues
       .map((issue) => `${issue.path?.map((p) => p.key).join(".") ?? "root"}: ${issue.message}`)
@@ -209,47 +214,49 @@ export async function invokeLambda(
 
   // Map error responses to typed LambdaInvokeError variants
   if ("success" in response && response.success === false) {
-    // todo: use assert unreachable pattern instead of switch
     const errorKind = response.error.kind;
-    switch (errorKind) {
-      case "validation":
-        return {
-          ok: false,
-          error: {
-            kind: "validation",
-            details: response.error.message,
-          },
-        };
-      case "concurrencyConflict":
-        return {
-          ok: false,
-          error: {
-            kind: "concurrencyConflict",
-            message: response.error.message,
-          },
-        };
-      case "operationFailed":
-        return {
-          ok: false,
-          error: {
-            kind: "operationFailed",
-            failedOperation: response.error.details?.failedOperation ?? 0,
-            totalOperations:
-              (response.error.details?.operationsCompleted ?? 0) + 1,
-            error: response.error.message,
-            partialState:
-              response.error.details?.partialState ?? buildEmptyStateForError(),
-          },
-        };
-      case "internal":
-        return {
-          ok: false,
-          error: {
-            kind: "invocationError",
-            message: response.error.message,
-          },
-        };
+    if (errorKind === "validation") {
+      return {
+        ok: false,
+        error: {
+          kind: "validation",
+          details: response.error.message,
+        },
+      };
     }
+    if (errorKind === "concurrencyConflict") {
+      return {
+        ok: false,
+        error: {
+          kind: "concurrencyConflict",
+          message: response.error.message,
+        },
+      };
+    }
+    if (errorKind === "operationFailed") {
+      return {
+        ok: false,
+        error: {
+          kind: "operationFailed",
+          failedOperation: response.error.details?.failedOperation ?? 0,
+          totalOperations:
+            (response.error.details?.operationsCompleted ?? 0) + 1,
+          error: response.error.message,
+          partialState:
+            response.error.details?.partialState ?? buildEmptyStateForError(),
+        },
+      };
+    }
+    if (errorKind === "internal") {
+      return {
+        ok: false,
+        error: {
+          kind: "invocationError",
+          message: response.error.message,
+        },
+      };
+    }
+    assertUnreachable(errorKind, "Unsupported error kind in Lambda response.");
   }
 
   return { ok: true, response };

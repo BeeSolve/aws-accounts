@@ -4,6 +4,10 @@ import { IdentitystoreClient } from "@aws-sdk/client-identitystore";
 import { AccountClient } from "@aws-sdk/client-account";
 import { OrganizationsClient } from "@aws-sdk/client-organizations";
 import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
+import { S3Client } from "@aws-sdk/client-s3";
+import { IAMClient } from "@aws-sdk/client-iam";
+import { LambdaClient } from "@aws-sdk/client-lambda";
+import { STSClient } from "@aws-sdk/client-sts";
 import {
   buildAwsClientConfig,
   resolveAwsProfile,
@@ -30,6 +34,7 @@ import {
   exitCodeForCliErrorKind,
   toUsageError,
 } from "./error.js";
+import { assertUnreachable } from "./helpers.js";
 
 const commands = [
   "scan",
@@ -339,6 +344,11 @@ async function main(): Promise<void> {
       return;
     }
 
+    const overwriteConfirmation = buildOverwriteConfirmation({
+      yes: args.values.yes ?? false,
+      isTty: process.stdin.isTTY,
+    });
+
     const remoteInput = {
       subcommand: remoteSubcommand,
       profile,
@@ -350,34 +360,33 @@ async function main(): Promise<void> {
         ignoreUnsupported: args.values["ignore-unsupported"] ?? false,
       },
       logger,
+      overwriteConfirmation,
+      stsClient: new STSClient(clientConfig),
+      s3Client: new S3Client(clientConfig),
+      iamClient: new IAMClient(clientConfig),
+      lambdaClient: new LambdaClient(clientConfig),
+      ssoAdminClient,
     };
 
-    // todo: this shouldn't be switch, you should prefer assert unreachable pattern
-    switch (remoteSubcommand) {
-      case "bootstrap":
-        await runRemoteBootstrap(remoteInput);
-        return;
-      case "scan":
-        await runRemoteScan(remoteInput);
-        return;
-      case "init": {
-        const overwriteConfirmation = buildOverwriteConfirmation({
-          yes: args.values.yes ?? false,
-          isTty: process.stdin.isTTY,
-        });
-        await runRemoteInit({ ...remoteInput, overwriteConfirmation });
-        return;
-      }
-      case "plan":
-        await runRemotePlan(remoteInput);
-        return;
-      case "apply":
-        await runRemoteApply(remoteInput);
-        return;
-      case "upgrade":
-        await runRemoteUpgrade(remoteInput);
-        return;
+    if (remoteSubcommand === "bootstrap") {
+      return runRemoteBootstrap(remoteInput);
     }
+    if (remoteSubcommand === "scan") {
+      return runRemoteScan(remoteInput);
+    }
+    if (remoteSubcommand === "init") {
+      return runRemoteInit(remoteInput);
+    }
+    if (remoteSubcommand === "plan") {
+      return runRemotePlan(remoteInput);
+    }
+    if (remoteSubcommand === "apply") {
+      return runRemoteApply(remoteInput);
+    }
+    if (remoteSubcommand === "upgrade") {
+      return runRemoteUpgrade(remoteInput);
+    }
+    assertUnreachable(remoteSubcommand, `Unknown remote subcommand: "${remoteSubcommand}"`);
   }
 
   printHelp(logger);

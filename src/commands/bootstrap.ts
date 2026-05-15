@@ -4,6 +4,7 @@ import {
   ListOrganizationalUnitsForParentCommand,
   ListRootsCommand,
   OrganizationsClient,
+  TagResourceCommand,
 } from "@aws-sdk/client-organizations";
 import {
   ListInstancesCommand,
@@ -12,6 +13,7 @@ import {
 import { readFile, writeFile } from "node:fs/promises";
 import * as v from "valibot";
 import type { Logger } from "../logger.js";
+import { getStandardTags } from "../tags.js";
 
 const graveyardOuName = "Graveyard";
 
@@ -309,6 +311,17 @@ async function createMissingRequiredOus(props: {
       new CreateOrganizationalUnitCommand({
         ParentId: props.rootId,
         Name: graveyardOuName,
+        Tags: getStandardTags("graveyard"),
+      }),
+    );
+    return;
+  }
+
+  if (props.analysis.graveyardOuId != null) {
+    await props.organizationsClient.send(
+      new TagResourceCommand({
+        ResourceId: props.analysis.graveyardOuId,
+        Tags: getStandardTags("graveyard"),
       }),
     );
   }

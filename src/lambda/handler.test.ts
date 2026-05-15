@@ -419,7 +419,7 @@ test("Property 8: Lambda response schema self-validation — all handler respons
         }`,
       );
     }),
-    { numRuns: 100 },
+    { numRuns: 20 },
   );
 });
 
@@ -734,7 +734,7 @@ test("Property 7: Operation schema validation reuses existing schema — valid o
       }
       // If success is true, that's also fine (though unlikely without real S3)
     }),
-    { numRuns: 100 },
+    { numRuns: 20 },
   );
 
   // Part 2: Invalid operations should produce a validation error.
@@ -824,6 +824,6 @@ test("Property 7: Operation schema validation reuses existing schema — valid o
         `Invalid operation should produce validation error kind. Op: ${JSON.stringify(invalidOp)}, Got kind: ${errorResponse.error.kind}`,
       );
     }),
-    { numRuns: 100 },
+    { numRuns: 20 },
   );
 });

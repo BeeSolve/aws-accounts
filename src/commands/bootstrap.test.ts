@@ -7,12 +7,14 @@ import {
   DescribeOrganizationCommand,
   ListOrganizationalUnitsForParentCommand,
   ListRootsCommand,
+  TagResourceCommand,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import { ListInstancesCommand, type SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import { runBootstrapCommand } from "./bootstrap.js";
 import { createTestWorkspace } from "../helpers.test.js";
 import { noopLogger } from "../logger.js";
+import { getStandardTags } from "../tags.js";
 
 test(
   "runBootstrapCommand creates missing root OUs and writes context file",
@@ -399,12 +401,111 @@ test(
   },
 );
 
+test(
+  "runBootstrapCommand includes standard tags when creating Graveyard OU",
+  async () => {
+    const workspace = await createTestWorkspace({ prefix: "bootstrap-test-" });
+    try {
+      const outputPath = join(workspace.workspacePath, "aws.context.json");
+      const orgClient = createOrganizationsClientMock({
+        rootId: "r-root",
+        initialRootChildren: [],
+      });
+      await runBootstrapCommand({
+        organizationsClient: orgClient,
+        ssoAdminClient: createSsoAdminClientMock({
+          instances: [
+            {
+              InstanceArn: "arn:aws:sso:::instance/ssoins-123",
+              IdentityStoreId: "d-1234567890",
+            },
+          ],
+        }),
+        logger: noopLogger,
+        profile: "default",
+        region: "eu-central-1",
+        outputPath,
+        planConfirmation: async () => true,
+      });
+
+      const createOuCommands = orgClient.capturedCommands.filter(
+        (cmd) => cmd.type === "CreateOrganizationalUnit",
+      );
+      assert.equal(createOuCommands.length, 1);
+      const createInput = createOuCommands[0].input as {
+        Name: string;
+        Tags: Array<{ Key: string; Value: string }>;
+      };
+      assert.equal(createInput.Name, "Graveyard");
+      assert.deepEqual(createInput.Tags, getStandardTags("graveyard"));
+    } finally {
+      await workspace.cleanup();
+    }
+  },
+);
+
+test(
+  "runBootstrapCommand tags existing Graveyard OU with standard tags",
+  async () => {
+    const workspace = await createTestWorkspace({ prefix: "bootstrap-test-" });
+    try {
+      const outputPath = join(workspace.workspacePath, "aws.context.json");
+      const orgClient = createOrganizationsClientMock({
+        rootId: "r-root",
+        initialRootChildren: [
+          {
+            id: "ou-graveyard",
+            name: "Graveyard",
+            arn: "arn:aws:organizations:::ou/graveyard",
+          },
+        ],
+      });
+      await runBootstrapCommand({
+        organizationsClient: orgClient,
+        ssoAdminClient: createSsoAdminClientMock({
+          instances: [
+            {
+              InstanceArn: "arn:aws:sso:::instance/ssoins-123",
+              IdentityStoreId: "d-1234567890",
+            },
+          ],
+        }),
+        logger: noopLogger,
+        profile: "default",
+        region: "eu-central-1",
+        outputPath,
+        planConfirmation: async () => true,
+      });
+
+      const tagCommands = orgClient.capturedCommands.filter(
+        (cmd) => cmd.type === "TagResource",
+      );
+      assert.equal(tagCommands.length, 1);
+      const tagInput = tagCommands[0].input as {
+        ResourceId: string;
+        Tags: Array<{ Key: string; Value: string }>;
+      };
+      assert.equal(tagInput.ResourceId, "ou-graveyard");
+      assert.deepEqual(tagInput.Tags, getStandardTags("graveyard"));
+    } finally {
+      await workspace.cleanup();
+    }
+  },
+);
+
+type CapturedCommand = {
+  type: string;
+  input: unknown;
+};
+
 function createOrganizationsClientMock(props: {
   rootId: string;
   initialRootChildren: Array<{ id: string; name: string; arn: string }>;
-}): OrganizationsClient {
+}): OrganizationsClient & { capturedCommands: CapturedCommand[] } {
   const rootChildren = [...props.initialRootChildren];
+  const capturedCommands: CapturedCommand[] = [];
   const mock = {
+    capturedCommands,
     async send(command: unknown): Promise<unknown> {
       if (command instanceof DescribeOrganizationCommand) {
         return {
@@ -431,6 +532,7 @@ function createOrganizationsClientMock(props: {
         };
       }
       if (command instanceof CreateOrganizationalUnitCommand) {
+        capturedCommands.push({ type: "CreateOrganizationalUnit", input: command.input });
         const name = command.input.Name;
         if (name == null) {
           throw new Error("Missing OU name.");
@@ -442,10 +544,14 @@ function createOrganizationsClientMock(props: {
         });
         return {};
       }
+      if (command instanceof TagResourceCommand) {
+        capturedCommands.push({ type: "TagResource", input: command.input });
+        return {};
+      }
       throw new Error("Unexpected Organizations command in test.");
     },
   };
-  return mock as OrganizationsClient;
+  return mock as OrganizationsClient & { capturedCommands: CapturedCommand[] };
 }
 
 function createSsoAdminClientMock(props: {

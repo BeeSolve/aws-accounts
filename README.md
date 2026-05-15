@@ -245,6 +245,7 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "organizations:ListRoots",
         "organizations:ListOrganizationalUnitsForParent",
         "organizations:CreateOrganizationalUnit",
+        "organizations:TagResource",
         "sso:ListInstances"
       ],
       "Resource": "*"
@@ -260,6 +261,7 @@ Use this policy as an inline role policy for the profile/role used by the CLI. E
         "organizations:ListOrganizationalUnitsForParent",
         "organizations:ListTagsForResource",
         "organizations:CreateOrganizationalUnit",
+        "organizations:TagResource",
         "sso:ListInstances",
         "sso:ListPermissionSets",
         "sso:DescribePermissionSet",
@@ -337,14 +339,24 @@ The `remote` subcommands (`bootstrap`, `scan`, `plan`, `apply`, `upgrade`) requi
       "Action": [
         "sts:GetCallerIdentity",
         "s3:CreateBucket",
+        "s3:PutBucketTagging",
         "iam:GetRole",
         "iam:CreateRole",
+        "iam:TagRole",
         "iam:PutRolePolicy",
         "iam:PassRole",
         "lambda:GetFunction",
         "lambda:CreateFunction",
         "lambda:UpdateFunctionCode",
-        "lambda:PutFunctionConcurrency"
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:TagResource",
+        "lambda:PutFunctionConcurrency",
+        "sso:ListPermissionSets",
+        "sso:DescribePermissionSet",
+        "sso:CreatePermissionSet",
+        "sso:UpdatePermissionSet",
+        "sso:PutInlinePolicyToPermissionSet",
+        "sso:TagResource"
       ],
       "Resource": "*"
     },

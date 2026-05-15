@@ -18,9 +18,8 @@ import {
   materializeWorkingState,
 } from "../state.js";
 import { scanOrganization, scanIdentityCenter } from "../scanLogic.js";
-import { executeOperation, type ExecuteOperationInput } from "../applyLogic.js";
-
-// --- Request Schemas ---
+import { executeOperation } from "../applyLogic.js";
+import { assertUnreachable } from "../helpers.js";
 
 const scanRequestSchema = v.strictObject({
   action: v.literal("scan"),
@@ -41,8 +40,6 @@ const lambdaRequestSchema = v.variant("action", [
   getStateUrlRequestSchema,
   applyRequestSchema,
 ]);
-
-// --- Response Schemas ---
 
 const scanResponseSchema = v.strictObject({
   action: v.literal("scan"),
@@ -102,12 +99,8 @@ const lambdaResponseSchema = v.union([
 
 type LambdaResponse = v.InferOutput<typeof lambdaResponseSchema>;
 
-// --- Constants ---
-
 const STATE_KEY = "state.json";
 const PRESIGNED_URL_EXPIRY_SECONDS = 3600;
-
-// --- Runtime defaults for operation execution ---
 
 const RUNTIME_DEFAULTS = {
   createAccount: {
@@ -124,8 +117,6 @@ const RUNTIME_DEFAULTS = {
   },
 };
 
-// --- Logger for Lambda ---
-
 const lambdaLogger = {
   log: (...args: unknown[]) => console.log(...args),
   info: (...args: unknown[]) => console.info(...args),
@@ -135,7 +126,67 @@ const lambdaLogger = {
   trace: (...args: unknown[]) => console.trace(...args),
 };
 
-// --- Helper: build error response ---
+const s3Client = new S3Client({});
+const organizationsClient = new OrganizationsClient({});
+const ssoAdminClient = new SSOAdminClient({});
+const identityStoreClient = new IdentitystoreClient({});
+const accountClient = new AccountClient({});
+
+export async function handler(event: unknown): Promise<LambdaResponse> {
+  try {
+    const parseResult = v.safeParse(lambdaRequestSchema, event);
+    if (!parseResult.success) {
+      const issues = parseResult.issues.map(
+        (issue) =>
+          `${issue.path?.map((p) => p.key).join(".") ?? "root"}: ${issue.message}`,
+      );
+      const response = buildErrorResponse(
+        "validation",
+        "Invalid request payload.",
+        { validationIssues: issues },
+      );
+      return validateResponse(response);
+    }
+
+    const request = parseResult.output;
+    const bucket = process.env.STATE_BUCKET_NAME;
+    if (bucket == null || bucket.length === 0) {
+      const response = buildErrorResponse(
+        "internal",
+        "STATE_BUCKET_NAME environment variable is not configured.",
+      );
+      return validateResponse(response);
+    }
+
+    if (request.action === "scan") {
+      const response = await handleScan({ s3Client, bucket, organizationsClient, ssoAdminClient, identityStoreClient });
+      return validateResponse(response);
+    }
+    if (request.action === "getStateUrl") {
+      const response = await handleGetStateUrl({ s3Client, bucket });
+      return validateResponse(response);
+    }
+    if (request.action === "apply") {
+      const response = await handleApply({
+        s3Client,
+        bucket,
+        operations: request.operations,
+        allowDestructive: request.allowDestructive,
+        organizationsClient,
+        ssoAdminClient,
+        identityStoreClient,
+        accountClient,
+      });
+      return validateResponse(response);
+    }
+    assertUnreachable(request, "Unsupported action in handler.");
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "An unexpected error occurred.";
+    const response = buildErrorResponse("internal", message);
+    return validateResponse(response);
+  }
+}
 
 function buildErrorResponse(
   kind: "validation" | "concurrencyConflict" | "operationFailed" | "internal",
@@ -148,8 +199,7 @@ function buildErrorResponse(
   },
 ): LambdaResponse {
   return {
-    // todo: why there is as const on literal boolean?
-    success: false as const,
+    success: false,
     error: {
       kind,
       message,
@@ -158,12 +208,9 @@ function buildErrorResponse(
   };
 }
 
-// --- Helper: validate and return response ---
-
 function validateResponse(response: LambdaResponse): LambdaResponse {
   const result = v.safeParse(lambdaResponseSchema, response);
   if (!result.success) {
-    // If response validation fails, return an internal error instead
     return {
       success: false as const,
       error: {
@@ -180,8 +227,6 @@ function validateResponse(response: LambdaResponse): LambdaResponse {
   }
   return result.output;
 }
-
-// --- Helper: read state from S3 ---
 
 async function readStateFromS3(props: {
   s3Client: S3Client;
@@ -203,33 +248,20 @@ async function readStateFromS3(props: {
   return { state, etag };
 }
 
-// --- Helper: write state to S3 ---
-
 async function writeStateToS3(props: {
   s3Client: S3Client;
   bucket: string;
   state: StateFile;
   ifMatch?: string;
 }): Promise<void> {
-  const putParams: {
-    Bucket: string;
-    Key: string;
-    Body: string;
-    ContentType: string;
-    IfMatch?: string;
-  } = {
+  await props.s3Client.send(new PutObjectCommand({
     Bucket: props.bucket,
     Key: STATE_KEY,
     Body: JSON.stringify(props.state, null, 2),
     ContentType: "application/json",
-  };
-  if (props.ifMatch != null) {
-    putParams.IfMatch = props.ifMatch;
-  }
-  await props.s3Client.send(new PutObjectCommand(putParams));
+    IfMatch: props.ifMatch
+  }));
 }
-
-// --- Helper: check if error is S3 PreconditionFailed ---
 
 function isS3PreconditionFailed(error: unknown): boolean {
   if (error instanceof S3ServiceException) {
@@ -241,27 +273,24 @@ function isS3PreconditionFailed(error: unknown): boolean {
   return false;
 }
 
-// --- Action: scan ---
-
 async function handleScan(props: {
   s3Client: S3Client;
   bucket: string;
+  organizationsClient: OrganizationsClient;
+  ssoAdminClient: SSOAdminClient;
+  identityStoreClient: IdentitystoreClient;
 }): Promise<LambdaResponse> {
-  // todo: pass all of these through props -> the clients in handler should be create outside of handler so they are being reused
-  const organizationsClient = new OrganizationsClient({});
-  const ssoAdminClient = new SSOAdminClient({});
-  const identityStoreClient = new IdentitystoreClient({});
-
   const identityCenterInstanceArn =
     process.env.IDENTITY_CENTER_INSTANCE_ARN || undefined;
 
-    // todo: parallelize
-  const organization = await scanOrganization({ organizationsClient });
-  const identityCenter = await scanIdentityCenter({
-    ssoAdminClient,
-    identityStoreClient,
-    requestedInstanceArn: identityCenterInstanceArn,
-  });
+  const [organization, identityCenter] = await Promise.all([
+    scanOrganization({ organizationsClient: props.organizationsClient }),
+    scanIdentityCenter({
+      ssoAdminClient: props.ssoAdminClient,
+      identityStoreClient: props.identityStoreClient,
+      requestedInstanceArn: identityCenterInstanceArn,
+    }),
+  ]);
 
   const state: StateFile = {
     version: "1",
@@ -291,8 +320,6 @@ async function handleScan(props: {
   };
 }
 
-// --- Action: getStateUrl ---
-
 async function handleGetStateUrl(props: {
   s3Client: S3Client;
   bucket: string;
@@ -308,45 +335,31 @@ async function handleGetStateUrl(props: {
 
   return {
     action: "getStateUrl" as const,
-    // todo: as const shouldn't be here
-    success: true as const,
+    success: true,
     url,
     expiresInSeconds: PRESIGNED_URL_EXPIRY_SECONDS,
   };
 }
-
-// --- Action: apply ---
 
 async function handleApply(props: {
   s3Client: S3Client;
   bucket: string;
   operations: Operation[];
   allowDestructive: boolean;
+  organizationsClient: OrganizationsClient;
+  ssoAdminClient: SSOAdminClient;
+  identityStoreClient: IdentitystoreClient;
+  accountClient: AccountClient;
 }): Promise<LambdaResponse> {
-  // Read current state from S3
-  let currentState: StateFile;
-  let etag: string;
-  try {
-    const result = await readStateFromS3({
-      s3Client: props.s3Client,
-      bucket: props.bucket,
-    });
-    currentState = result.state;
-    etag = result.etag;
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Failed to read state from S3.";
-    return buildErrorResponse("internal", message);
+  const stateResult = await loadStateForApply({
+    s3Client: props.s3Client,
+    bucket: props.bucket,
+  });
+  if (!stateResult.ok) {
+    return stateResult.response;
   }
+  const { state: currentState, etag } = stateResult;
 
-  // todo: shouldn't be here but passed through props and outside of handler
-  // Create AWS clients for operation execution
-  const organizationsClient = new OrganizationsClient({});
-  const accountClient = new AccountClient({});
-  const ssoAdminClient = new SSOAdminClient({});
-  const identityStoreClient = new IdentitystoreClient({});
-
-  // Execute operations sequentially
   let workingState = createWorkingState({ state: currentState });
   let operationsCompleted = 0;
 
@@ -355,10 +368,10 @@ async function handleApply(props: {
     try {
       workingState = await executeOperation({
         state: workingState,
-        organizationsClient,
-        accountClient,
-        ssoAdminClient,
-        identityStoreClient,
+        organizationsClient: props.organizationsClient,
+        accountClient: props.accountClient,
+        ssoAdminClient: props.ssoAdminClient,
+        identityStoreClient: props.identityStoreClient,
         logger: lambdaLogger,
         context: {
           organization: {
@@ -370,7 +383,6 @@ async function handleApply(props: {
       });
       operationsCompleted++;
     } catch (error: unknown) {
-      // Operation failed — write partial state and return error
       const partialState = materializeWorkingState({ workingState });
       try {
         await writeStateToS3({
@@ -386,7 +398,6 @@ async function handleApply(props: {
             "Concurrent state modification detected while writing partial state.",
           );
         }
-        // If partial state write fails for other reasons, still report the operation failure
         lambdaLogger.error(
           "Failed to write partial state after operation failure:",
           writeError,
@@ -403,7 +414,6 @@ async function handleApply(props: {
     }
   }
 
-  // All operations succeeded — write final state with conditional write
   const finalState = materializeWorkingState({ workingState });
   try {
     await writeStateToS3({
@@ -430,63 +440,22 @@ async function handleApply(props: {
   };
 }
 
-// --- Main Handler ---
-
-export async function handler(event: unknown): Promise<LambdaResponse> {
+async function loadStateForApply(props: {
+  s3Client: S3Client;
+  bucket: string;
+}): Promise<
+  | { ok: true; state: StateFile; etag: string }
+  | { ok: false; response: LambdaResponse }
+> {
   try {
-    // Validate incoming event
-    const parseResult = v.safeParse(lambdaRequestSchema, event);
-    if (!parseResult.success) {
-      const issues = parseResult.issues.map(
-        (issue) =>
-          `${issue.path?.map((p) => p.key).join(".") ?? "root"}: ${issue.message}`,
-      );
-      const response = buildErrorResponse(
-        "validation",
-        "Invalid request payload.",
-        { validationIssues: issues },
-      );
-      return validateResponse(response);
-    }
-
-    const request = parseResult.output;
-    const bucket = process.env.STATE_BUCKET_NAME;
-    if (bucket == null || bucket.length === 0) {
-      const response = buildErrorResponse(
-        "internal",
-        "STATE_BUCKET_NAME environment variable is not configured.",
-      );
-      return validateResponse(response);
-    }
-
-    const s3Client = new S3Client({});
-
-    // Route to action handler
-    let response: LambdaResponse;
-    // todo: use assert unreachable pattern here
-    switch (request.action) {
-      case "scan":
-        response = await handleScan({ s3Client, bucket });
-        break;
-      case "getStateUrl":
-        response = await handleGetStateUrl({ s3Client, bucket });
-        break;
-      case "apply":
-        response = await handleApply({
-          s3Client,
-          bucket,
-          operations: request.operations,
-          allowDestructive: request.allowDestructive,
-        });
-        break;
-    }
-
-    return validateResponse(response);
+    const result = await readStateFromS3({
+      s3Client: props.s3Client,
+      bucket: props.bucket,
+    });
+    return { ok: true, state: result.state, etag: result.etag };
   } catch (error: unknown) {
-    // Catch-all for unexpected errors
     const message =
-      error instanceof Error ? error.message : "An unexpected error occurred.";
-    const response = buildErrorResponse("internal", message);
-    return validateResponse(response);
+      error instanceof Error ? error.message : "Failed to read state from S3.";
+    return { ok: false, response: buildErrorResponse("internal", message) };
   }
 }

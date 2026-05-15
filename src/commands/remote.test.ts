@@ -46,6 +46,12 @@ function createBaseInput(overrides?: Partial<RemoteCommandInput>): RemoteCommand
       ...overrides?.flags,
     },
     logger: overrides?.logger ?? noopLogger,
+    overwriteConfirmation: overrides?.overwriteConfirmation ?? (async () => true),
+    stsClient: overrides?.stsClient ?? { send: async () => ({}) } as any,
+    s3Client: overrides?.s3Client ?? { send: async () => ({}) } as any,
+    iamClient: overrides?.iamClient ?? { send: async () => ({}) } as any,
+    lambdaClient: overrides?.lambdaClient ?? { send: async () => ({}) } as any,
+    ssoAdminClient: overrides?.ssoAdminClient ?? { send: async () => ({}) } as any,
   };
 }
 

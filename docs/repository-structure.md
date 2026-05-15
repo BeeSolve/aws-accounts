@@ -67,5 +67,6 @@ Agreed structure for the v1 codebase (historical phase-1 layout evolved with add
 - Keep shared reusable helpers in `src/` root (not under `shared/`).
 - Keep command files under `src/commands/`.
 - Keep implementation explicit and simple.
+- Do not use `if/else if` or `if/else` chains. Use guard `if` statements that return early, then let the remaining code handle the happy path. For exhaustive checks, use standalone `if` statements with early returns followed by `assertUnreachable` at the end.
 - Do not keep task tracking in internal Cursor-only todo state. If a checklist, handoff, or work log is needed, keep it on disk in the repo and update that shared file so other agents can see the current status.
 - For fixed command-name sets, define a `const` tuple and derive the union type from it (`type CommandName = (typeof commands)[number]`), then guard unknown input with a dedicated type guard (`isCommandName(value)`). When needed, add a small assert helper around the guard for fail-fast narrowing at module boundaries.

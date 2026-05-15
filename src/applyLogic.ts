@@ -45,7 +45,7 @@ import {
   UpdatePermissionSetCommand,
 } from "@aws-sdk/client-sso-admin";
 import { createAccountAndMoveToOu } from "./accountCreation.js";
-import { assertUnreachable } from "./helpers.js";
+import { assertUnreachable, delay } from "./helpers.js";
 import type { Operation } from "./operations.js";
 import {
   addGroupMembershipToWorkingState,
@@ -1374,10 +1374,4 @@ async function resolveGroupMembershipId(props: {
     );
   }
   return response.MembershipId;
-}
-
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }

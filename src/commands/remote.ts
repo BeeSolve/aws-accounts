@@ -1,9 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { resolve } from "node:path";
+import * as v from "valibot";
 import {
   BucketLocationConstraint,
   CreateBucketCommand,
+  PutBucketTaggingCommand,
   S3Client,
   type S3ServiceException,
 } from "@aws-sdk/client-s3";
@@ -12,6 +14,7 @@ import {
   GetRoleCommand,
   IAMClient,
   PutRolePolicyCommand,
+  TagRoleCommand,
 } from "@aws-sdk/client-iam";
 import {
   CreateFunctionCommand,
@@ -19,19 +22,32 @@ import {
   LambdaClient,
   PutFunctionConcurrencyCommand,
   ResourceNotFoundException,
+  TagResourceCommand,
   UpdateFunctionCodeCommand,
   UpdateFunctionConfigurationCommand,
 } from "@aws-sdk/client-lambda";
 import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
+import {
+  CreatePermissionSetCommand,
+  DescribePermissionSetCommand,
+  ListPermissionSetsCommand,
+  PutInlinePolicyToPermissionSetCommand,
+  SSOAdminClient,
+  TagResourceCommand as SsoTagResourceCommand,
+  UpdatePermissionSetCommand,
+} from "@aws-sdk/client-sso-admin";
 import {
   type AwsContextFile,
   type Deployment,
   loadAwsConfigModelFromTsFile,
   mapAwsConfigToState,
   readAwsContextFromFile,
+  regenerateTypesFromState,
   writeAwsConfigFromState,
 } from "../awsConfig.js";
 import { buildAwsClientConfig } from "../awsClientConfig.js";
+import { getStandardTags } from "../tags.js";
+import type { AwsTag } from "../tags.js";
 import { diffStates } from "../diff.js";
 import { invokeLambda } from "../lambdaClient.js";
 import type { Logger } from "../logger.js";
@@ -43,52 +59,43 @@ import {
 } from "../remoteStateCache.js";
 import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 import { validateState, type StateFile } from "../state.js";
+import { assertUnreachable, delay } from "../helpers.js";
 
-// todo: why is this not inferred from valibot schema?
-export type RemoteCommandInput = {
-  subcommand: "bootstrap" | "scan" | "init" | "plan" | "apply" | "upgrade";
-  profile: string | undefined;
-  region: string | undefined;
-  flags: {
-    yes: boolean;
-    refresh: boolean;
-    allowDestructive: boolean;
-    ignoreUnsupported: boolean;
-  };
+const remoteCommandSchema = v.object({
+  subcommand: v.picklist(["bootstrap", "scan", "init", "plan", "apply", "upgrade"]),
+  profile: v.optional(v.string()),
+  region: v.optional(v.string()),
+  flags: v.object({
+    yes: v.boolean(),
+    refresh: v.boolean(),
+    allowDestructive: v.boolean(),
+    ignoreUnsupported: v.boolean(),
+  }),
+});
+
+export type RemoteCommandInput = v.InferOutput<typeof remoteCommandSchema> & {
   logger: Logger;
-  overwriteConfirmation?: (props: { fileSummaries: string[] }) => Promise<boolean>;
+  overwriteConfirmation: (props: { fileSummaries: string[] }) => Promise<boolean>;
+  stsClient: STSClient;
+  s3Client: S3Client;
+  iamClient: IAMClient;
+  lambdaClient: LambdaClient;
+  ssoAdminClient: SSOAdminClient;
 };
 
 const contextFilePath = "aws.context.json";
 const configFilePath = "aws.config.ts";
 const typesFilePath = "aws.config.types.ts";
-const cachePath = ".remote-state-cache.json"; // todo: shouldn't be cache config same as state config? I mean if those are two separate files and now we are supporting both local and remote execution these files will go out of sync soon
+const cachePath = ".remote-state-cache.json";
 const lambdaZipPath = "dist-lambda/lambda.zip";
 const lambdaRoleName = "beesolve-aws-accounts-lambda-role";
 const lambdaFunctionName = "beesolve-aws-accounts";
 
-// --- Bootstrap ---
 
 export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<void> {
-  const { logger } = input;
+  const lambdaZip = await readLambdaZip();
 
-  // todo: extract this to separate helper to avoid using let
-  // Read lambda zip
-  let lambdaZip: Buffer;
-  try {
-    lambdaZip = await readFile(resolve(lambdaZipPath));
-  } catch {
-    throw new Error("dist-lambda/lambda.zip not found. Run `npm run build:lambda` first.");
-  }
-
-  const clientConfig = buildAwsClientConfig({
-    profile: input.profile,
-    region: input.region,
-  });
-
-  // Get account ID and region
-  const stsClient = new STSClient(clientConfig);
-  const callerIdentity = await stsClient.send(new GetCallerIdentityCommand({}));
+  const callerIdentity = await input.stsClient.send(new GetCallerIdentityCommand({}));
   const accountId = callerIdentity.Account;
   if (accountId == null) {
     throw new Error("Could not determine AWS account ID from STS.");
@@ -97,69 +104,51 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
   const resolvedRegion = input.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "us-east-1";
   const bucketName = `beesolve-aws-accounts-state-${accountId}-${resolvedRegion}`;
 
-  logger.log(`Account: ${accountId}`);
-  logger.log(`Region: ${resolvedRegion}`);
-  logger.log(`Bucket: ${bucketName}`);
+  input.logger.log(`Account: ${accountId}`);
+  input.logger.log(`Region: ${resolvedRegion}`);
+  input.logger.log(`Bucket: ${bucketName}`);
 
-  // todo: all AWS clients should be passed by property so it's easier to write tests - as the rest of the codebase
-  // Create S3 bucket
-  const s3Client = new S3Client(clientConfig);
   try {
-    // todo: why is this cast as any?
-    // const createBucketInput: any = { Bucket: bucketName };
-    // if (resolvedRegion !== "us-east-1") {
-    //   createBucketInput.CreateBucketConfiguration = {
-    //     LocationConstraint: resolvedRegion,
-    //   };
-    // }
-    await s3Client.send(new CreateBucketCommand({
+    await input.s3Client.send(new CreateBucketCommand({
       Bucket: bucketName,
-      // would this change be acceptable?
-      CreateBucketConfiguration: resolvedRegion !== "us-east-1"?{
-        LocationConstraint: 
+      CreateBucketConfiguration: resolvedRegion !== "us-east-1" ? {
+        LocationConstraint:
           resolvedRegion as BucketLocationConstraint,
-      }: undefined
+      } : undefined
     }));
-    logger.log(`Created S3 bucket: ${bucketName}`);
+    input.logger.log(`Created S3 bucket: ${bucketName}`);
   } catch (error: unknown) {
     const s3Error = error as S3ServiceException;
     if (
       s3Error.name === "BucketAlreadyOwnedByYou" ||
       s3Error.name === "BucketAlreadyExists"
     ) {
-      logger.log(`S3 bucket already exists: ${bucketName}`);
+      input.logger.log(`S3 bucket already exists: ${bucketName}`);
     } else {
       throw error;
     }
   }
 
-  // todo: all clients should be passed as properties
-  // Create IAM role
-  const iamClient = new IAMClient(clientConfig);
-  const { roleArn, created: roleCreated } = await ensureIamRole({
-    iamClient,
-    accountId,
+  await input.s3Client.send(new PutBucketTaggingCommand({
+    Bucket: bucketName,
+    Tagging: {
+      TagSet: getStandardTags("state-storage"),
+    },
+  }));
+
+  const { roleArn } = await ensureIamRole({
+    iamClient: input.iamClient,
     bucketName,
-    logger,
+    logger: input.logger,
   });
 
-  // extract delay function to helpers and reuse it here as well - also shouldn't we wait in loop until some condition is done + timeout?
-  // IAM is eventually consistent — wait for the role to be assumable
-  if (roleCreated) {
-    logger.log("Waiting for IAM role to propagate...");
-    await new Promise((resolve) => setTimeout(resolve, 10_000));
-  }
-
-  // todo: all clients should be passed as properties
-  // Create or update Lambda function
-  const lambdaClient = new LambdaClient(clientConfig);
   const lambdaArn = await ensureLambdaFunction({
-    lambdaClient,
+    lambdaClient: input.lambdaClient,
     roleArn,
     lambdaZip,
     bucketName,
     resolvedRegion,
-    logger,
+    logger: input.logger,
   });
 
   // Persist deployment to context file
@@ -186,20 +175,46 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
   };
   await writeFile(contextFilePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf8");
 
-  logger.log("");
-  logger.log("Bootstrap complete.");
-  logger.log(`  Lambda ARN: ${lambdaArn}`);
-  logger.log(`  State bucket: ${bucketName}`);
+  const instanceArn = updatedContext.identityCenter?.instanceArn;
+
+  if (instanceArn != null && instanceArn !== "") {
+    await ensureOrganizationManagementPermissionSet({
+      ssoAdminClient: input.ssoAdminClient,
+      instanceArn,
+      tags: getStandardTags("organization-management"),
+      logger: input.logger,
+    })
+      .catch((error: unknown) => {
+        input.logger.log(`Error creating OrganizationManagement permission set: ${error instanceof Error ? error.message : String(error)}`);
+      });
+
+    await ensureOrganizationRemoteManagementPermissionSet({
+      ssoAdminClient: input.ssoAdminClient,
+      instanceArn,
+      lambdaArn,
+      tags: getStandardTags("remote-invocation"),
+      logger: input.logger,
+    })
+      .catch((error: unknown) => {
+        input.logger.log(`Error creating OrganizationRemoteManagement permission set: ${error instanceof Error ? error.message : String(error)}`);
+      });
+  }
+
+  if (instanceArn == null || instanceArn === "") {
+    input.logger.log("IAM Identity Center not configured, skipping permission set creation.");
+  }
+
+  input.logger.log("");
+  input.logger.log("Bootstrap complete.");
+  input.logger.log(`  Lambda ARN: ${lambdaArn}`);
+  input.logger.log(`  State bucket: ${bucketName}`);
 }
 
 async function ensureIamRole(props: {
   iamClient: IAMClient;
-  accountId: string;
   bucketName: string;
   logger: Logger;
-}): Promise<{ roleArn: string; created: boolean }> {
-  const { iamClient, accountId, bucketName, logger } = props;
-
+}): Promise<{ roleArn: string }> {
   const trustPolicy = JSON.stringify({
     Version: "2012-10-17",
     Statement: [
@@ -211,38 +226,12 @@ async function ensureIamRole(props: {
     ],
   });
 
-  let roleArn: string;
-  let created = false;
-  try {
-    const getRole = await iamClient.send(
-      new GetRoleCommand({ RoleName: lambdaRoleName }),
-    );
-    roleArn = getRole.Role?.Arn ?? "";
-    if (roleArn === "") {
-      throw new Error("IAM role exists but ARN is empty.");
-    }
-    logger.log(`IAM role already exists: ${lambdaRoleName}`);
-  } catch (error: unknown) {
-    if ((error as any).name === "NoSuchEntityException") {
-      const createRole = await iamClient.send(
-        new CreateRoleCommand({
-          RoleName: lambdaRoleName,
-          AssumeRolePolicyDocument: trustPolicy,
-          Description: "Execution role for beesolve-aws-accounts Lambda",
-        }),
-      );
-      roleArn = createRole.Role?.Arn ?? "";
-      if (roleArn === "") {
-        throw new Error("Failed to create IAM role: ARN is empty.");
-      }
-      created = true;
-      logger.log(`Created IAM role: ${lambdaRoleName}`);
-    } else {
-      throw error;
-    }
-  }
+  const { roleArn } = await getOrCreateIamRole({
+    iamClient: props.iamClient,
+    trustPolicy,
+    logger: props.logger,
+  });
 
-  // Attach inline policy
   const inlinePolicy = JSON.stringify({
     Version: "2012-10-17",
     Statement: [
@@ -260,8 +249,8 @@ async function ensureIamRole(props: {
         Effect: "Allow",
         Action: ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
         Resource: [
-          `arn:aws:s3:::${bucketName}`,
-          `arn:aws:s3:::${bucketName}/*`,
+          `arn:aws:s3:::${props.bucketName}`,
+          `arn:aws:s3:::${props.bucketName}/*`,
         ],
       },
       {
@@ -281,7 +270,7 @@ async function ensureIamRole(props: {
     ],
   });
 
-  await iamClient.send(
+  await props.iamClient.send(
     new PutRolePolicyCommand({
       RoleName: lambdaRoleName,
       PolicyName: "beesolve-aws-accounts-execution-policy",
@@ -289,7 +278,51 @@ async function ensureIamRole(props: {
     }),
   );
 
-  return { roleArn, created };
+  return { roleArn };
+}
+
+async function getOrCreateIamRole(props: {
+  iamClient: IAMClient;
+  trustPolicy: string;
+  logger: Logger;
+}): Promise<{ roleArn: string }> {
+  try {
+    const getRole = await props.iamClient.send(
+      new GetRoleCommand({ RoleName: lambdaRoleName }),
+    );
+    const roleArn = getRole.Role?.Arn ?? "";
+    if (roleArn === "") {
+      throw new Error("IAM role exists but ARN is empty.");
+    }
+    props.logger.log(`IAM role already exists: ${lambdaRoleName}`);
+
+    await props.iamClient.send(
+      new TagRoleCommand({
+        RoleName: lambdaRoleName,
+        Tags: getStandardTags("execution-role"),
+      }),
+    );
+    return { roleArn };
+  } catch (error: unknown) {
+    if ((error as any).name !== "NoSuchEntityException") {
+      throw error;
+    }
+  }
+
+  const createRole = await props.iamClient.send(
+    new CreateRoleCommand({
+      RoleName: lambdaRoleName,
+      AssumeRolePolicyDocument: props.trustPolicy,
+      Description: "Execution role for beesolve-aws-accounts Lambda",
+      Tags: getStandardTags("execution-role"),
+    }),
+  );
+  const roleArn = createRole.Role?.Arn ?? "";
+  if (roleArn === "") {
+    throw new Error("Failed to create IAM role: ARN is empty.");
+  }
+  props.logger.log(`Created IAM role: ${lambdaRoleName}`);
+  return { roleArn };
 }
 
 async function ensureLambdaFunction(props: {
@@ -300,12 +333,9 @@ async function ensureLambdaFunction(props: {
   resolvedRegion: string;
   logger: Logger;
 }): Promise<string> {
-  // todo: do not extract properties, just use props.* directly
-  const { lambdaClient, roleArn, lambdaZip, bucketName, logger } = props;
-
   try {
     // Check if function already exists
-    const getFunction = await lambdaClient.send(
+    const getFunction = await props.lambdaClient.send(
       new GetFunctionCommand({ FunctionName: lambdaFunctionName }),
     );
     const existingArn = getFunction.Configuration?.FunctionArn ?? "";
@@ -314,75 +344,110 @@ async function ensureLambdaFunction(props: {
     }
 
     // Update function code
-    await lambdaClient.send(
+    await props.lambdaClient.send(
       new UpdateFunctionCodeCommand({
         FunctionName: lambdaFunctionName,
-        ZipFile: lambdaZip,
+        ZipFile: props.lambdaZip,
       }),
     );
 
     // Ensure environment variables are set
-    await lambdaClient.send(
+    await props.lambdaClient.send(
       new UpdateFunctionConfigurationCommand({
         FunctionName: lambdaFunctionName,
         Environment: {
           Variables: {
-            STATE_BUCKET_NAME: bucketName,
+            STATE_BUCKET_NAME: props.bucketName,
           },
         },
       }),
     );
 
-    logger.log(`Updated Lambda function code: ${lambdaFunctionName}`);
+    // Apply standard tags to existing Lambda function
+    await props.lambdaClient.send(
+      new TagResourceCommand({
+        Resource: existingArn,
+        Tags: Object.fromEntries(getStandardTags("remote-execution").map(t => [t.Key, t.Value])),
+      }),
+    );
+
+    props.logger.log(`Updated Lambda function code: ${lambdaFunctionName}`);
     return existingArn;
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundException) {
-      // Create new function
-      const createResult = await lambdaClient.send(
-        new CreateFunctionCommand({
-          FunctionName: lambdaFunctionName,
-          Runtime: "nodejs24.x",
-          Handler: "handler.handler",
-          Role: roleArn,
-          Code: { ZipFile: lambdaZip },
-          Timeout: 900,
-          MemorySize: 512,
-          PackageType: "Zip",
-          Architectures: ["arm64"],
-          Environment: {
-            Variables: {
-              STATE_BUCKET_NAME: bucketName,
-            },
-          },
-        }),
-      );
-      const lambdaArn = createResult.FunctionArn ?? "";
-      if (lambdaArn === "") {
-        throw new Error("Failed to create Lambda function: ARN is empty.");
-      }
+      const lambdaArn = await createLambdaFunctionWithRetry({
+        lambdaClient: props.lambdaClient,
+        roleArn: props.roleArn,
+        lambdaZip: props.lambdaZip,
+        bucketName: props.bucketName,
+        logger: props.logger,
+      });
 
-      // Set reserved concurrency to 1
-      await lambdaClient.send(
+      await props.lambdaClient.send(
         new PutFunctionConcurrencyCommand({
           FunctionName: lambdaFunctionName,
           ReservedConcurrentExecutions: 1,
         }),
       );
 
-      logger.log(`Created Lambda function: ${lambdaFunctionName}`);
-      logger.log(`Set reserved concurrency to 1`);
+      props.logger.log(`Created Lambda function: ${lambdaFunctionName}`);
+      props.logger.log(`Set reserved concurrency to 1`);
       return lambdaArn;
     }
     throw error;
   }
 }
 
+const IAM_PROPAGATION_MAX_ATTEMPTS = 10;
+const IAM_PROPAGATION_RETRY_INTERVAL_MS = 2_000;
 
-// --- Scan ---
+async function createLambdaFunctionWithRetry(props: {
+  lambdaClient: LambdaClient;
+  roleArn: string;
+  lambdaZip: Buffer;
+  bucketName: string;
+  logger: Logger;
+}): Promise<string> {
+  for (let attempt = 1; attempt <= IAM_PROPAGATION_MAX_ATTEMPTS; attempt++) {
+    try {
+      const createResult = await props.lambdaClient.send(
+        new CreateFunctionCommand({
+          FunctionName: lambdaFunctionName,
+          Runtime: "nodejs24.x",
+          Handler: "handler.handler",
+          Role: props.roleArn,
+          Code: { ZipFile: props.lambdaZip },
+          Timeout: 900,
+          MemorySize: 512,
+          PackageType: "Zip",
+          Architectures: ["arm64"],
+          Environment: {
+            Variables: {
+              STATE_BUCKET_NAME: props.bucketName,
+            },
+          },
+          Tags: Object.fromEntries(getStandardTags("remote-execution").map(t => [t.Key, t.Value])),
+        }),
+      );
+      const lambdaArn = createResult.FunctionArn ?? "";
+      if (lambdaArn === "") {
+        throw new Error("Failed to create Lambda function: ARN is empty.");
+      }
+      return lambdaArn;
+    } catch (error: unknown) {
+      const isRoleNotReady = (error as any).name === "InvalidParameterValueException";
+      if (!isRoleNotReady || attempt === IAM_PROPAGATION_MAX_ATTEMPTS) {
+        throw error;
+      }
+      props.logger.log(`Waiting for IAM role to propagate (attempt ${attempt}/${IAM_PROPAGATION_MAX_ATTEMPTS})...`);
+      await delay(IAM_PROPAGATION_RETRY_INTERVAL_MS);
+    }
+  }
+  throw new Error("Unreachable: retry loop exhausted without throwing.");
+}
+
 
 export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
-  const { logger } = input;
-
   const deployment = await readDeploymentFromContext();
 
   const clientConfig = buildAwsClientConfig({
@@ -391,7 +456,7 @@ export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
   });
   const lambdaClient = new LambdaClient(clientConfig);
 
-  logger.log("Invoking remote scan...");
+  input.logger.log("Invoking remote scan...");
   const result = await invokeLambda({
     lambdaClient,
     lambdaArn: deployment.lambdaArn,
@@ -407,37 +472,26 @@ export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
     throw new Error("Unexpected response from Lambda scan action.");
   }
 
-  logger.log("Scan complete.");
-  logger.log(`  Organizational Units: ${response.summary.organizationalUnits}`);
-  logger.log(`  Accounts: ${response.summary.accounts}`);
-  logger.log(`  Users: ${response.summary.users}`);
-  logger.log(`  Groups: ${response.summary.groups}`);
-  logger.log(`  Permission Sets: ${response.summary.permissionSets}`);
-  logger.log(`  Account Assignments: ${response.summary.accountAssignments}`);
+  input.logger.log("Scan complete.");
+  input.logger.log(`  Organizational Units: ${response.summary.organizationalUnits}`);
+  input.logger.log(`  Accounts: ${response.summary.accounts}`);
+  input.logger.log(`  Users: ${response.summary.users}`);
+  input.logger.log(`  Groups: ${response.summary.groups}`);
+  input.logger.log(`  Permission Sets: ${response.summary.permissionSets}`);
+  input.logger.log(`  Account Assignments: ${response.summary.accountAssignments}`);
 
   await writeStateCache(cachePath, response.state);
-  logger.log("State cache updated.");
+  input.logger.log("State cache updated.");
 }
-
-// --- Init ---
 
 const statePath = "state.json";
 
 export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
-  const { logger } = input;
-
   const deployment = await readDeploymentFromContext();
 
-  const clientConfig = buildAwsClientConfig({
-    profile: input.profile ?? (deployment.profile || undefined),
-    region: input.region ?? (deployment.region || undefined),
-  });
-  // todo: should be passed as props
-  const lambdaClient = new LambdaClient(clientConfig);
-
-  logger.log("Invoking remote scan...");
+  input.logger.log("Invoking remote scan...");
   const result = await invokeLambda({
-    lambdaClient,
+    lambdaClient: input.lambdaClient,
     lambdaArn: deployment.lambdaArn,
     payload: { action: "scan" },
   });
@@ -451,60 +505,53 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
     throw new Error("Unexpected response from Lambda scan action.");
   }
 
-  logger.log("Scan complete.");
-  logger.log(`  Organizational Units: ${response.summary.organizationalUnits}`);
-  logger.log(`  Accounts: ${response.summary.accounts}`);
-  logger.log(`  Users: ${response.summary.users}`);
-  logger.log(`  Groups: ${response.summary.groups}`);
-  logger.log(`  Permission Sets: ${response.summary.permissionSets}`);
-  logger.log(`  Account Assignments: ${response.summary.accountAssignments}`);
+  input.logger.log("Scan complete.");
+  input.logger.log(`  Organizational Units: ${response.summary.organizationalUnits}`);
+  input.logger.log(`  Accounts: ${response.summary.accounts}`);
+  input.logger.log(`  Users: ${response.summary.users}`);
+  input.logger.log(`  Groups: ${response.summary.groups}`);
+  input.logger.log(`  Permission Sets: ${response.summary.permissionSets}`);
+  input.logger.log(`  Account Assignments: ${response.summary.accountAssignments}`);
 
-  // Write state to state.json and update cache
-  await writeFile(statePath, `${JSON.stringify(response.state, null, 2)}\n`, "utf8");
-  await writeStateCache(cachePath, response.state);
-  logger.log("State written to state.json and cache updated.");
-
-  // Generate aws.config.ts + aws.config.types.ts from state
-  if (input.overwriteConfirmation == null) {
-    throw new Error("overwriteConfirmation is required for remote init.");
-  }
+  await Promise.all([
+    writeFile(statePath, `${JSON.stringify(response.state, null, 2)}\n`, "utf8"),
+    writeStateCache(cachePath, response.state),
+  ]);
+  input.logger.log("State written to state.json and cache updated.");
 
   const configWriteResult = await writeAwsConfigFromState({
     statePath,
     contextPath: contextFilePath,
     configPath: configFilePath,
     typesPath: typesFilePath,
-    logger,
+    logger: input.logger,
     overwriteConfirmation: input.overwriteConfirmation,
   });
 
   const writtenFiles = configWriteResult.files.filter((f) => f.status === "written");
   if (writtenFiles.length > 0) {
-    logger.log("");
-    logger.log("Init complete.");
+    input.logger.log("");
+    input.logger.log("Init complete.");
     for (const file of writtenFiles) {
-      logger.log(`  ${file.path}: ${file.status}`);
+      input.logger.log(`  ${file.path}: ${file.status}`);
     }
   }
 }
 
-// --- Plan ---
-
 export async function runRemotePlan(input: RemoteCommandInput): Promise<void> {
-  const { logger } = input;
-
   const deployment = await readDeploymentFromContext();
   const currentState = await fetchCurrentState({
     input,
     deployment,
   });
 
-  // todo: why are these not being called in parallel via Promise.all?
-  const context = await readAwsContextFromFile(contextFilePath);
-  const config = await loadAwsConfigModelFromTsFile({
-    configPath: configFilePath,
-    typesPath: typesFilePath,
-  });
+  const [context, config] = await Promise.all([
+    readAwsContextFromFile(contextFilePath),
+    loadAwsConfigModelFromTsFile({
+      configPath: configFilePath,
+      typesPath: typesFilePath,
+    }),
+  ]);
 
   const desiredState = mapAwsConfigToState({
     config,
@@ -520,26 +567,23 @@ export async function runRemotePlan(input: RemoteCommandInput): Promise<void> {
     context,
   });
 
-  displayPlan({ plan, logger });
+  displayPlan({ plan, logger: input.logger });
 }
 
-// --- Apply ---
-
 export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
-  const { logger, flags } = input;
-
   const deployment = await readDeploymentFromContext();
   const currentState = await fetchCurrentState({
     input,
     deployment,
   });
 
-  // todo: call these within Promise.all
-  const context = await readAwsContextFromFile(contextFilePath);
-  const config = await loadAwsConfigModelFromTsFile({
-    configPath: configFilePath,
-    typesPath: typesFilePath,
-  });
+  const [context, config] = await Promise.all([
+    readAwsContextFromFile(contextFilePath),
+    loadAwsConfigModelFromTsFile({
+      configPath: configFilePath,
+      typesPath: typesFilePath,
+    }),
+  ]);
 
   const desiredState = mapAwsConfigToState({
     config,
@@ -556,14 +600,13 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
   });
 
   if (plan.operations.length === 0) {
-    logger.log("No changes.");
+    input.logger.log("No changes.");
     return;
   }
 
-  displayPlan({ plan, logger });
+  displayPlan({ plan, logger: input.logger });
 
-  // Prompt for confirmation
-  if (!flags.yes) {
+  if (!input.flags.yes) {
     if (process.stdin.isTTY !== true) {
       throw new Error(
         "Refusing to apply changes in non-interactive mode without --yes.",
@@ -579,7 +622,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
       );
       const normalized = answer.trim().toLowerCase();
       if (normalized !== "y" && normalized !== "yes") {
-        logger.log("Apply cancelled.");
+        input.logger.log("Apply cancelled.");
         return;
       }
     } finally {
@@ -587,36 +630,35 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     }
   }
 
-  // Invoke Lambda with apply action
   const clientConfig = buildAwsClientConfig({
     profile: input.profile ?? (deployment.profile || undefined),
     region: input.region ?? (deployment.region || undefined),
   });
   const lambdaClient = new LambdaClient(clientConfig);
 
-  logger.log("Applying changes remotely...");
+  input.logger.log("Applying changes remotely...");
   const result = await invokeLambda({
     lambdaClient,
     lambdaArn: deployment.lambdaArn,
     payload: {
       action: "apply",
       operations: plan.operations,
-      allowDestructive: flags.allowDestructive,
+      allowDestructive: input.flags.allowDestructive,
     },
   });
 
   if (!result.ok) {
     const error = result.error;
     if (error.kind === "concurrencyConflict") {
-      logger.log("Another apply is in progress. Retry later.");
+      input.logger.log("Another apply is in progress. Retry later.");
       return;
     }
     if (error.kind === "operationFailed") {
-      logger.log(
+      input.logger.log(
         `Apply failed at operation ${error.failedOperation + 1} of ${error.totalOperations}: ${error.error}`,
       );
       await writeStateCache(cachePath, error.partialState);
-      logger.log("State cache updated with partial state.");
+      input.logger.log("State cache updated with partial state.");
       return;
     }
     throw new Error(formatLambdaError(error));
@@ -627,35 +669,26 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     throw new Error("Unexpected response from Lambda apply action.");
   }
 
-  logger.log(`Applied ${response.operationsCompleted} operation(s).`);
+  input.logger.log(`Applied ${response.operationsCompleted} operation(s).`);
   await writeStateCache(cachePath, response.state);
-  logger.log("State cache updated.");
+  input.logger.log("State cache updated.");
+
+  await regenerateTypesFromState({
+    state: response.state,
+    contextPath: contextFilePath,
+    configPath: configFilePath,
+    typesPath: typesFilePath,
+    logger: input.logger,
+  });
 }
 
-// --- Upgrade ---
-
 export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void> {
-  const { logger } = input;
-
   const deployment = await readDeploymentFromContext();
 
-  // Read lambda zip
-  let lambdaZip: Buffer;
-  try {
-    lambdaZip = await readFile(resolve(lambdaZipPath));
-  } catch {
-    throw new Error("dist-lambda/lambda.zip not found. Run `npm run build:lambda` first.");
-  }
+  const lambdaZip = await readLambdaZip();
 
-  const clientConfig = buildAwsClientConfig({
-    profile: input.profile ?? (deployment.profile || undefined),
-    region: input.region ?? (deployment.region || undefined),
-  });
-  // todo: pass by props
-  const lambdaClient = new LambdaClient(clientConfig);
-
-  logger.log(`Updating Lambda function code: ${deployment.lambdaArn}`);
-  const updateResult = await lambdaClient.send(
+  input.logger.log(`Updating Lambda function code: ${deployment.lambdaArn}`);
+  const updateResult = await input.lambdaClient.send(
     new UpdateFunctionCodeCommand({
       FunctionName: deployment.lambdaArn,
       ZipFile: lambdaZip,
@@ -663,11 +696,8 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
   );
 
   const lastModified = updateResult.LastModified ?? "unknown";
-  logger.log(`Upgrade complete. Last modified: ${lastModified}`);
+  input.logger.log(`Upgrade complete. Last modified: ${lastModified}`);
 }
-
-
-// --- Helpers ---
 
 async function readDeploymentFromContext(): Promise<Deployment> {
   const context = await readAwsContextFromFile(contextFilePath);
@@ -683,28 +713,24 @@ async function fetchCurrentState(props: {
   input: RemoteCommandInput;
   deployment: Deployment;
 }): Promise<StateFile> {
-  const { input, deployment } = props;
-
-  // Check cache freshness
-  if (!input.flags.refresh) {
+  if (!props.input.flags.refresh) {
     const cache = await readStateCache(cachePath);
-    if (cache != null && isCacheFresh(cache, deployment.stateCacheTtlSeconds)) {
-      input.logger.log("Using cached state.");
+    if (cache != null && isCacheFresh(cache, props.deployment.stateCacheTtlSeconds)) {
+      props.input.logger.log("Using cached state.");
       return cache.state;
     }
   }
 
-  // Fetch fresh state via pre-signed URL
-  input.logger.log("Fetching remote state...");
+  props.input.logger.log("Fetching remote state...");
   const clientConfig = buildAwsClientConfig({
-    profile: input.profile ?? (deployment.profile || undefined),
-    region: input.region ?? (deployment.region || undefined),
+    profile: props.input.profile ?? (props.deployment.profile || undefined),
+    region: props.input.region ?? (props.deployment.region || undefined),
   });
   const lambdaClient = new LambdaClient(clientConfig);
 
   const result = await invokeLambda({
     lambdaClient,
-    lambdaArn: deployment.lambdaArn,
+    lambdaArn: props.deployment.lambdaArn,
     payload: { action: "getStateUrl" },
   });
 
@@ -717,7 +743,6 @@ async function fetchCurrentState(props: {
     throw new Error("Unexpected response from Lambda getStateUrl action.");
   }
 
-  // Fetch state from pre-signed URL
   const stateResponse = await fetch(response.url);
   if (!stateResponse.ok) {
     throw new Error(
@@ -729,35 +754,33 @@ async function fetchCurrentState(props: {
   const state = validateState(stateJson);
 
   await writeStateCache(cachePath, state);
-  input.logger.log("State cache updated.");
+  props.input.logger.log("State cache updated.");
 
   return state;
 }
 
 function displayPlan(props: { plan: Plan; logger: Logger }): void {
-  const { plan, logger } = props;
-
-  logger.log(
-    `Plan: ${plan.operations.length} operation(s), ${plan.unsupported.length} unsupported diff(s)`,
+  props.logger.log(
+    `Plan: ${props.plan.operations.length} operation(s), ${props.plan.unsupported.length} unsupported diff(s)`,
   );
 
-  const destructiveOperations = plan.operations.filter((op) =>
+  const destructiveOperations = props.plan.operations.filter((op) =>
     isDestructiveOperation(op),
   );
   if (destructiveOperations.length > 0) {
-    logger.log(
+    props.logger.log(
       `Destructive operations detected: ${destructiveOperations.length}. Apply requires --allow-destructive.`,
     );
   }
 
-  for (const operation of plan.operations) {
-    logger.log(formatOperationLine(operation));
+  for (const operation of props.plan.operations) {
+    props.logger.log(formatOperationLine(operation));
   }
 
-  if (plan.unsupported.length > 0) {
-    logger.log("Unsupported diffs:");
-    for (const diff of plan.unsupported) {
-      logger.log(`  - ${diff.description} [${diff.category}]`);
+  if (props.plan.unsupported.length > 0) {
+    props.logger.log("Unsupported diffs:");
+    for (const diff of props.plan.unsupported) {
+      props.logger.log(`  - ${diff.description} [${diff.category}]`);
     }
   }
 }
@@ -857,10 +880,7 @@ function formatOperationLine(operation: Operation): string {
   if (operation.kind === "revokeIdcAccountAssignment") {
     return `  revoke IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel(operation.principalType, operation.principalName)} on "${operation.accountName}"`;
   }
-  // todo: use assert unreachable here
-  // Exhaustive — should never reach here
-  const _exhaustive: never = operation;
-  return `  ${(operation as any).kind}`;
+  assertUnreachable(operation, "Unsupported operation kind in formatOperationLine.");
 }
 
 function formatPrincipalLabel(
@@ -890,4 +910,221 @@ function formatLambdaError(error: {
     return `Lambda invocation error: ${error.message}`;
   }
   return `Lambda error: ${JSON.stringify(error)}`;
+}
+
+async function findPermissionSetByName(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+  name: string;
+}): Promise<string | undefined> {
+  let nextToken: string | undefined;
+  do {
+    const listResponse = await props.ssoAdminClient.send(
+      new ListPermissionSetsCommand({
+        InstanceArn: props.instanceArn,
+        NextToken: nextToken,
+      }),
+    );
+    const permissionSetArns = listResponse.PermissionSets ?? [];
+    for (const arn of permissionSetArns) {
+      const describeResponse = await props.ssoAdminClient.send(
+        new DescribePermissionSetCommand({
+          InstanceArn: props.instanceArn,
+          PermissionSetArn: arn,
+        }),
+      );
+      if (describeResponse.PermissionSet?.Name === props.name) {
+        return arn;
+      }
+    }
+    nextToken = listResponse.NextToken;
+  } while (nextToken != null);
+  return undefined;
+}
+
+async function ensureOrganizationManagementPermissionSet(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+  tags: AwsTag[];
+  logger: Logger;
+}): Promise<{ permissionSetArn: string }> {
+  const permissionSetName = "OrganizationManagement";
+  const description = "Full organization management access for AWS Organizations, IAM Identity Center, and IAM";
+  const sessionDuration = "PT4H";
+
+  const inlinePolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow",
+      Action: ["organizations:*", "sso:*", "identitystore:*", "account:*", "iam:*"],
+      Resource: "*",
+    }],
+  });
+
+  const existingArn = await findPermissionSetByName({
+    ssoAdminClient: props.ssoAdminClient,
+    instanceArn: props.instanceArn,
+    name: permissionSetName,
+  });
+
+  const permissionSetArn = existingArn != null
+    ? await updateExistingPermissionSet({
+      ssoAdminClient: props.ssoAdminClient,
+      instanceArn: props.instanceArn,
+      permissionSetArn: existingArn,
+      permissionSetName,
+      description,
+      sessionDuration,
+      logger: props.logger,
+    })
+    : await createNewPermissionSet({
+      ssoAdminClient: props.ssoAdminClient,
+      instanceArn: props.instanceArn,
+      permissionSetName,
+      description,
+      sessionDuration,
+      tags: props.tags,
+      logger: props.logger,
+    });
+
+  await props.ssoAdminClient.send(
+    new PutInlinePolicyToPermissionSetCommand({
+      InstanceArn: props.instanceArn,
+      PermissionSetArn: permissionSetArn,
+      InlinePolicy: inlinePolicy,
+    }),
+  );
+
+  // Apply tags (for both create and update to ensure idempotency)
+  await props.ssoAdminClient.send(
+    new SsoTagResourceCommand({
+      InstanceArn: props.instanceArn,
+      ResourceArn: permissionSetArn,
+      Tags: props.tags.map(t => ({ Key: t.Key, Value: t.Value })),
+    }),
+  );
+
+  return { permissionSetArn };
+}
+
+async function ensureOrganizationRemoteManagementPermissionSet(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+  lambdaArn: string;
+  tags: AwsTag[];
+  logger: Logger;
+}): Promise<{ permissionSetArn: string }> {
+  const permissionSetName = "OrganizationRemoteManagement";
+  const description = "Minimal access to invoke the beesolve-aws-accounts remote management Lambda";
+  const sessionDuration = "PT1H";
+
+  const inlinePolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow",
+      Action: ["lambda:InvokeFunction"],
+      Resource: props.lambdaArn,
+    }],
+  });
+
+  const existingArn = await findPermissionSetByName({
+    ssoAdminClient: props.ssoAdminClient,
+    instanceArn: props.instanceArn,
+    name: permissionSetName,
+  });
+
+  const permissionSetArn = existingArn != null
+    ? await updateExistingPermissionSet({
+      ssoAdminClient: props.ssoAdminClient,
+      instanceArn: props.instanceArn,
+      permissionSetArn: existingArn,
+      permissionSetName,
+      description,
+      sessionDuration,
+      logger: props.logger,
+    })
+    : await createNewPermissionSet({
+      ssoAdminClient: props.ssoAdminClient,
+      instanceArn: props.instanceArn,
+      permissionSetName,
+      description,
+      sessionDuration,
+      tags: props.tags,
+      logger: props.logger,
+    });
+
+  await props.ssoAdminClient.send(
+    new PutInlinePolicyToPermissionSetCommand({
+      InstanceArn: props.instanceArn,
+      PermissionSetArn: permissionSetArn,
+      InlinePolicy: inlinePolicy,
+    }),
+  );
+
+  // Apply tags (for both create and update to ensure idempotency)
+  await props.ssoAdminClient.send(
+    new SsoTagResourceCommand({
+      InstanceArn: props.instanceArn,
+      ResourceArn: permissionSetArn,
+      Tags: props.tags.map(t => ({ Key: t.Key, Value: t.Value })),
+    }),
+  );
+
+  return { permissionSetArn };
+}
+
+async function updateExistingPermissionSet(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+  permissionSetArn: string;
+  permissionSetName: string;
+  description: string;
+  sessionDuration: string;
+  logger: Logger;
+}): Promise<string> {
+  await props.ssoAdminClient.send(
+    new UpdatePermissionSetCommand({
+      InstanceArn: props.instanceArn,
+      PermissionSetArn: props.permissionSetArn,
+      Description: props.description,
+      SessionDuration: props.sessionDuration,
+    }),
+  );
+  props.logger.log(`Updated permission set: ${props.permissionSetName}`);
+  return props.permissionSetArn;
+}
+
+async function createNewPermissionSet(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+  permissionSetName: string;
+  description: string;
+  sessionDuration: string;
+  tags: AwsTag[];
+  logger: Logger;
+}): Promise<string> {
+  const createResponse = await props.ssoAdminClient.send(
+    new CreatePermissionSetCommand({
+      InstanceArn: props.instanceArn,
+      Name: props.permissionSetName,
+      Description: props.description,
+      SessionDuration: props.sessionDuration,
+      Tags: props.tags.map(t => ({ Key: t.Key, Value: t.Value })),
+    }),
+  );
+  const permissionSetArn = createResponse.PermissionSet?.PermissionSetArn ?? "";
+  if (permissionSetArn === "") {
+    throw new Error(`Failed to create permission set "${props.permissionSetName}": ARN is empty.`);
+  }
+  props.logger.log(`Created permission set: ${props.permissionSetName}`);
+  return permissionSetArn;
+}
+
+
+async function readLambdaZip(): Promise<Buffer> {
+  try {
+    return await readFile(resolve(lambdaZipPath));
+  } catch {
+    throw new Error("dist-lambda/lambda.zip not found. Run `npm run build:lambda` first.");
+  }
 }

@@ -1560,8 +1560,7 @@ export async function loadAwsConfigModelFromTsFile(props: {
 export async function readAwsContextFromFile(
   path: string,
 ): Promise<AwsContextFile> {
-  // todo: isn't this await unneccesary?
-  return await readAwsContextFile(path);
+  return readAwsContextFile(path);
 }
 
 async function loadAwsConfigTypesModule(props: {
@@ -1692,4 +1691,30 @@ function isValiErrorLike(error: unknown): error is Error {
     error instanceof v.ValiError ||
     (error instanceof Error && error.name === "ValiError")
   );
+}
+
+export async function regenerateTypesFromState(props: {
+  state: StateFile;
+  contextPath: string;
+  configPath: string;
+  typesPath: string;
+  logger: Logger;
+}): Promise<void> {
+  try {
+    const mappedConfig = mapStateToAwsConfig({ state: props.state });
+    const sortedConfig = sortAwsConfigModel({ config: mappedConfig });
+    const nextTypesContent = renderAwsConfigTypesTs({ config: sortedConfig });
+
+    const currentTypesContent = await readIfExists(props.typesPath);
+
+    if (currentTypesContent === nextTypesContent) {
+      return;
+    }
+
+    await writeFile(props.typesPath, nextTypesContent, "utf8");
+    props.logger.log("Updated aws.config.types.ts");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    props.logger.log(`Warning: Failed to regenerate types: ${message}`);
+  }
 }

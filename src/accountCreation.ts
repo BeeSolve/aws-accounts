@@ -7,6 +7,7 @@ import {
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import type { Logger } from "./logger.js";
+import { delay } from "./helpers.js";
 
 type CreateAccountAndMoveToOuProps = {
   organizationsClient: OrganizationsClient;
@@ -203,8 +204,3 @@ function isCompleteAccountWithStatus(
   return account.Id === expectedAccountId;
 }
 
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
