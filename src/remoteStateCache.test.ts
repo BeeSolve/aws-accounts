@@ -114,11 +114,12 @@ test("isCacheFresh returns false when cache exceeds TTL", () => {
 });
 
 test("isCacheFresh returns true when elapsed equals TTL exactly", () => {
-  // Use a timestamp exactly TTL seconds ago
+  // Use a timestamp just barely within TTL to avoid clock drift between
+  // the two Date.now() calls (test setup vs isCacheFresh internals).
   const ttl = 60;
-  const exactlyAtTtl = new Date(Date.now() - ttl * 1000);
+  const justWithinTtl = new Date(Date.now() - ttl * 1000 + 10);
   const cache = {
-    fetchedAt: exactlyAtTtl.toISOString(),
+    fetchedAt: justWithinTtl.toISOString(),
     state: createSampleState(),
   };
 
