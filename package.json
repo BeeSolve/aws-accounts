@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/beesolve/aws-accounts.git"
+    "url": "git+https://github.com/BeeSolve/aws-accounts.git"
   },
   "scripts": {
     "clean": "rm -rf dist",
