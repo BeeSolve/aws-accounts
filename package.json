@@ -8,7 +8,8 @@
   },
   "files": [
     "dist",
-    "!dist/**/*.test.js"
+    "!dist/**/*.test.js",
+    "dist-lambda"
   ],
   "publishConfig": {
     "access": "public",
@@ -25,7 +26,8 @@
     "build:tests": "find dist -name '*.test.js' -delete && esbuild \"src/**/*.test.ts\" --platform=node --target=node24 --format=esm --outdir=dist --outbase=src",
     "cli": "npm run build && node dist/cli.js",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && npm run build:tests && node --experimental-test-module-mocks --test \"dist/**/*.test.js\""
+    "test": "npm run build && npm run build:tests && node --experimental-test-module-mocks --test \"dist/**/*.test.js\"",
+    "prepublishOnly": "npm run typecheck && npm run build && npm run build:lambda"
   },
   "keywords": [],
   "author": "",
