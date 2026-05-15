@@ -60,6 +60,7 @@ import {
 import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 import { validateState, type StateFile } from "../state.js";
 import { assertUnreachable, delay } from "../helpers.js";
+import { iam } from "@beesolve/iam-policy-ts";
 
 const remoteCommandSchema = v.object({
   subcommand: v.picklist(["bootstrap", "scan", "init", "plan", "apply", "upgrade"]),
@@ -221,7 +222,7 @@ async function ensureIamRole(props: {
       {
         Effect: "Allow",
         Principal: { Service: "lambda.amazonaws.com" },
-        Action: "sts:AssumeRole",
+        Action: iam.sts("AssumeRole"),
       },
     ],
   });
@@ -237,17 +238,17 @@ async function ensureIamRole(props: {
     Statement: [
       {
         Effect: "Allow",
-        Action: ["organizations:*"],
+        Action: iam.organizations("*"),
         Resource: "*",
       },
       {
         Effect: "Allow",
-        Action: ["sso:*", "identitystore:*"],
+        Action: [iam.sso('*'), iam.identitystore('*')],
         Resource: "*",
       },
       {
         Effect: "Allow",
-        Action: ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+        Action: [iam.s3("GetObject"), iam.s3("PutObject"), iam.s3("ListBucket")],
         Resource: [
           `arn:aws:s3:::${props.bucketName}`,
           `arn:aws:s3:::${props.bucketName}/*`,
@@ -256,15 +257,15 @@ async function ensureIamRole(props: {
       {
         Effect: "Allow",
         Action: [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
+          iam.logs("CreateLogGroup"),
+          iam.logs("CreateLogStream"),
+          iam.logs("PutLogEvents"),
         ],
         Resource: "arn:aws:logs:*:*:*",
       },
       {
         Effect: "Allow",
-        Action: ["account:PutAccountName"],
+        Action: [iam.account("PutAccountName")],
         Resource: "*",
       },
     ],
@@ -956,7 +957,7 @@ async function ensureOrganizationManagementPermissionSet(props: {
     Version: "2012-10-17",
     Statement: [{
       Effect: "Allow",
-      Action: ["organizations:*", "sso:*", "identitystore:*", "account:*", "iam:*"],
+      Action: [iam.organizations("*"), iam.sso("*"), iam.identitystore("*"), iam.account("*"), iam.iam("*")],
       Resource: "*",
     }],
   });
@@ -1022,7 +1023,7 @@ async function ensureOrganizationRemoteManagementPermissionSet(props: {
     Version: "2012-10-17",
     Statement: [{
       Effect: "Allow",
-      Action: ["lambda:InvokeFunction"],
+      Action: [iam.lambda("InvokeFunction")],
       Resource: props.lambdaArn,
     }],
   });
