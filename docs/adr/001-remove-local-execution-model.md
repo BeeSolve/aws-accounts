@@ -39,9 +39,11 @@ The complete local execution code was extracted into the `local/` folder and com
 - **Commit:** `3e7a30d`
 - **Message:** "feat: extract local execution code to local/ — preserve local execution model"
 
-The `local/` folder remains in the repository and contains a fully self-contained copy of the local-first CLI with its own `package.json`, `tsconfig.json`, and build scripts. To recover the local version:
+The `local/` folder was subsequently removed from the working tree. To recover the local version, check out commit `3e7a30d`:
 
 ```bash
+git show 3e7a30d:local/package.json  # inspect
+git checkout 3e7a30d -- local/        # restore the folder
 cd local/
 npm install
 npm run build
@@ -98,5 +100,5 @@ The `remote` subcommand namespace was removed entirely. The remote execution mod
 - The remote execution model is now the **sole path** for all AWS operations (scan, plan, apply, init, bootstrap, upgrade).
 - Users must have a deployed Lambda function to use the CLI for AWS operations.
 - Local utility commands (`regenerate`, `graveyard`) continue to work without Lambda.
-- The `local/` folder in the repository serves as a historical reference and recovery point.
+- The `local/` folder was committed as a recovery point (commit `3e7a30d`) and subsequently removed from the working tree.
 - Future features only need to be implemented once (in the Lambda handler and remote command path).

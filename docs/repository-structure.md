@@ -1,75 +1,76 @@
 # Repository Structure
 
-> **Note:** The local execution model was removed in favor of remote-only execution. The structure below reflects the historical layout before that change. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md) for details on the current architecture.
-
-Agreed structure for the v1 codebase (historical phase-1 layout evolved with additional commands and tests).
+Current layout of the @beesolve/aws-accounts codebase.
 
 ```text
 .
 ├── README.md
-├── plan.md
-├── project.md
 ├── package.json
 ├── tsconfig.json
+├── aws.config.ts              (user-editable desired state)
+├── aws.config.types.ts        (generated valibot schema + picklists)
+├── aws.context.json           (deployment metadata: Lambda ARN, S3 bucket, IdC instance)
+├── .remote-state-cache.json   (cached remote state for offline plan)
 ├── docs/
-│   ├── phase-1-decisions.md
-│   ├── phase-2-decisions.md
-│   ├── phase-3-decisions.md
-│   ├── v1-backlog-priority.md
+│   ├── adr/
+│   │   ├── 001-remove-local-execution-model.md
+│   │   ├── 002-architecture-and-technology-choices.md
+│   │   └── 003-v1-implementation-phases.md
 │   ├── account-tag-inheritance-research.md
-│   └── repository-structure.md
+│   ├── repository-structure.md
+│   └── v1-backlog-priority.md
+├── scripts/
+│   └── buildLambda.ts
 ├── src/
-│   ├── cli.ts
-│   ├── state.ts
-│   ├── state.test.ts
-│   ├── awsClientConfig.ts
-│   ├── awsConfig.ts
-│   ├── awsConfig.test.ts
-│   └── commands/
-│       ├── scan.ts
-│       ├── scan.test.ts
-│       ├── bootstrap.ts
-│       ├── bootstrap.test.ts
-│       ├── init.ts
-│       ├── init.test.ts
-│       ├── regenerate.ts
-│       ├── regenerate.test.ts
-│       ├── graveyard.ts
-│       ├── graveyard.test.ts
-│       ├── plan.ts
-│       ├── plan.test.ts
-│       ├── apply.ts
-│       └── apply.test.ts
+│   ├── cli.ts                 (CLI entry point — routes to commands)
+│   ├── state.ts               (state model, validation, working-state abstraction)
+│   ├── diff.ts                (state-vs-state diff engine)
+│   ├── operations.ts          (operation model — discriminated union + schemas)
+│   ├── applyLogic.ts          (operation execution logic, used by Lambda)
+│   ├── scanLogic.ts           (AWS scanning logic, used by Lambda)
+│   ├── awsConfig.ts           (config loader, codegen, state↔config transforms)
+│   ├── awsClientConfig.ts     (AWS SDK client configuration + credential resolution)
+│   ├── lambdaClient.ts        (Lambda invocation helper)
+│   ├── remoteStateCache.ts    (local cache read/write with TTL freshness)
+│   ├── helpers.ts             (shared utilities)
+│   ├── error.ts               (CLI error classification + exit codes)
+│   ├── logger.ts              (logger interface)
+│   ├── tags.ts                (tag normalization + diff)
+│   ├── accountCreation.ts     (account creation polling logic)
+│   ├── reservedOuDeletion.ts  (OU deletion safety guards)
+│   ├── commands/
+│   │   ├── remote.ts          (remote command handlers: bootstrap, scan, init, plan, apply, upgrade)
+│   │   ├── regenerate.ts      (local: refresh aws.config.types.ts from aws.config.ts)
+│   │   └── graveyard.ts       (local: list accounts in Graveyard OU)
+│   └── lambda/
+│       └── handler.ts         (Lambda function handler — scan, apply, state management)
+├── dist/                      (esbuild output — unbundled ESM)
+└── dist-lambda/               (Lambda deployment artifact)
+    ├── handler.mjs
+    └── lambda.zip
 ```
 
 ## Conventions
 
-- Import Valibot as a namespace and call helpers on it: `import * as v from "valibot"` then `v.pipe()`, `v.strictObject()`, `v.parse()`, etc. Do not use named imports like `import { pipe } from "valibot"`.
-- Infer persisted file types from Valibot schemas via `v.InferOutput<typeof schema>`. Do not hand-write duplicate persisted type declarations when a schema already exists.
-- Tests use explicit `./foo.js` imports next to sources so TypeScript lines up with emitted ESM; run **`npm test`** to compile with esbuild then **`node --test`** on **`dist/*.test.js`** (no `--experimental-strip-types`).
-- Build output is intentionally **unbundled ESM**. The build script compiles runtime modules via glob entrypoints (`src/*.ts` and `src/commands/*.ts`) so every file imported by `dist/cli.js` is present in `dist/`.
-- Bootstrap planning helpers (`aws.context.json` schema, OU analysis, conflict checks) live in **`src/commands/bootstrap.ts`** next to `runBootstrapCommand`.
+- Import Valibot as a namespace: `import * as v from "valibot"` then `v.pipe()`, `v.strictObject()`, `v.parse()`, etc. Do not use named imports.
+- Infer persisted file types from Valibot schemas via `v.InferOutput<typeof schema>`. Do not hand-write duplicate type declarations.
+- Tests use explicit `./foo.js` imports next to sources so TypeScript lines up with emitted ESM; run `npm test` to compile with esbuild then `node --test` on `dist/*.test.js`.
+- Build output is intentionally unbundled ESM. The build script compiles runtime modules via glob entrypoints so every file imported by `dist/cli.js` is present in `dist/`.
 - Functions take a single `props` object argument. Do not use positional argument lists.
 - Do not destructure `props` inside functions; access fields via `props.fieldName`.
-- Prefer object-property shorthand when key and variable names are identical (for example, use `{ organizationsClient }` instead of `{ organizationsClient: organizationsClient }`).
+- Prefer object-property shorthand when key and variable names are identical.
 - Define helper types (`FooProps`, `FooResult`) immediately above the function they belong to.
 - Do not export types or functions that are only used inside the same module.
-- Group related types together. Do not create a separate type for every small shape when an inline type keeps code clearer (for example, prefer an inline `{ planLines: string[] }` for one-off callback props instead of introducing a dedicated standalone type).
-- Command entrypoints must receive required AWS SDK clients via `props`; do not instantiate command clients internally.
+- Group related types together. Prefer inline types for one-off shapes over dedicated standalone types.
+- Command entrypoints receive required AWS SDK clients via `props`; do not instantiate clients internally.
 - Keep command dependencies explicit for production and tests; do not make client injection optional.
 - Test module behavior through exported/public APIs; do not export internals only to make testing easier.
-- Parallelize independent async operations with `Promise.all` where there is no data dependency, and keep dependent operations sequential.
+- Parallelize independent async operations with `Promise.all` where there is no data dependency.
 - Keep user interaction concerns (TTY checks, prompts, `--yes` semantics) in `cli.ts`; command modules receive callback/flags via props.
-- Prefer `value != null` checks over generic falsy checks when testing presence; avoid `Boolean(value)` for nullish checks.
-- Colocate tests as `*.test.ts` next to the module under test (for example `src/state.test.ts`).
-- Keep scan logic in one file: `src/commands/scan.ts`.
-- Keep state model + validation + normalization + read/write in one file: `src/state.ts`. Repeated keyed state transformations should use a working-state abstraction there: convert persisted arrays to record maps once, apply lookups/updates against the working state, then materialize back to arrays once before persistence.
-- Keep `aws.config.ts` schema, picklist generation, state→config transform, codegen, and the loader in one file: `src/awsConfig.ts`. Phase 5's `aws.config.ts` → `state.json` transform also lives here when added.
-- Keep `init` orchestration in `src/commands/init.ts` — it calls existing `runBootstrapCommand` / `runScanCommand` rather than reimplementing them.
+- Prefer `value != null` checks over generic falsy checks when testing presence.
+- Colocate tests as `*.test.ts` next to the module under test.
 - Keep shared reusable helpers in `src/` root (not under `shared/`).
 - Keep command files under `src/commands/`.
-- Keep implementation explicit and simple.
-- Do not use `if/else if` or `if/else` chains. Use guard `if` statements that return early, then let the remaining code handle the happy path. For exhaustive checks, use standalone `if` statements with early returns followed by `assertUnreachable` at the end.
-- Do not keep task tracking in internal Cursor-only todo state. If a checklist, handoff, or work log is needed, keep it on disk in the repo and update that shared file so other agents can see the current status.
-- For fixed command-name sets, define a `const` tuple and derive the union type from it (`type CommandName = (typeof commands)[number]`), then guard unknown input with a dedicated type guard (`isCommandName(value)`). When needed, add a small assert helper around the guard for fail-fast narrowing at module boundaries.
-- Never commit or amend git commits unless the user explicitly asks. Only stage and commit when instructed.
+- Do not use `if/else if` or `if/else` chains. Use guard `if` statements that return early. For exhaustive checks, use standalone `if` statements with early returns followed by `assertUnreachable`.
+- For fixed command-name sets, define a `const` tuple and derive the union type from it (`type CommandName = (typeof commands)[number]`), then guard unknown input with a type guard.
+- Never commit or amend git commits unless the user explicitly asks.

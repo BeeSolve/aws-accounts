@@ -197,14 +197,12 @@ catalog.
 
 - Decision log for phase 1 scan: `docs/phase-1-decisions.md`
 - Decision log for phase 2 bootstrap: `docs/phase-2-decisions.md`
-- Decision log for phase 3 init / regenerate: `docs/phase-3-decisions.md`
-- Wave 4 permission set policy plan: `docs/phase-6-wave-4-permission-set-policy-plan.md`
-- Wave 4 IAM action hinting follow-up plan: `docs/phase-6-wave-4-iam-action-hints-plan.md`
-- Wave 5 IdC entity removal plan: `docs/phase-6-wave-5-idc-removal-plan.md`
-- Wave 6 IdC metadata updates (shipped): `docs/phase-6-wave-6-idc-metadata-updates.md`
+- Architecture and technology choices: `docs/adr/002-architecture-and-technology-choices.md`
+- V1 implementation phases: `docs/adr/003-v1-implementation-phases.md`
+- Remove local execution model: `docs/adr/001-remove-local-execution-model.md`
 - Post-v1 backlog and deferred ideas: `docs/v1-backlog-priority.md`
-- Agreed repository structure: `docs/repository-structure.md`
-- ADR: Remove local execution model: `docs/adr/001-remove-local-execution-model.md`
+- Repository structure and conventions: `docs/repository-structure.md`
+- Account tag inheritance research: `docs/account-tag-inheritance-research.md`
 
 Tests compile with esbuild to `dist/*.test.js` and run with `node --test` (`npm test`).
 
