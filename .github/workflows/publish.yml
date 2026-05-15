@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write  
     steps:
       - uses: actions/checkout@v6
 
@@ -16,12 +17,15 @@ jobs:
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
       - run: npm ci
 
       - run: npm run typecheck
 
       - run: npm test
+
+      - run: npm install -g npm@latest
 
       - name: Check if version is already published
         id: version-check
@@ -36,8 +40,6 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "Publishing ${PACKAGE_NAME}@${PACKAGE_VERSION}"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build
         if: steps.version-check.outputs.skip == 'false'
@@ -45,6 +47,4 @@ jobs:
 
       - name: Publish
         if: steps.version-check.outputs.skip == 'false'
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
