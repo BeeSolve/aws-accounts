@@ -1,5 +1,7 @@
 # Phase 6 Wave 2: IAM Identity Center Reconciliation Plan
 
+> **Note:** The local execution model described in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 This document captures the agreed broader Wave 2 scope for replacing the current
 `idcAssignmentChanged` unsupported diff with real `plan` / `apply` support.
 

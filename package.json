@@ -1,7 +1,7 @@
 {
   "name": "@beesolve/aws-accounts",
   "version": "1.0.0",
-  "description": "Local-first AWS Organizations and IAM Identity Center management CLI",
+  "description": "AWS Organizations and IAM Identity Center management CLI",
   "main": "dist/cli.js",
   "bin": {
     "aws-accounts": "dist/cli.js"

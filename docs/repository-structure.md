@@ -1,5 +1,7 @@
 # Repository Structure
 
+> **Note:** The local execution model was removed in favor of remote-only execution. The structure below reflects the historical layout before that change. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md) for details on the current architecture.
+
 Agreed structure for the v1 codebase (historical phase-1 layout evolved with additional commands and tests).
 
 ```text

@@ -9,10 +9,10 @@ import { runGraveyardCommand } from "./graveyard.js";
 test("runGraveyardCommand lists graveyard accounts with close command hints", async () => {
   const workspace = await createTestWorkspace({ prefix: "graveyard-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
+    const cachePath = join(workspace.workspacePath, ".remote-state-cache.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     await writeFixtureFiles({
-      statePath,
+      cachePath,
       contextPath,
       graveyardAccounts: [
         {
@@ -26,7 +26,7 @@ test("runGraveyardCommand lists graveyard accounts with close command hints", as
     const logger = createCollectingLogger();
     const result = await runGraveyardCommand({
       logger,
-      statePath,
+      cachePath,
       contextPath,
     });
     assert.equal(result.accounts.length, 1);
@@ -44,17 +44,17 @@ test("runGraveyardCommand lists graveyard accounts with close command hints", as
 test("runGraveyardCommand prints empty state message", async () => {
   const workspace = await createTestWorkspace({ prefix: "graveyard-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
+    const cachePath = join(workspace.workspacePath, ".remote-state-cache.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     await writeFixtureFiles({
-      statePath,
+      cachePath,
       contextPath,
       graveyardAccounts: [],
     });
     const logger = createCollectingLogger();
     const result = await runGraveyardCommand({
       logger,
-      statePath,
+      cachePath,
       contextPath,
     });
     assert.equal(result.accounts.length, 0);
@@ -68,8 +68,49 @@ test("runGraveyardCommand prints empty state message", async () => {
   }
 });
 
+test("runGraveyardCommand throws error when cache file does not exist", async () => {
+  const workspace = await createTestWorkspace({ prefix: "graveyard-test-" });
+  try {
+    const cachePath = join(workspace.workspacePath, ".remote-state-cache.json");
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    // Write only the context file, not the cache file
+    const context = {
+      version: "1",
+      generatedAt: "2026-05-01T00:00:00.000Z",
+      organization: {
+        managementAccountId: "999999999999",
+        rootId: "r-root",
+        graveyardOuId: "ou-graveyard",
+      },
+      identityCenter: {
+        instanceArn: "arn:aws:sso:::instance/ssoins-123",
+        identityStoreId: "d-123",
+      },
+      deployment: {
+        profile: "default",
+        region: "eu-central-1",
+        lambdaArn: "",
+        stateBucketName: "",
+        stateCacheTtlSeconds: 300,
+      },
+    };
+    await writeFile(contextPath, `${JSON.stringify(context, null, 2)}\n`, "utf8");
+    const logger = createCollectingLogger();
+    await assert.rejects(
+      () => runGraveyardCommand({ logger, cachePath, contextPath }),
+      (error: Error) => {
+        assert.ok(error.message.includes("No remote state cache found"));
+        assert.ok(error.message.includes(cachePath));
+        return true;
+      },
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
 async function writeFixtureFiles(props: {
-  statePath: string;
+  cachePath: string;
   contextPath: string;
   graveyardAccounts: Array<{
     id: string;
@@ -118,6 +159,10 @@ async function writeFixtureFiles(props: {
       accessRoles: [],
     },
   };
+  const cache = {
+    fetchedAt: "2026-05-01T00:00:00.000Z",
+    state,
+  };
   const context = {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
@@ -139,7 +184,7 @@ async function writeFixtureFiles(props: {
     },
   };
   await Promise.all([
-    writeFile(props.statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8"),
+    writeFile(props.cachePath, `${JSON.stringify(cache, null, 2)}\n`, "utf8"),
     writeFile(props.contextPath, `${JSON.stringify(context, null, 2)}\n`, "utf8"),
   ]);
 }

@@ -1,6 +1,6 @@
 # Phase 4 Plan: `create-account` (local AWS SDK flow)
 
-> Historical note: this document describes a deprecated command. Account creation is now config-driven through `plan`/`apply` via `createAccount`, and `Pending` is no longer a reserved OU.
+> Historical note: this document describes a deprecated command. Account creation is now config-driven through `plan`/`apply` via `createAccount`, and `Pending` is no longer a reserved OU. The local execution model was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
 
 This is the working implementation plan for Phase 4 account creation.  
 No reconciliation behavior is changed here; this command is a dedicated create flow.

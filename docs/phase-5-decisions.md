@@ -1,5 +1,7 @@
 # Phase 5 Decisions
 
+> **Note:** The local execution model described in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 This file records decisions agreed before implementing phase 5: introduce `plan` and `apply` to reconcile AWS Organizations state to `aws.config.ts`. Phase 3 shipped the `aws.config.ts` loader and the state→config transform that phase 5 reuses.
 
 ## Lifecycle (recap)

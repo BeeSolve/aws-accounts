@@ -704,7 +704,7 @@ async function readDeploymentFromContext(): Promise<Deployment> {
   const context = await readAwsContextFromFile(contextFilePath);
   if (context.deployment == null) {
     throw new Error(
-      "No deployment found in aws.context.json. Run `aws-accounts remote bootstrap` first.",
+      "No deployment found in aws.context.json. Run `aws-accounts bootstrap` first.",
     );
   }
   return context.deployment;

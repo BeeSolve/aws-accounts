@@ -6,6 +6,8 @@ edited in `aws.config.ts` after entities already exist in AWS.
 Execution model is unchanged from earlier v1 waves: local `plan`, direct SDK
 `apply`, `state.json` as persisted actual state.
 
+> **Note:** The local execution model described in this document was subsequently removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 ## Supported updates
 
 | Entity | Config fields | AWS API |

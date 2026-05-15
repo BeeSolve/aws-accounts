@@ -19,6 +19,8 @@ This wave stays in the current local-first v1 model:
 - `state.json` remains the persisted source of actual state
 - partial-failure persistence remains in place
 
+> **Note:** The local execution model described above was subsequently removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 ## Goal
 
 Support config-driven IAM Identity Center permission set policy reconciliation

@@ -13,6 +13,8 @@ Cloud-backed execution (`Lambda` / `S3` / saved remote plans) is treated as **v2
 - `state.json` remains the persisted source of actual state
 - partial-failure persistence remains in place
 
+> **Note:** The local execution model described above was subsequently removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 ## Goal
 
 Support config-driven IAM Identity Center **group membership management** for v1:

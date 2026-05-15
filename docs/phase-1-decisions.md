@@ -1,5 +1,7 @@
 # Phase 1 Decisions
 
+> **Note:** The local execution model described in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 This file records decisions made before and during implementation of phase 1 (scan).
 
 ## Lifecycle position

@@ -160,15 +160,6 @@ type RegenerateAwsConfigTypesResult = {
   files: FileWriteResult[];
 };
 
-type WriteAwsConfigModelToFileInput = {
-  config: AwsConfigModel;
-  configPath: string;
-};
-
-type WriteAwsConfigModelToFileResult = {
-  changed: boolean;
-};
-
 type AwsConfigTypesModule = {
   awsConfigSchema: v.GenericSchema;
 };
@@ -386,27 +377,6 @@ export async function regenerateAwsConfigTypes(
         status: "written",
       },
     ],
-  };
-}
-
-export async function writeAwsConfigModelToFile(
-  props: WriteAwsConfigModelToFileInput,
-): Promise<WriteAwsConfigModelToFileResult> {
-  const sortedConfig = sortAwsConfigModel({
-    config: props.config,
-  });
-  const nextConfigContent = renderAwsConfigTs({
-    config: sortedConfig,
-  });
-  const currentConfigContent = await readIfExists(props.configPath);
-  if (currentConfigContent === nextConfigContent) {
-    return {
-      changed: false,
-    };
-  }
-  await writeFile(props.configPath, nextConfigContent, "utf8");
-  return {
-    changed: true,
   };
 }
 

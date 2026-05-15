@@ -1,5 +1,7 @@
 # Phase 5.5 Handoff: `apply` Command
 
+> **Note:** The local execution model described in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 This document is a review-first implementation plan for Phase 5.5 only.
 No assumptions from chat context are required.
 

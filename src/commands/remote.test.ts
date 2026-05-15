@@ -169,7 +169,7 @@ test("runRemoteScan throws error when deployment is missing from context", async
         () => runRemoteScan(input),
         (error: Error) => {
           assert.ok(error.message.includes("No deployment found"));
-          assert.ok(error.message.includes("remote bootstrap"));
+          assert.ok(error.message.includes("bootstrap"));
           return true;
         },
       );
@@ -203,7 +203,7 @@ test("runRemotePlan throws error when deployment is missing from context", async
         () => runRemotePlan(input),
         (error: Error) => {
           assert.ok(error.message.includes("No deployment found"));
-          assert.ok(error.message.includes("remote bootstrap"));
+          assert.ok(error.message.includes("bootstrap"));
           return true;
         },
       );
@@ -237,7 +237,7 @@ test("runRemoteApply throws error when deployment is missing from context", asyn
         () => runRemoteApply(input),
         (error: Error) => {
           assert.ok(error.message.includes("No deployment found"));
-          assert.ok(error.message.includes("remote bootstrap"));
+          assert.ok(error.message.includes("bootstrap"));
           return true;
         },
       );
@@ -271,7 +271,7 @@ test("runRemoteUpgrade throws error when deployment is missing from context", as
         () => runRemoteUpgrade(input),
         (error: Error) => {
           assert.ok(error.message.includes("No deployment found"));
-          assert.ok(error.message.includes("remote bootstrap"));
+          assert.ok(error.message.includes("bootstrap"));
           return true;
         },
       );
@@ -283,16 +283,16 @@ test("runRemoteUpgrade throws error when deployment is missing from context", as
   }
 });
 
-// --- Tests: CLI argument parsing for remote subcommands ---
+// --- Tests: CLI argument parsing for top-level commands ---
 
-test("CLI parses remote subcommand and routes to handler", async (t) => {
+test("CLI parses top-level commands and routes to handler", async (t) => {
   // We test the CLI argument parsing logic by importing the parseArgs behavior
-  // and verifying the remote command routing logic from cli.ts
+  // and verifying the top-level command routing logic from cli.ts
   const { parseArgs } = await import("node:util");
 
-  // Test: remote bootstrap
+  // Test: bootstrap (top-level)
   const bootstrapArgs = parseArgs({
-    args: ["remote", "bootstrap", "--profile", "prod", "--region", "eu-west-1"],
+    args: ["bootstrap", "--profile", "prod", "--region", "eu-west-1"],
     options: {
       profile: { type: "string" },
       region: { type: "string" },
@@ -304,14 +304,13 @@ test("CLI parses remote subcommand and routes to handler", async (t) => {
     },
     allowPositionals: true,
   });
-  assert.equal(bootstrapArgs.positionals[0], "remote");
-  assert.equal(bootstrapArgs.positionals[1], "bootstrap");
+  assert.equal(bootstrapArgs.positionals[0], "bootstrap");
   assert.equal(bootstrapArgs.values.profile, "prod");
   assert.equal(bootstrapArgs.values.region, "eu-west-1");
 
-  // Test: remote plan --refresh
+  // Test: plan --refresh (top-level)
   const planArgs = parseArgs({
-    args: ["remote", "plan", "--refresh"],
+    args: ["plan", "--refresh"],
     options: {
       profile: { type: "string" },
       region: { type: "string" },
@@ -323,13 +322,12 @@ test("CLI parses remote subcommand and routes to handler", async (t) => {
     },
     allowPositionals: true,
   });
-  assert.equal(planArgs.positionals[0], "remote");
-  assert.equal(planArgs.positionals[1], "plan");
+  assert.equal(planArgs.positionals[0], "plan");
   assert.equal(planArgs.values.refresh, true);
 
-  // Test: remote apply --yes --allow-destructive
+  // Test: apply --yes --allow-destructive (top-level)
   const applyArgs = parseArgs({
-    args: ["remote", "apply", "--yes", "--allow-destructive"],
+    args: ["apply", "--yes", "--allow-destructive"],
     options: {
       profile: { type: "string" },
       region: { type: "string" },
@@ -341,55 +339,56 @@ test("CLI parses remote subcommand and routes to handler", async (t) => {
     },
     allowPositionals: true,
   });
-  assert.equal(applyArgs.positionals[0], "remote");
-  assert.equal(applyArgs.positionals[1], "apply");
+  assert.equal(applyArgs.positionals[0], "apply");
   assert.equal(applyArgs.values.yes, true);
   assert.equal(applyArgs.values["allow-destructive"], true);
 });
 
-// --- Tests: Help text output for remote without subcommand ---
+// --- Tests: Help text output for top-level commands ---
 
-test("CLI prints remote help text when remote is called without subcommand", async () => {
-  // Simulate the printRemoteHelp behavior from cli.ts
+test("CLI prints help text listing all top-level commands", async () => {
+  // Simulate the printHelp behavior from cli.ts
   const logger = createCollectingLogger();
 
-  // Replicate the printRemoteHelp function logic
-  logger.log("@beesolve/aws-accounts remote");
+  // Replicate the printHelp function logic (commands are now top-level)
+  logger.log("@beesolve/aws-accounts");
   logger.log("");
   logger.log("Usage:");
   logger.log(
-    "  npm run cli -- remote bootstrap [--profile <name>] [--region <region>] [--yes]",
+    "  npm run cli -- bootstrap [--profile <name>] [--region <region>] [--yes]",
   );
   logger.log(
-    "  npm run cli -- remote scan [--profile <name>] [--region <region>]",
+    "  npm run cli -- scan [--profile <name>] [--region <region>]",
   );
   logger.log(
-    "  npm run cli -- remote plan [--profile <name>] [--region <region>] [--refresh]",
+    "  npm run cli -- init [--profile <name>] [--region <region>] [--yes]",
+  );
+  logger.log("  npm run cli -- regenerate [--yes]");
+  logger.log("  npm run cli -- graveyard");
+  logger.log(
+    "  npm run cli -- plan [--profile <name>] [--region <region>] [--refresh]",
   );
   logger.log(
-    "  npm run cli -- remote apply [--profile <name>] [--region <region>] [--yes] [--allow-destructive] [--ignore-unsupported]",
+    "  npm run cli -- apply [--profile <name>] [--region <region>] [--yes] [--allow-destructive] [--ignore-unsupported]",
   );
   logger.log(
-    "  npm run cli -- remote upgrade [--profile <name>] [--region <region>]",
+    "  npm run cli -- upgrade [--profile <name>] [--region <region>]",
   );
-  logger.log("");
-  logger.log("Subcommands:");
-  logger.log("  bootstrap   Deploy Lambda, S3 bucket, and IAM role");
-  logger.log("  scan        Trigger remote scan of AWS environment");
-  logger.log("  plan        Compute plan using remote state");
-  logger.log("  apply       Send operations to Lambda for execution");
-  logger.log("  upgrade     Update deployed Lambda function code");
 
-  // Verify help text contains expected subcommands
+  // Verify help text contains expected commands
   const allText = logger.logs.join("\n");
   assert.ok(allText.includes("bootstrap"));
   assert.ok(allText.includes("scan"));
   assert.ok(allText.includes("plan"));
   assert.ok(allText.includes("apply"));
   assert.ok(allText.includes("upgrade"));
+  assert.ok(allText.includes("regenerate"));
+  assert.ok(allText.includes("graveyard"));
   assert.ok(allText.includes("--refresh"));
   assert.ok(allText.includes("--profile"));
   assert.ok(allText.includes("--region"));
+  // Verify no "remote" prefix in usage lines
+  assert.ok(!allText.includes("npm run cli -- remote"));
 });
 
 // --- Tests: --refresh flag bypasses cache ---
@@ -574,22 +573,26 @@ test("runRemoteApply displays concurrency conflict message", async () => {
   }
 });
 
-// --- Tests: Remote subcommand validation ---
+// --- Tests: Top-level command validation ---
 
-test("remote subcommand validation rejects unknown subcommands", () => {
-  const remoteSubcommands = ["bootstrap", "scan", "plan", "apply", "upgrade"];
-  function isRemoteSubcommand(value: string): boolean {
-    return remoteSubcommands.includes(value);
+test("top-level command validation rejects unknown commands", () => {
+  const commands = ["bootstrap", "scan", "init", "regenerate", "graveyard", "plan", "apply", "upgrade"];
+  function isCommandName(value: string): boolean {
+    return commands.includes(value);
   }
 
-  assert.equal(isRemoteSubcommand("bootstrap"), true);
-  assert.equal(isRemoteSubcommand("scan"), true);
-  assert.equal(isRemoteSubcommand("plan"), true);
-  assert.equal(isRemoteSubcommand("apply"), true);
-  assert.equal(isRemoteSubcommand("upgrade"), true);
-  assert.equal(isRemoteSubcommand("destroy"), false);
-  assert.equal(isRemoteSubcommand(""), false);
-  assert.equal(isRemoteSubcommand("PLAN"), false);
+  assert.equal(isCommandName("bootstrap"), true);
+  assert.equal(isCommandName("scan"), true);
+  assert.equal(isCommandName("init"), true);
+  assert.equal(isCommandName("regenerate"), true);
+  assert.equal(isCommandName("graveyard"), true);
+  assert.equal(isCommandName("plan"), true);
+  assert.equal(isCommandName("apply"), true);
+  assert.equal(isCommandName("upgrade"), true);
+  assert.equal(isCommandName("destroy"), false);
+  assert.equal(isCommandName(""), false);
+  assert.equal(isCommandName("PLAN"), false);
+  assert.equal(isCommandName("remote"), false);
 });
 
 // --- Helpers for state/config fixtures ---

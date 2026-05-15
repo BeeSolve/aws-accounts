@@ -1,5 +1,7 @@
 # Phase 5.2 Handoff: `mapAwsConfigToState`
 
+> **Note:** The local execution model described in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 This is an implementation + test checklist for step 5.2 only. It is written so any agent can continue without prior chat context.
 
 ## Scope

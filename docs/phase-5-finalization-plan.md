@@ -1,5 +1,7 @@
 # Phase 5 Finalization Plan
 
+> **Note:** The local execution model described in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 ## Scope to Finish
 
 - Add missing `mapAwsConfigToState` test coverage in `src/awsConfig.test.ts`.

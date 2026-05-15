@@ -1,5 +1,7 @@
 # Phase 2 Decisions
 
+> **Note:** The local execution model described in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 This file records agreed behaviour before implementing phase 2 (`bootstrap`): ensure **`Graveyard`** organizational unit exists and persist context locally.
 
 ## Lifecycle position

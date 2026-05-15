@@ -1,5 +1,7 @@
 # V1 complete — post‑v1 backlog
 
+> **Note:** The local execution model referenced in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 **v1 is complete** for the agreed local-first product: Organizations + IAM Identity Center reconciliation via `plan` / `apply`, with gated destructive operations, `graveyard` for parked accounts, account tags and display-name reconciliation, and `plan --json` destructive summary metadata.
 
 What shipped in v1 (high level):
@@ -22,8 +24,8 @@ What shipped in v1 (high level):
 - Account metadata: resource tags and member account display name reconciliation
   (`organizations:TagResource` / `UntagResource`, `account:PutAccountName`)
 
-Cloud-backed execution (`Lambda` / `S3` / remote saved plans) remains **v2** and
-is intentionally excluded from v1.
+Cloud-backed execution (`Lambda` / `S3` / remote saved plans) is now the **sole
+execution model** (the local execution model was removed).
 
 ---
 
@@ -54,5 +56,3 @@ Not scheduled until explicitly prioritized.
 1. Alternate contacts (or other chosen account metadata) via the same plan /
    apply pattern.
 2. Revisit inherited OU-level default tags if product need is confirmed.
-3. v2: Lambda/S3-backed `apply`, persisted plans, or other remote execution
-   models as separately scoped work.

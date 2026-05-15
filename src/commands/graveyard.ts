@@ -1,10 +1,10 @@
 import { readAwsContextFromFile } from "../awsConfig.js";
 import type { Logger } from "../logger.js";
-import { readStateFile } from "../state.js";
+import { readStateCache } from "../remoteStateCache.js";
 
 type GraveyardCommandInput = {
   logger: Logger;
-  statePath: string;
+  cachePath: string;
   contextPath: string;
 };
 
@@ -21,10 +21,16 @@ type GraveyardCommandResult = {
 export async function runGraveyardCommand(
   props: GraveyardCommandInput,
 ): Promise<GraveyardCommandResult> {
-  const [state, context] = await Promise.all([
-    readStateFile(props.statePath),
+  const [cache, context] = await Promise.all([
+    readStateCache(props.cachePath),
     readAwsContextFromFile(props.contextPath),
   ]);
+  if (cache == null) {
+    throw new Error(
+      `No remote state cache found at "${props.cachePath}". Run a scan or apply command first to populate the cache.`,
+    );
+  }
+  const state = cache.state;
   const graveyardOuId = context.organization.graveyardOuId;
   const graveyardAccounts = state.organization.accounts
     .filter((account) => account.parentId === graveyardOuId)

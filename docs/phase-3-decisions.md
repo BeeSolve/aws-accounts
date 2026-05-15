@@ -1,5 +1,7 @@
 # Phase 3 Decisions
 
+> **Note:** The local execution model described in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 This file records decisions agreed before implementing phase 3: introduce `init` (first-time setup) and `regenerate` (refresh `aws.config.types.ts` from `aws.config.ts`), produce `aws.config.ts` (human-editable) and `aws.config.types.ts` (generated valibot schema + inferred TypeScript type), and ship the `aws.config.ts` loader that phase 5 will reuse.
 
 ## Lifecycle

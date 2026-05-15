@@ -1,22 +1,23 @@
 # @beesolve/aws-accounts
 
-Local-first AWS Organizations and IAM Identity Center management CLI.
+AWS Organizations and IAM Identity Center management CLI.
 
 ## v1 status
 
-**v1 is complete** for the agreed local-first scope: `bootstrap`, `scan`, `init`, `regenerate`, `plan`, `apply`, and `graveyard`, with config-driven reconciliation for Organizations (including gated destructive work such as empty OU deletes and parking removed accounts in `Graveyard`) and IAM Identity Center (assignments, permission set policies, metadata updates, and gated entity removal). Human `plan` / `apply` previews and `plan --json` (including destructive summary metadata) are supported.
+**v1 is complete** for the agreed scope: `bootstrap`, `scan`, `init`, `regenerate`, `plan`, `apply`, and `graveyard`, with config-driven reconciliation for Organizations (including gated destructive work such as empty OU deletes and parking removed accounts in `Graveyard`) and IAM Identity Center (assignments, permission set policies, metadata updates, and gated entity removal). Human `plan` / `apply` previews and `plan --json` (including destructive summary metadata) are supported.
 
-**Deferred after v1:** cloud-backed apply (Lambda / S3), cross-session saved plan files, automatic drift merge from the AWS Console into `aws.config.ts`, alternate account metadata (e.g. alternate contacts), and OU-level inherited default tags (see `docs/account-tag-inheritance-research.md`). Follow-ups are tracked in `docs/v1-backlog-priority.md`.
+**Deferred after v1:** cross-session saved plan files, automatic drift merge from the AWS Console into `aws.config.ts`, alternate account metadata (e.g. alternate contacts), and OU-level inherited default tags (see `docs/account-tag-inheritance-research.md`). Follow-ups are tracked in `docs/v1-backlog-priority.md`.
 
 ## Workflow
 
 The tool's lifecycle has three phases:
 
-1. **Init (one-time).** `init` runs `bootstrap` + `scan` and writes `aws.config.ts` + `aws.config.types.ts` from the resulting `state.json`. After this, AWS state is mirrored locally and `aws.config.ts` is your editable source of truth.
-2. **Edit (steady state).** Edit `aws.config.ts` to model the desired state. Run `regenerate` to refresh `aws.config.types.ts` (picklists / IDE autocomplete) after manual edits. A future `watch` command will run `regenerate` automatically.
-3. **Sync.** `plan` shows the diff between desired (`aws.config.ts`) and actual (`state.json`); `apply` reconciles supported mutations in AWS and writes updated `state.json`.
+1. **Bootstrap (one-time).** `bootstrap` deploys the remote infrastructure: S3 bucket for state, IAM role, and Lambda function. Run this once per AWS organization.
+2. **Init (one-time).** `init` triggers a remote scan via Lambda, then generates `aws.config.ts` + `aws.config.types.ts` from the resulting state. After this, `aws.config.ts` is your editable source of truth.
+3. **Edit (steady state).** Edit `aws.config.ts` to model the desired state. Run `regenerate` to refresh `aws.config.types.ts` (picklists / IDE autocomplete) after manual edits.
+4. **Sync.** `plan` computes the diff between desired (`aws.config.ts`) and actual (remote state in S3); `apply` sends operations to Lambda for execution and writes updated state back to S3.
 
-`bootstrap` and `scan` remain individually callable for advanced or recovery use, but they are init-time commands — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged after init; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
+`scan` remains individually callable for advanced or recovery use, but it is an init-time command — not part of the routine edit / sync loop. Manual changes made directly in the AWS Console outside this tool are not detected or merged after init; re-run `init` (with confirmation) to reset `aws.config.ts` to current AWS state.
 
 For IAM inline policies, `aws.config.types.ts` also exports `iam` helpers with
 service-scoped action autocomplete:
@@ -29,13 +30,13 @@ Action: [iam.s3("GetObject"), iam.identitystore("CreateGroupMembership")];
 
 When `init` rewrites `aws.config.ts`, it now emits those helper expressions for
 recognized IAM actions inside inline policies. `scan` still updates only
-`state.json`.
+remote state in S3.
 Those policy helpers and schemas are provided by the installed
 `@beesolve/iam-policy-ts` package and re-exported through `aws.config.types.ts`.
 
 ## Plan/apply safety
 
-- `plan` is local-only in v1 and does not require AWS IAM permissions.
+- `plan` computes the diff using remote state fetched from S3 via Lambda.
 - `apply` recomputes the plan before executing any operations.
 - `apply --yes` skips the interactive confirmation prompt.
 - `apply --ignore-unsupported` proceeds only when unsupported diffs are non-destructive (`unsupportedMutation`).
@@ -43,7 +44,7 @@ Those policy helpers and schemas are provided by the installed
 - Human-readable `plan` and `apply` previews mark supported destructive deletes as `[destructive]`.
 - The interactive `apply` prompt explicitly warns when the pending batch includes destructive operations.
 - Destructive unsupported diffs always block `apply` (no override).
-- If `apply` fails mid-run, the CLI persists partial `state.json`; recovery flow is: run `scan`, verify state, then re-run `apply`.
+- If `apply` fails mid-run, the Lambda persists partial state to S3; recovery flow is: run `scan`, verify state, then re-run `apply`.
 
 ## Supported mutations
 
@@ -54,7 +55,7 @@ Those policy helpers and schemas are provided by the installed
 - rename OU when the diff resolves to a strict one-to-one same-parent rename
 - delete an OU subtree with `apply --allow-destructive` when every removed OU becomes empty and nested deletes can run deepest-first
 - create account in a known target OU
-- rename member accounts to match `aws.config.ts` (AWS Account Management `account:PutAccountName`; requires trusted access for Account Management on the organization). When you change an account’s `name` in config, also update every `assignments` entry (and any other references) that list that account by name so the model stays consistent; the tool resolves existing members by **account id** (falling back to matching by **email** when the config name no longer matches AWS) before planning the rename.
+- rename member accounts to match `aws.config.ts` (AWS Account Management `account:PutAccountName`; requires trusted access for Account Management on the organization). When you change an account's `name` in config, also update every `assignments` entry (and any other references) that list that account by name so the model stays consistent; the tool resolves existing members by **account id** (falling back to matching by **email** when the config name no longer matches AWS) before planning the rename.
 - reconcile member account resource tags with `organizations:TagResource` / `organizations:UntagResource`
 - remove accounts from authored config by moving them into the reserved `Graveyard` OU with `apply --allow-destructive` (manual AWS account closure remains required)
 
@@ -86,7 +87,7 @@ A removed OU can be reconciled with `deleteOu` only when all of the following ar
 
 - the OU is removed from `aws.config.ts`,
 - every current descendant OU in that removed subtree is also removed and safely deletable,
-- each OU in the subtree is either already empty in `state.json` or becomes empty through same-batch direct account moves,
+- each OU in the subtree is either already empty in state or becomes empty through same-batch direct account moves,
 - `apply` can execute the deletes deepest-first,
 - live AWS preflight checks immediately before each delete confirm that no child OU or account is still attached.
 
@@ -147,21 +148,21 @@ Beyond v1 (not implemented in this repo today):
 - deleting an OU subtree when any descendant is unresolved or unsafe to delete
 - deleting the reserved `Graveyard` OU (do that manually outside this tool)
 - alternate contacts and other account metadata not modeled in `aws.config.ts` (tags and member account display names are reconciled when authored in config; see `docs/v1-backlog-priority.md`)
-- cloud-backed `apply`, S3 state, Lambda runner, and Terraform-style saved plan artifacts
+- Terraform-style saved plan artifacts
 
 `Graveyard` is bootstrap-managed internal state. Generated `aws.config.ts` intentionally omits `Graveyard` accounts and does not require a `Graveyard` OU entry.
 
 ## Recovery after failed destructive apply
 
-If `apply --allow-destructive` fails after some operations succeeded, the CLI writes the progressed `state.json` before exiting.
+If `apply --allow-destructive` fails after some operations succeeded, the Lambda writes the progressed state to S3 before returning the error.
 
 Recovery flow:
 
-1. Run `npm run cli -- scan` to refresh local state from live AWS.
-2. Review the resulting `state.json` and rerun `npm run cli -- plan`.
+1. Run `npm run cli -- scan` to refresh remote state from live AWS.
+2. Review the plan with `npm run cli -- plan`.
 3. If the remaining diff is still intended, rerun `npm run cli -- apply --allow-destructive`.
 
-Do not blindly rerun `apply` without `scan` after a partial destructive failure; the live AWS state may already differ from the old local plan.
+Do not blindly rerun `apply` without `scan` after a partial destructive failure; the live AWS state may already differ from the old plan.
 
 ## FAQ
 
@@ -175,13 +176,13 @@ npm run cli -- init
 
 (`npm run cli -- init --yes` for non-interactive runs.)
 
-Reason: `scan` updates only `state.json`, while `aws.config.ts` is rewritten from live AWS state only during `init`.
+Reason: `scan` updates only remote state in S3, while `aws.config.ts` is rewritten from live AWS state only during `init`.
 When possible, the generated inline policy actions are rendered back as
 `iam.*(...)` helper calls instead of raw strings.
 
 ### Why not `scan` only?
 
-`scan` refreshes actual state in `state.json`, but does not modify `aws.config.ts`.
+`scan` refreshes actual state in S3, but does not modify `aws.config.ts`.
 
 ### Why not `scan` + `regenerate`?
 
@@ -203,138 +204,42 @@ catalog.
 - Wave 6 IdC metadata updates (shipped): `docs/phase-6-wave-6-idc-metadata-updates.md`
 - Post-v1 backlog and deferred ideas: `docs/v1-backlog-priority.md`
 - Agreed repository structure: `docs/repository-structure.md`
+- ADR: Remove local execution model: `docs/adr/001-remove-local-execution-model.md`
 
 Tests compile with esbuild to `dist/*.test.js` and run with `node --test` (`npm test`).
 
-## IAM permissions by command
+## IAM permissions
 
-Use this policy as an inline role policy for the profile/role used by the CLI. Each statement corresponds to a CLI command; developers can enable only the statements needed for their workflow.
+The CLI delegates all AWS operations to a deployed Lambda function. IAM permissions are split into two tiers:
+
+### Routine usage (scan, plan, apply, init)
+
+These commands only invoke the Lambda function. The Lambda's own execution role handles Organizations, Identity Center, and S3 access.
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ScanCommand",
+      "Sid": "RoutineCliUsage",
       "Effect": "Allow",
-      "Action": [
-        "organizations:ListRoots",
-        "organizations:ListAccounts",
-        "organizations:ListParents",
-        "organizations:ListOrganizationalUnitsForParent",
-        "organizations:ListTagsForResource",
-        "sso:ListInstances",
-        "sso:ListPermissionSets",
-        "sso:DescribePermissionSet",
-        "sso:GetInlinePolicyForPermissionSet",
-        "sso:ListManagedPoliciesInPermissionSet",
-        "sso:ListCustomerManagedPolicyReferencesInPermissionSet",
-        "sso:ListAccountsForProvisionedPermissionSet",
-        "sso:ListAccountAssignments",
-        "identitystore:ListUsers",
-        "identitystore:ListGroups",
-        "identitystore:ListGroupMemberships"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "BootstrapCommand",
-      "Effect": "Allow",
-      "Action": [
-        "organizations:DescribeOrganization",
-        "organizations:ListRoots",
-        "organizations:ListOrganizationalUnitsForParent",
-        "organizations:CreateOrganizationalUnit",
-        "organizations:TagResource",
-        "sso:ListInstances"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "InitCommand",
-      "Effect": "Allow",
-      "Action": [
-        "organizations:DescribeOrganization",
-        "organizations:ListRoots",
-        "organizations:ListAccounts",
-        "organizations:ListParents",
-        "organizations:ListOrganizationalUnitsForParent",
-        "organizations:ListTagsForResource",
-        "organizations:CreateOrganizationalUnit",
-        "organizations:TagResource",
-        "sso:ListInstances",
-        "sso:ListPermissionSets",
-        "sso:DescribePermissionSet",
-        "sso:GetInlinePolicyForPermissionSet",
-        "sso:ListManagedPoliciesInPermissionSet",
-        "sso:ListCustomerManagedPolicyReferencesInPermissionSet",
-        "sso:ListAccountsForProvisionedPermissionSet",
-        "sso:ListAccountAssignments",
-        "identitystore:ListUsers",
-        "identitystore:ListGroups",
-        "identitystore:ListGroupMemberships"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ApplyCommand",
-      "Effect": "Allow",
-      "Action": [
-        "organizations:ListAccounts",
-        "organizations:MoveAccount",
-        "organizations:CreateOrganizationalUnit",
-        "organizations:UpdateOrganizationalUnit",
-        "organizations:DeleteOrganizationalUnit",
-        "organizations:ListAccountsForParent",
-        "organizations:ListOrganizationalUnitsForParent",
-        "organizations:CreateAccount",
-        "organizations:DescribeCreateAccountStatus",
-        "organizations:TagResource",
-        "organizations:UntagResource",
-        "account:PutAccountName",
-        "identitystore:CreateUser",
-        "identitystore:CreateGroup",
-        "identitystore:CreateGroupMembership",
-        "identitystore:DeleteUser",
-        "identitystore:DeleteGroup",
-        "identitystore:DeleteGroupMembership",
-        "identitystore:GetGroupMembershipId",
-        "identitystore:UpdateGroup",
-        "identitystore:UpdateUser",
-        "sso:CreatePermissionSet",
-        "sso:DeletePermissionSet",
-        "sso:UpdatePermissionSet",
-        "sso:PutInlinePolicyToPermissionSet",
-        "sso:DeleteInlinePolicyFromPermissionSet",
-        "sso:AttachManagedPolicyToPermissionSet",
-        "sso:DetachManagedPolicyFromPermissionSet",
-        "sso:AttachCustomerManagedPolicyReferenceToPermissionSet",
-        "sso:DetachCustomerManagedPolicyReferenceFromPermissionSet",
-        "sso:ProvisionPermissionSet",
-        "sso:DescribePermissionSetProvisioningStatus",
-        "sso:CreateAccountAssignment",
-        "sso:DeleteAccountAssignment",
-        "sso:DescribeAccountAssignmentCreationStatus",
-        "sso:DescribeAccountAssignmentDeletionStatus"
-      ],
-      "Resource": "*"
+      "Action": "lambda:InvokeFunction",
+      "Resource": "arn:aws:lambda:*:*:function:beesolve-aws-accounts"
     }
   ]
 }
 ```
 
-```
+### Infrastructure provisioning (bootstrap, upgrade)
 
-### Remote commands
-
-The `remote` subcommands (`bootstrap`, `scan`, `plan`, `apply`, `upgrade`) require a separate set of permissions. Add this statement to the policy above (or use a dedicated role):
+`bootstrap` deploys the Lambda, S3 bucket, and IAM role. `upgrade` updates the Lambda function code. These commands require broader permissions:
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "RemoteBootstrapCommand",
+      "Sid": "BootstrapInfrastructure",
       "Effect": "Allow",
       "Action": [
         "sts:GetCallerIdentity",
@@ -361,19 +266,9 @@ The `remote` subcommands (`bootstrap`, `scan`, `plan`, `apply`, `upgrade`) requi
       "Resource": "*"
     },
     {
-      "Sid": "RemoteScanPlanApplyCommands",
+      "Sid": "UpgradeLambdaCode",
       "Effect": "Allow",
-      "Action": [
-        "lambda:InvokeFunction"
-      ],
-      "Resource": "arn:aws:lambda:*:*:function:beesolve-aws-accounts"
-    },
-    {
-      "Sid": "RemoteUpgradeCommand",
-      "Effect": "Allow",
-      "Action": [
-        "lambda:UpdateFunctionCode"
-      ],
+      "Action": "lambda:UpdateFunctionCode",
       "Resource": "arn:aws:lambda:*:*:function:beesolve-aws-accounts"
     }
   ]
@@ -382,8 +277,7 @@ The `remote` subcommands (`bootstrap`, `scan`, `plan`, `apply`, `upgrade`) requi
 
 **Notes on commands not in this policy:**
 - `regenerate` performs local code generation only (no AWS API calls); no permissions required.
-- `plan` (local) compares local config against state file (no AWS API calls); no permissions required.
-- `remote plan` / `remote scan` / `remote apply` only need `lambda:InvokeFunction` — the Lambda's own execution role handles Organizations, Identity Center, and S3 access.
+- `graveyard` reads the local remote state cache only (no AWS API calls); no permissions required.
 
 ## Notes
 

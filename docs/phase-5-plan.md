@@ -1,5 +1,7 @@
 # Phase 5 Plan: `plan` and `apply` Reconciliation
 
+> **Note:** The local execution model described in this document was removed in favor of remote-only execution. See [docs/adr/001-remove-local-execution-model.md](adr/001-remove-local-execution-model.md).
+
 This is the working implementation plan. Design decisions live in `docs/phase-5-decisions.md`. As tasks complete, tick boxes here and propagate status to `plan.md`.
 
 ## Overview
