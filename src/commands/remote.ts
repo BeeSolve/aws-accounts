@@ -919,6 +919,10 @@ function formatOperationLine(operation: Operation): string {
   if (operation.kind === "revokeIdcAccountAssignment") {
     return `  revoke IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel(operation.principalType, operation.principalName)} on "${operation.accountName}"`;
   }
+  if (operation.kind === "updateIdcPermissionSetSessionDuration") {
+    const duration = operation.sessionDuration ?? "default";
+    return `  update IdC permission set session duration "${operation.permissionSetName}" -> ${duration}`;
+  }
   assertUnreachable(operation, "Unsupported operation kind in formatOperationLine.");
 }
 
