@@ -141,6 +141,37 @@ Support `PermissionsBoundary` on permission sets (AWS managed or customer-manage
 
 ---
 
+## 8. Well-Architected patterns — opinionated org scaffolding
+
+Provide commands that provision recommended OU structures and guardrails based on AWS Well-Architected best practices.
+
+**Phase 1: `scaffold sandbox`** — create a Sandbox OU with a pre-configured SCP that limits blast radius (e.g., deny expensive services, restrict regions). Useful for safely testing SCPs before promoting them to production OUs.
+
+```bash
+npx aws-accounts scaffold sandbox --name "SCP-Testing" --regions eu-central-1,us-east-1
+```
+
+Would generate:
+
+- A `Sandbox` OU (or custom name) under root
+- A restrictive SCP attached to it (deny region sprawl, deny costly services)
+- Optionally a test account moved into the OU
+
+**Phase 2:** Additional scaffolds for common patterns:
+
+- `scaffold workloads` — Production / Staging / Dev OU hierarchy with graduated SCPs
+- `scaffold security` — Security OU with log archive and audit accounts
+- `scaffold governance` — Shared Services OU with networking and identity accounts
+
+**Key considerations:**
+
+- Scaffolds are additive — they don't touch existing OUs/accounts
+- Generated config is fully editable after scaffolding (no magic, just config)
+- Depends on Organization Policies (item 3) for SCP attachment
+- Should reference AWS Control Tower / Landing Zone patterns without reimplementing them
+
+---
+
 ## Suggested priority
 
 1. `profile` — immediate user value, low effort
@@ -150,3 +181,4 @@ Support `PermissionsBoundary` on permission sets (AWS managed or customer-manage
 5. Organization Policies (SCPs/RCPs) — high value but higher complexity
 6. `drift` — nice-to-have for auditing
 7. Permission set boundaries — niche, low urgency
+8. Well-Architected scaffolds — depends on SCPs, longer-term
