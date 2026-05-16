@@ -22,20 +22,26 @@ npm init -y
 npm pkg set type=module
 npm install @beesolve/aws-accounts
 
-# 2. Deploy remote infrastructure (S3 bucket, IAM role, Lambda)
+# 2. Initialize git and add a .gitignore
+git init
+echo -e "node_modules/\n.remote-state-cache.json" > .gitignore
+
+# 3. Deploy remote infrastructure (S3 bucket, IAM role, Lambda)
 npx aws-accounts bootstrap --region us-east-1
 
-# 3. Scan your AWS org and generate aws.config.ts
+# 4. Scan your AWS org and generate aws.config.ts
 npx aws-accounts init
 
-# 4. Edit aws.config.ts to model your desired state
+# 5. Edit aws.config.ts to model your desired state
 
-# 5. Preview and apply changes
+# 6. Preview and apply changes
 npx aws-accounts plan
 npx aws-accounts apply
 ```
 
 After `init`, `aws.config.ts` is your source of truth. Edit it to add accounts, move OUs, manage permission sets, and control access — then sync with `plan` / `apply`.
+
+> **`.gitignore` recommendation:** Add `node_modules/` and `.remote-state-cache.json` to your `.gitignore`. The cache file is a local copy of remote state that varies per environment and should not be committed.
 
 ## Commands
 

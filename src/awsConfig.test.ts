@@ -17,22 +17,20 @@ import {
   writeConfigModelForTest,
 } from "./helpers.test.js";
 import { noopLogger } from "./logger.js";
-import { readStateFile } from "./state.js";
+import { validateState } from "./state.js";
 
 test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     let confirmationCalls = 0;
     const result = await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -69,25 +67,22 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
 test("writeAwsConfigFromState renders IAM action helpers for known inline policy actions", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
 
-    const stateRaw = await readFile(statePath, "utf8");
-    const state = JSON.parse(stateRaw) as {
+    const modifiedState = structuredClone(state) as {
       identityCenter: {
         permissionSets: Array<{
           name: string;
           inlinePolicy: string | null;
         }>;
       };
-    };
-    const adminAccess = state.identityCenter.permissionSets.find(
+    } & typeof state;
+    const adminAccess = modifiedState.identityCenter.permissionSets.find(
       (permissionSet) => permissionSet.name === "AdminAccess",
     );
     if (adminAccess == null) {
@@ -107,10 +102,9 @@ test("writeAwsConfigFromState renders IAM action helpers for known inline policy
         },
       ],
     });
-    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(modifiedState),
       contextPath,
       configPath,
       typesPath,
@@ -130,16 +124,14 @@ test("writeAwsConfigFromState renders IAM action helpers for known inline policy
 test("writeAwsConfigFromState no-op does not call confirmation", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -149,7 +141,7 @@ test("writeAwsConfigFromState no-op does not call confirmation", async () => {
 
     let confirmationCalls = 0;
     const result = await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -172,12 +164,10 @@ test("writeAwsConfigFromState no-op does not call confirmation", async () => {
 test("writeAwsConfigFromState fails on context mismatch", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     const contextRaw = await readFile(contextPath, "utf8");
@@ -194,7 +184,7 @@ test("writeAwsConfigFromState fails on context mismatch", async () => {
     await assert.rejects(
       () =>
         writeAwsConfigFromState({
-          statePath,
+          state: validateState(state),
           contextPath,
           configPath,
           typesPath,
@@ -211,16 +201,14 @@ test("writeAwsConfigFromState fails on context mismatch", async () => {
 test("regenerateAwsConfigTypes reports no changes when types are up to date", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -249,16 +237,14 @@ test("regenerateAwsConfigTypes reports no changes when types are up to date", as
 test("regenerateAwsConfigTypes writes when types are stale", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -286,16 +272,14 @@ test("regenerateAwsConfigTypes writes when types are stale", async () => {
 test("writeAwsConfigFromState reports would-write when confirmation is rejected", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     const result = await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -314,16 +298,14 @@ test("writeAwsConfigFromState reports would-write when confirmation is rejected"
 test("regenerateAwsConfigTypes reports would-write when confirmation is rejected", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -348,16 +330,14 @@ test("regenerateAwsConfigTypes reports would-write when confirmation is rejected
 test("mapAwsConfigToState emits sentinel ids for entities missing in current state", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -370,7 +350,7 @@ test("mapAwsConfigToState emits sentinel ids for entities missing in current sta
         configPath,
         typesPath,
       }),
-      readStateFile(statePath),
+      Promise.resolve(validateState(state)),
       readAwsContextFromFile(contextPath),
     ]);
     config.organizationalUnits.push({
@@ -443,16 +423,14 @@ test("mapAwsConfigToState emits sentinel ids for entities missing in current sta
 test("mapAwsConfigToState resolves synthetic root parent from context rootId", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -465,7 +443,7 @@ test("mapAwsConfigToState resolves synthetic root parent from context rootId", a
         configPath,
         typesPath,
       }),
-      readStateFile(statePath),
+      Promise.resolve(validateState(state)),
       readAwsContextFromFile(contextPath),
     ]);
     context.organization.rootId = "r-alt-root";
@@ -489,16 +467,14 @@ test("mapAwsConfigToState resolves synthetic root parent from context rootId", a
 test("mapAwsConfigToState keeps existing ids for unchanged config entities", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -511,7 +487,7 @@ test("mapAwsConfigToState keeps existing ids for unchanged config entities", asy
         configPath,
         typesPath,
       }),
-      readStateFile(statePath),
+      Promise.resolve(validateState(state)),
       readAwsContextFromFile(contextPath),
     ]);
 
@@ -578,16 +554,14 @@ test("mapAwsConfigToState keeps existing ids for unchanged config entities", asy
 test("mapAwsConfigToState matches existing member account by email when config name differs", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -600,7 +574,7 @@ test("mapAwsConfigToState matches existing member account by email when config n
         configPath,
         typesPath,
       }),
-      readStateFile(statePath),
+      Promise.resolve(validateState(state)),
       readAwsContextFromFile(contextPath),
     ]);
 
@@ -641,17 +615,18 @@ test("mapAwsConfigToState matches existing member account by email when config n
 test("permission set policy state round-trips between state and config", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
 
-    const rawState = JSON.parse(await readFile(statePath, "utf8")) as {
-      identityCenter: {
+    const rawState = structuredClone(state) as {
+      version: string;
+      generatedAt: string;
+      organization: typeof state.organization;
+      identityCenter: Omit<typeof state.identityCenter, "permissionSets"> & {
         permissionSets: Array<{
           permissionSetArn: string;
           name: string;
@@ -674,10 +649,8 @@ test("permission set policy state round-trips between state and config", async (
         },
       ],
     };
-    await writeFile(statePath, `${JSON.stringify(rawState, null, 2)}\n`, "utf8");
-
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(rawState),
       contextPath,
       configPath,
       typesPath,
@@ -690,7 +663,7 @@ test("permission set policy state round-trips between state and config", async (
         configPath,
         typesPath,
       }),
-      readStateFile(statePath),
+      Promise.resolve(validateState(rawState)),
       readAwsContextFromFile(contextPath),
       readFile(configPath, "utf8"),
     ]);
@@ -742,16 +715,14 @@ test("permission set policy state round-trips between state and config", async (
 test("loadAwsConfigModelFromTsFile validates inline policy documents against IAM schema", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -798,16 +769,14 @@ test("loadAwsConfigModelFromTsFile validates inline policy documents against IAM
 test("loadAwsConfigModelFromTsFile supports IAM action helper functions", async () => {
   const workspace = await createTestWorkspace({ prefix: "aws-config-test-" });
   try {
-    const statePath = join(workspace.workspacePath, "state.json");
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     const configPath = join(workspace.workspacePath, "aws.config.ts");
     const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-    await writeFixtureFiles({
-      statePath,
+    const { state } = await writeFixtureFiles({
       contextPath,
     });
     await writeAwsConfigFromState({
-      statePath,
+      state: validateState(state),
       contextPath,
       configPath,
       typesPath,
@@ -918,10 +887,19 @@ export default awsConfig;
 });
 
 async function writeFixtureFiles(props: {
-  statePath: string;
   contextPath: string;
-}): Promise<void> {
-  const state = {
+}): Promise<{ state: ReturnType<typeof getFixtureState> }> {
+  const state = getFixtureState();
+  await writeFile(
+    props.contextPath,
+    `${JSON.stringify(getFixtureContext(), null, 2)}\n`,
+    "utf8",
+  );
+  return { state };
+}
+
+function getFixtureState() {
+  return {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
@@ -997,7 +975,10 @@ async function writeFixtureFiles(props: {
       accessRoles: [],
     },
   };
-  const context = {
+}
+
+function getFixtureContext() {
+  return {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
@@ -1017,14 +998,6 @@ async function writeFixtureFiles(props: {
       stateCacheTtlSeconds: 300,
     },
   };
-  await Promise.all([
-    writeFile(props.statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8"),
-    writeFile(
-      props.contextPath,
-      `${JSON.stringify(context, null, 2)}\n`,
-      "utf8",
-    ),
-  ]);
 }
 
 async function updateConfigModel(props: {

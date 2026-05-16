@@ -6,20 +6,19 @@ import { runRegenerateCommand } from "./regenerate.js";
 import { writeAwsConfigFromState } from "../awsConfig.js";
 import { createTestWorkspace } from "../helpers.test.js";
 import { noopLogger } from "../logger.js";
+import { validateState } from "../state.js";
 
 test("runRegenerateCommand returns unchanged when types are current", async () => {
   const workspace = await createTestWorkspace({ prefix: "regenerate-test-" });
   try {
-      const statePath = join(workspace.workspacePath, "state.json");
       const contextPath = join(workspace.workspacePath, "aws.context.json");
       const configPath = join(workspace.workspacePath, "aws.config.ts");
       const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-      await writeFixtureFiles({
-        statePath,
+      const { state } = await writeFixtureFiles({
         contextPath,
       });
       await writeAwsConfigFromState({
-        statePath,
+        state: validateState(state),
         contextPath,
         configPath,
         typesPath,
@@ -49,16 +48,14 @@ test("runRegenerateCommand returns unchanged when types are current", async () =
 test("runRegenerateCommand writes updated types when stale", async () => {
   const workspace = await createTestWorkspace({ prefix: "regenerate-test-" });
   try {
-      const statePath = join(workspace.workspacePath, "state.json");
       const contextPath = join(workspace.workspacePath, "aws.context.json");
       const configPath = join(workspace.workspacePath, "aws.config.ts");
       const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
-      await writeFixtureFiles({
-        statePath,
+      const { state } = await writeFixtureFiles({
         contextPath,
       });
       await writeAwsConfigFromState({
-        statePath,
+        state: validateState(state),
         contextPath,
         configPath,
         typesPath,
@@ -84,10 +81,19 @@ test("runRegenerateCommand writes updated types when stale", async () => {
 });
 
 async function writeFixtureFiles(props: {
-  statePath: string;
   contextPath: string;
-}): Promise<void> {
-  const state = {
+}): Promise<{ state: ReturnType<typeof getFixtureState> }> {
+  const state = getFixtureState();
+  await writeFile(
+    props.contextPath,
+    `${JSON.stringify(getFixtureContext(), null, 2)}\n`,
+    "utf8",
+  );
+  return { state };
+}
+
+function getFixtureState() {
+  return {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
@@ -157,7 +163,10 @@ async function writeFixtureFiles(props: {
       accessRoles: [],
     },
   };
-  const context = {
+}
+
+function getFixtureContext() {
+  return {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
@@ -177,8 +186,4 @@ async function writeFixtureFiles(props: {
       stateCacheTtlSeconds: 300,
     },
   };
-  await Promise.all([
-    writeFile(props.statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8"),
-    writeFile(props.contextPath, `${JSON.stringify(context, null, 2)}\n`, "utf8"),
-  ]);
 }

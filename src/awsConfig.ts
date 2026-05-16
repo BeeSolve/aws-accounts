@@ -12,7 +12,6 @@ import {
 } from "@beesolve/iam-policy-ts";
 import {
   createAccessRoleName,
-  readStateFile,
   type StateFile,
   validateState,
 } from "./state.js";
@@ -129,7 +128,7 @@ export const awsConfigModelSchema = v.strictObject({
 export type AwsConfigModel = v.InferOutput<typeof awsConfigModelSchema>;
 
 type WriteAwsConfigFromStateInput = {
-  statePath: string;
+  state: StateFile;
   contextPath: string;
   configPath: string;
   typesPath: string;
@@ -196,7 +195,7 @@ type MapAwsConfigToStateProps = {
 export async function writeAwsConfigFromState(
   props: WriteAwsConfigFromStateInput,
 ): Promise<WriteAwsConfigFromStateResult> {
-  const state = await readStateFile(props.statePath);
+  const state = props.state;
   const context = await readAwsContextFile(props.contextPath);
   assertStateMatchesContext({
     state,

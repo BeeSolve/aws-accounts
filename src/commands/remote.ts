@@ -501,8 +501,6 @@ export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
   input.logger.log("State cache updated.");
 }
 
-const statePath = "state.json";
-
 export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   const deployment = await readDeploymentFromContext();
 
@@ -530,11 +528,8 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   input.logger.log(`  Permission Sets: ${response.summary.permissionSets}`);
   input.logger.log(`  Account Assignments: ${response.summary.accountAssignments}`);
 
-  await Promise.all([
-    writeFile(statePath, `${JSON.stringify(response.state, null, 2)}\n`, "utf8"),
-    writeStateCache(cachePath, response.state),
-  ]);
-  input.logger.log("State written to state.json and cache updated.");
+  await writeStateCache(cachePath, response.state);
+  input.logger.log("State cache updated.");
 
   // Update context file with real values from scan (replaces bootstrap placeholders)
   const context = await readAwsContextFromFile(contextFilePath);
@@ -563,7 +558,7 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   await writeFile(contextFilePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf8");
 
   const configWriteResult = await writeAwsConfigFromState({
-    statePath,
+    state: response.state,
     contextPath: contextFilePath,
     configPath: configFilePath,
     typesPath: typesFilePath,
