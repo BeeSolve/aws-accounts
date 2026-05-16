@@ -60,6 +60,7 @@ After `init`, `aws.config.ts` is your source of truth. Edit it to add accounts, 
 | `upgrade` | Updates the deployed Lambda function code |
 | `scan` | Refreshes remote state in S3 (advanced/recovery use) |
 | `graveyard` | Lists accounts parked in the Graveyard OU |
+| `profile` | Generates an AWS CLI SSO profile block from local state |
 
 ## Workflow
 
@@ -160,20 +161,46 @@ npx aws-accounts plan        # review remaining diff
 npx aws-accounts apply       # re-apply (add --allow-destructive if needed)
 ```
 
+## Generating AWS CLI profiles
+
+The `profile` command reads your local state cache and presents an interactive picker of every account/permission-set combination you have access to, then prints a ready-to-paste `~/.aws/config` block:
+
+```bash
+npx aws-accounts profile --sso-start-url https://d-xxxxxxxxxx.awsapps.com/start
+```
+
+```ini
+[profile my-account-admin-access]
+sso_session = sso
+sso_account_id = 123456789012
+sso_role_name = AdminAccess
+
+[sso-session sso]
+sso_start_url = https://d-xxxxxxxxxx.awsapps.com/start
+sso_region = eu-central-1
+sso_registration_scopes = sso:account:access
+```
+
+The SSO start URL is not returned by the AWS API — set it via the flag or the `AWS_SSO_START_URL` environment variable to avoid typing it every time. Use `--sso-session <name>` to customise the session name (default: `sso`).
+
+Requires a populated local state cache — run `plan` or `scan` first if the cache is empty.
+
 ## CLI Options
 
 ```
 npx aws-accounts <command> [options]
 
 Options:
-  --profile <name>       AWS profile (fallback: AWS_PROFILE)
-  --region <region>      AWS region (fallback: AWS_REGION, AWS_DEFAULT_REGION)
-  --yes                  Skip interactive confirmations
-  --json                 Output plan as JSON (plan command)
-  --allow-destructive    Allow destructive operations (apply command)
-  --ignore-unsupported   Proceed with non-destructive unsupported diffs (apply command)
-  --refresh              Force state refresh before planning (plan command)
-  --help                 Show help
+  --profile <name>          AWS profile (fallback: AWS_PROFILE)
+  --region <region>         AWS region (fallback: AWS_REGION, AWS_DEFAULT_REGION)
+  --yes                     Skip interactive confirmations
+  --json                    Output plan as JSON (plan command)
+  --allow-destructive       Allow destructive operations (apply command)
+  --ignore-unsupported      Proceed with non-destructive unsupported diffs (apply command)
+  --refresh                 Force state refresh before planning (plan command)
+  --sso-start-url <url>     IAM Identity Center access portal URL (fallback: AWS_SSO_START_URL)
+  --sso-session <name>      SSO session name for profile output (default: sso)
+  --help                    Show help
 ```
 
 ## IAM Permissions
