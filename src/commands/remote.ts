@@ -536,6 +536,32 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   ]);
   input.logger.log("State written to state.json and cache updated.");
 
+  // Update context file with real values from scan (replaces bootstrap placeholders)
+  const context = await readAwsContextFromFile(contextFilePath);
+  const graveyardOu = response.state.organization.organizationalUnits.find(
+    (ou: { name: string }) => ou.name === "Graveyard",
+  );
+  const updatedContext = {
+    ...context,
+    organization: {
+      managementAccountId: context.organization.managementAccountId,
+      rootId: response.state.organization.rootId,
+      graveyardOuId: graveyardOu?.id ?? context.organization.graveyardOuId,
+    },
+    identityCenter: {
+      instanceArn: response.state.identityCenter.instanceArn,
+      identityStoreId: response.state.identityCenter.identityStoreId,
+    },
+  };
+  const ordered: Record<string, unknown> = {
+    version: updatedContext.version,
+    generatedAt: new Date().toISOString(),
+    organization: updatedContext.organization,
+    identityCenter: updatedContext.identityCenter,
+    deployment: updatedContext.deployment,
+  };
+  await writeFile(contextFilePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf8");
+
   const configWriteResult = await writeAwsConfigFromState({
     statePath,
     contextPath: contextFilePath,
