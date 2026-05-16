@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
-import { resolve } from "node:path";
+import { resolve, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import {
   BucketLocationConstraint,
@@ -88,7 +89,6 @@ const contextFilePath = "aws.context.json";
 const configFilePath = "aws.config.ts";
 const typesFilePath = "aws.config.types.ts";
 const cachePath = ".remote-state-cache.json";
-const lambdaZipPath = "dist-lambda/lambda.zip";
 const lambdaRoleName = "beesolve-aws-accounts-lambda-role";
 const lambdaFunctionName = "beesolve-aws-accounts";
 
@@ -1123,9 +1123,15 @@ async function createNewPermissionSet(props: {
 
 
 async function readLambdaZip(): Promise<Buffer> {
+  const thisFile = fileURLToPath(import.meta.url);
+  // thisFile = <root>/dist/commands/remote.js → go up 3 levels to package root
+  const packageDir = dirname(dirname(dirname(thisFile)));
+  const zipPath = join(packageDir, "dist-lambda", "lambda.zip");
   try {
-    return await readFile(resolve(lambdaZipPath));
+    return await readFile(zipPath);
   } catch {
-    throw new Error("dist-lambda/lambda.zip not found. Run `npm run build:lambda` first.");
+    throw new Error(
+      `Lambda zip not found at ${zipPath}. The package may be corrupted — try reinstalling @beesolve/aws-accounts.`,
+    );
   }
 }
