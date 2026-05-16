@@ -117,8 +117,115 @@ All policy types share the same API pattern: `CreatePolicy` / `UpdatePolicy` / `
 16. **Declarative policies** — Too new, limited adoption.
 17. **Trusted token issuers / Applications** — Enterprise edge cases.
 
+
 ---
 
-## README gap
+## Control Tower / Account Factory functionality via direct APIs
 
-The README does not explicitly state that IAM Identity Center must be enabled. The description says "AWS Organizations and IAM Identity Center" but the prerequisites section only mentions "Node.js 24+ and valid AWS credentials." Should add: "Requires an AWS Organization with IAM Identity Center enabled."
+Research into whether we can provide Control Tower-equivalent functionality using only AWS SDKs — no Control Tower, no CloudFormation, no StackSets dependency.
+
+### What Control Tower actually creates
+
+A "landing zone" is just a set of resources provisioned via standard APIs:
+
+| CT resource | Direct API equivalent |
+|-------------|----------------------|
+| Security OU | `organizations:CreateOrganizationalUnit` |
+| Log Archive account | `organizations:CreateAccount` + move to Security OU |
+| Audit account | `organizations:CreateAccount` + move to Security OU |
+| Org-wide CloudTrail | `cloudtrail:CreateTrail` with `IsOrganizationTrail: true` |
+| S3 bucket for logs | `s3:CreateBucket` + bucket policy for org trail writes |
+| Deny-region SCP | `organizations:CreatePolicy` + `AttachPolicy` |
+| Baseline SCPs | Same pattern |
+| Config recorder in member accounts | `config:PutConfigurationRecorder` (cross-account) |
+
+All achievable via SDK calls from the management account or via `sts:AssumeRole` into member accounts.
+
+### Account Factory replacement
+
+What CT Account Factory does at account creation:
+
+| Step | API | Our status |
+|------|-----|------------|
+| Create account | `organizations:CreateAccount` | ✅ Done |
+| Move to target OU | `organizations:MoveAccount` | ✅ Done |
+| Set alternate contacts | `account:PutAlternateContact` | On roadmap (Tier 2) |
+| Apply SCPs via OU membership | Automatic once SCPs exist on OU | On roadmap (Tier 1) |
+| Enable CloudTrail | `cloudtrail:CreateTrail` / `StartLogging` | Future |
+| Enable Config recording | `config:PutConfigurationRecorder` / `StartConfigurationRecorder` | Future |
+| Deploy baseline IAM roles | `iam:CreateRole` / `PutRolePolicy` | Future |
+| Account-level settings | `account:PutAccountSettings`, `iam:CreateAccountAlias` | Future |
+
+Cross-account operations use `OrganizationAccountAccessRole` — AWS automatically creates this role in every member account provisioned via `CreateAccount`.
+
+### Controls / Guardrails mapping
+
+CT's ~400 controls map to three mechanisms:
+
+| Control type | CT implementation | Our equivalent |
+|--------------|-------------------|----------------|
+| Preventive | SCPs | `organizations:CreatePolicy` / `AttachPolicy` — on roadmap |
+| Detective | AWS Config rules | `config:PutConfigRule` via cross-account assume-role — future |
+| Proactive | CloudFormation hooks | Out of scope (CFN-specific) |
+
+### Account baselines — recommended approach
+
+Rather than deploying a custom Lambda to member accounts, the better approach is:
+
+**Option A: Direct SDK calls for known baselines (recommended)**
+
+Extend the existing management-account Lambda to assume role into member accounts and execute well-defined setup operations:
+
+```ts
+accountDefaults: {
+  alias: "${accountName}-${orgName}",
+  cloudTrail: { enabled: true },
+  configRecorder: { enabled: true, deliveryBucket: "org-config-logs" },
+  passwordPolicy: { minimumLength: 14, requireSymbols: true },
+  blockPublicS3: true,
+  ebs: { defaultEncryption: true },
+}
+```
+
+Each setting maps to 1-3 SDK calls. Idempotent, fits plan/apply model, user declares desired state without writing code.
+
+**Option B: StackSets as escape hatch for arbitrary resources**
+
+For truly custom resources (VPCs, IAM roles, specific S3 buckets), orchestrate CloudFormation StackSets:
+
+```ts
+accountDefaults: {
+  stackSets: [
+    { name: "baseline-networking", template: "./templates/vpc.yaml", parameters: { CidrBlock: "10.0.0.0/16" } },
+    { name: "baseline-security", template: "./templates/security-roles.yaml" },
+  ],
+}
+```
+
+The Lambda calls `cloudformation:CreateStackSet` + `CreateStackInstances`. StackSets handle cross-account deployment, rollback, and drift. We just orchestrate when they run.
+
+**Why not a custom Lambda in member accounts:**
+
+- Reinvents StackSets without rollback, drift detection, or parallel execution
+- 15-minute Lambda timeout limits complex setups
+- No automatic cleanup on partial failure
+- Packaging burden on the user (must write idempotent handler)
+- IAM permissions explosion (Lambda role needs whatever the handler requires)
+
+### Implementation path
+
+1. **Now:** Org structure + Identity Center (done)
+2. **Next:** SCPs + tag policies + session duration (Tier 1-2)
+3. **Then:** Account defaults — post-creation settings via cross-account assume-role (direct SDK calls for common baselines)
+4. **Later:** Org-wide CloudTrail + Config — the "landing zone in config" story
+5. **Escape hatch:** StackSets integration for arbitrary custom resources
+
+### Positioning
+
+**"Control Tower as code, without Control Tower."**
+
+- Transparent: every resource is in your config file
+- No opaque managed resources
+- No ClickOps
+- No Control Tower cost overhead (Config rules in every account, mandatory CloudTrail)
+- Full plan/apply semantics with destructive operation gates
