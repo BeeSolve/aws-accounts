@@ -19,6 +19,7 @@ Requires Node.js 24+ and valid AWS credentials (via environment, profile, or SSO
 # 1. Create a project directory
 mkdir my-org && cd my-org
 npm init -y
+npm pkg set type=module
 npm install @beesolve/aws-accounts
 
 # 2. Deploy remote infrastructure (S3 bucket, IAM role, Lambda)

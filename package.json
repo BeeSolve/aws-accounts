@@ -4,9 +4,10 @@
   "description": "AWS Organizations and IAM Identity Center management CLI",
   "main": "dist/cli.js",
   "bin": {
-    "aws-accounts": "dist/cli.js"
+    "aws-accounts": "bin/cli.js"
   },
   "files": [
+    "bin",
     "dist",
     "!dist/**/*.test.js",
     "dist-lambda"
@@ -21,7 +22,7 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && esbuild $(find src -name '*.ts' ! -name '*.test.ts') --platform=node --target=node24 --format=esm --outdir=dist --outbase=src && chmod +x dist/cli.js",
+    "build": "npm run clean && esbuild $(find src -name '*.ts' ! -name '*.test.ts') --platform=node --target=node24 --format=esm --outdir=dist --outbase=src",
     "build:lambda": "node scripts/buildLambda.ts",
     "build:tests": "find dist -name '*.test.js' -delete && esbuild \"src/**/*.test.ts\" --platform=node --target=node24 --format=esm --outdir=dist --outbase=src",
     "cli": "npm run build && node dist/cli.js",
