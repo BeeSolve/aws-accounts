@@ -11,7 +11,12 @@ Config-driven management for AWS Organizations and IAM Identity Center. Define y
 npm install @beesolve/aws-accounts
 ```
 
-Requires Node.js 24+ and valid AWS credentials (via environment, profile, or SSO).
+## Prerequisites
+
+- **Node.js 24+**
+- **AWS Organization** with all features enabled
+- **IAM Identity Center** enabled in the organization's management account (or delegated admin account)
+- **AWS credentials** with access to the management account (via environment, profile, or SSO)
 
 ## Quick Start
 

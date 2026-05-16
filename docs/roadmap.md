@@ -1,10 +1,31 @@
 # Roadmap
 
-Post-v1 features under consideration. Not committed to a timeline.
+Post-v1 features organized by priority tier. See [feature-parity-research.md](./feature-parity-research.md) for the full analysis.
 
 ---
 
-## 1. `profile` command — generate AWS CLI profiles
+## Tier 1 — Immediate differentiators
+
+### Permission set session duration
+
+Add `sessionDuration` field to permission set config. The default 1h is too short for most workflows — this is table-stakes.
+
+```ts
+permissionSets: [
+  {
+    name: "AdminAccess",
+    description: "Admin",
+    sessionDuration: "PT8H", // ISO-8601, max 12h
+    // ...
+  },
+]
+```
+
+**Effort:** Trivial — one field on create/update, one field in scan.
+
+---
+
+### `profile` command — generate AWS CLI profiles
 
 Generate `~/.aws/config` profile blocks from account/permission-set assignments.
 
@@ -24,39 +45,13 @@ sso_registration_scopes = sso:account:access
 
 **Phase 2:** Read existing `~/.aws/config`, detect conflicts, offer to append or update the file directly.
 
----
-
-## 2. ABAC — Attributes for Access Control
-
-Define attribute mappings on the Identity Center instance that enable `${aws:PrincipalTag/key}` conditions in permission set policies.
-
-**API surface:**
-
-- `CreateInstanceAccessControlAttributeConfiguration` — enable ABAC and define mappings
-- `UpdateInstanceAccessControlAttributeConfiguration` — modify mappings
-- `DescribeInstanceAccessControlAttributeConfiguration` — read current config
-- `DeleteInstanceAccessControlAttributeConfiguration` — disable ABAC
-
-**Proposed config model:**
-
-```ts
-identityCenter: {
-  accessControlAttributes: [
-    { key: "department", source: ["${path:enterprise.department}"] },
-    { key: "costCenter", source: ["${path:enterprise.costCenter}"] },
-  ],
-}
-```
-
-Scan reads current ABAC config, plan/apply reconciles attribute mappings.
-
-**Complexity:** Low-medium. Simple key/source[] array structure.
+**Effort:** Low. Eliminates need for `aws-sso-util` (Python).
 
 ---
 
-## 3. Organization Policies — SCPs and RCPs
+### Organization Policies — SCPs and RCPs
 
-Manage Service Control Policies and Resource Control Policies attached to OUs and accounts.
+Manage Service Control Policies and Resource Control Policies attached to OUs and accounts. The #1 governance primitive — biggest gap vs. Terraform/OrgFormation.
 
 **API surface:**
 
@@ -102,9 +97,111 @@ policies: {
 2. Plan/apply for create, update content, attach/detach
 3. Destructive delete with safety checks (ensure FullAWSAccess remains)
 
+**Effort:** Medium-high. High value.
+
 ---
 
-## 4. `graveyard close` — generate account closure commands
+## Tier 2 — Strong value-add
+
+### Tag policies
+
+Enforce tag standardization org-wide. Same API pattern as SCPs (`CreatePolicy` type `TAG_POLICY`). Universal governance need — often the first policy type orgs enable after SCPs.
+
+```ts
+policies: {
+  tagPolicies: [
+    {
+      name: "CostAllocationTags",
+      description: "Enforce cost allocation tags",
+      content: { tags: { CostCenter: { tag_key: { "@@assign": "CostCenter" } } } },
+      targets: ["Production", "Engineering"],
+    },
+  ],
+}
+```
+
+**Effort:** Low-medium (same API as SCPs — implement together).
+
+---
+
+### Account alternate contacts
+
+Manage billing, operations, and security contacts per account. Satisfies CIS AWS Foundations Benchmark 1.1/1.2.
+
+```ts
+accounts: [
+  {
+    name: "Production",
+    email: "prod@example.com",
+    alternateContacts: {
+      billing: { name: "Finance Team", email: "billing@example.com", phone: "+1..." },
+      operations: { name: "Ops Team", email: "ops@example.com", phone: "+1..." },
+      security: { name: "Security Team", email: "security@example.com", phone: "+1..." },
+    },
+  },
+]
+```
+
+**Effort:** Low. Simple API (`PutAlternateContact` / `GetAlternateContact`).
+
+---
+
+### AI services opt-out policies
+
+Opt out of AWS AI service data usage for training. Increasingly relevant, very simple structure.
+
+```ts
+policies: {
+  aiOptOutPolicies: [
+    {
+      name: "OptOutAll",
+      description: "Opt out of all AI service data usage",
+      content: { services: { default: { opt_out_policy: { "@@assign": "optOut" } } } },
+      targets: ["root"],
+    },
+  ],
+}
+```
+
+**Effort:** Low (same API pattern as other policies).
+
+---
+
+### `validate` command — local config validation
+
+Check `aws.config.ts` for common mistakes without hitting AWS:
+
+- Duplicate account/OU/group/user names
+- Assignments referencing non-existent permission sets or groups
+- Invalid policy syntax or size violations (SCP 5120-byte limit)
+- Circular or conflicting references
+
+Fast local feedback loop before plan/apply.
+
+**Effort:** Low-medium. No AWS calls needed.
+
+---
+
+## Tier 3 — Solid additions
+
+### ABAC — Attributes for Access Control
+
+Define attribute mappings on the Identity Center instance that enable `${aws:PrincipalTag/key}` conditions in permission set policies.
+
+```ts
+identityCenter: {
+  accessControlAttributes: [
+    { key: "department", source: ["${path:enterprise.department}"] },
+    { key: "costCenter", source: ["${path:enterprise.costCenter}"] },
+  ],
+}
+```
+
+**Effort:** Low-medium. Simple key/source[] array structure.
+
+---
+
+### `graveyard close` — generate account closure commands
 
 Output AWS CLI commands for closing graveyarded accounts:
 
@@ -112,73 +209,56 @@ Output AWS CLI commands for closing graveyarded accounts:
 aws organizations close-account --account-id 123456789012
 ```
 
-Low effort, completes the account lifecycle story.
+**Effort:** Trivial. Completes the account lifecycle story.
 
 ---
 
-## 5. `validate` command — local config validation
+### Permission set boundaries
 
-Check `aws.config.ts` for common mistakes without hitting AWS:
+Support `PermissionsBoundary` on permission sets (AWS managed or customer-managed policy ARN). Already supported by the SSO Admin API, just not modeled in config yet.
 
-- Duplicate account/OU/group/user names
-- Assignments referencing non-existent permission sets or groups
-- Invalid policy syntax or size violations
-- Circular or conflicting references
-
-Fast local feedback loop before plan/apply.
+**Effort:** Low.
 
 ---
 
-## 6. `drift` command — detect manual AWS changes
+### Delegated administrator
+
+Register/deregister member accounts as delegated administrators for services (SSO, Organizations, etc.). Useful for security-conscious orgs that avoid running from the management account.
+
+**Effort:** Low.
+
+---
+
+## Tier 4 — Long-term
+
+### `drift` command — detect manual AWS changes
 
 Compare current remote state against last-known state to show what changed in AWS since last scan. Useful for auditing manual console changes before deciding whether to `init` (reset config) or `plan` (push config).
 
 ---
 
-## 7. Permission set boundaries
+### Backup policies
 
-Support `PermissionsBoundary` on permission sets (AWS managed or customer-managed policy ARN). Already supported by the SSO Admin API, just not modeled in config yet.
-
----
-
-## 8. Well-Architected patterns — opinionated org scaffolding
-
-Provide commands that provision recommended OU structures and guardrails based on AWS Well-Architected best practices.
-
-**Phase 1: `scaffold sandbox`** — create a Sandbox OU with a pre-configured SCP that limits blast radius (e.g., deny expensive services, restrict regions). Useful for safely testing SCPs before promoting them to production OUs.
-
-```bash
-npx aws-accounts scaffold sandbox --name "SCP-Testing" --regions eu-central-1,us-east-1
-```
-
-Would generate:
-
-- A `Sandbox` OU (or custom name) under root
-- A restrictive SCP attached to it (deny region sprawl, deny costly services)
-- Optionally a test account moved into the OU
-
-**Phase 2:** Additional scaffolds for common patterns:
-
-- `scaffold workloads` — Production / Staging / Dev OU hierarchy with graduated SCPs
-- `scaffold security` — Security OU with log archive and audit accounts
-- `scaffold governance` — Shared Services OU with networking and identity accounts
-
-**Key considerations:**
-
-- Scaffolds are additive — they don't touch existing OUs/accounts
-- Generated config is fully editable after scaffolding (no magic, just config)
-- Depends on Organization Policies (item 3) for SCP attachment
-- Should reference AWS Control Tower / Landing Zone patterns without reimplementing them
+Centralized backup plans across accounts. Same API pattern as other org policies.
 
 ---
 
-## Suggested priority
+### Well-Architected patterns — opinionated org scaffolding
 
-1. `profile` — immediate user value, low effort
-2. `graveyard close` — trivial, completes existing workflow
-3. `validate` — fast feedback, no AWS calls
-4. ABAC — unlocks tag-based policies
-5. Organization Policies (SCPs/RCPs) — high value but higher complexity
-6. `drift` — nice-to-have for auditing
-7. Permission set boundaries — niche, low urgency
-8. Well-Architected scaffolds — depends on SCPs, longer-term
+Provide commands that provision recommended OU structures and guardrails based on AWS Well-Architected best practices. Depends on SCPs being implemented first.
+
+**Phase 1: `scaffold sandbox`** — create a Sandbox OU with a pre-configured SCP that limits blast radius.
+
+**Phase 2:** Additional scaffolds for common patterns (workloads, security, governance).
+
+---
+
+### Declarative policies (EC2, VPC)
+
+Newer policy type (2024) for centrally configuring AWS service behavior. Limited adoption so far.
+
+---
+
+### Trusted token issuers / Applications
+
+Enterprise edge cases for M2M auth and SAML/OIDC app integrations. Not related to account access management.
