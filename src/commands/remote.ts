@@ -153,7 +153,12 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
   });
 
   // Persist deployment to context file
-  const context = await readAwsContextFromFile(contextFilePath);
+  let context: AwsContextFile | null = null;
+  try {
+    context = await readAwsContextFromFile(contextFilePath);
+  } catch {
+    // File doesn't exist yet on fresh bootstrap — that's expected
+  }
   const deployment: Deployment = {
     profile: input.profile ?? "",
     region: resolvedRegion,
@@ -162,10 +167,15 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
     stateCacheTtlSeconds: 300,
   };
 
-  const updatedContext: AwsContextFile = {
-    ...context,
-    deployment,
-  };
+  const updatedContext = context != null
+    ? { ...context, deployment }
+    : {
+      version: "1",
+      generatedAt: new Date().toISOString(),
+      organization: { managementAccountId: accountId, rootId: "pending", graveyardOuId: "pending" },
+      identityCenter: { instanceArn: "pending", identityStoreId: "pending" },
+      deployment,
+    };
 
   const ordered: Record<string, unknown> = {
     version: updatedContext.version,
@@ -178,7 +188,7 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
 
   const instanceArn = updatedContext.identityCenter?.instanceArn;
 
-  if (instanceArn != null && instanceArn !== "") {
+  if (instanceArn != null && instanceArn !== "" && instanceArn !== "pending") {
     await ensureOrganizationManagementPermissionSet({
       ssoAdminClient: input.ssoAdminClient,
       instanceArn,
