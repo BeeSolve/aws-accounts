@@ -1171,10 +1171,15 @@ function renderPolicyActionString(value: string): string {
     return JSON.stringify(value);
   }
 
-  if (isIdentifierSafeServicePrefix(servicePrefix)) {
-    return `iam.${servicePrefix}(${JSON.stringify(actionName)})`;
+  const fnName = servicePrefixToCamelCase(servicePrefix);
+  if (isIdentifierSafeServicePrefix(fnName)) {
+    return `iam.${fnName}(${JSON.stringify(actionName)})`;
   }
-  return `iam[${JSON.stringify(servicePrefix)}](${JSON.stringify(actionName)})`;
+  return `iam[${JSON.stringify(fnName)}](${JSON.stringify(actionName)})`;
+}
+
+function servicePrefixToCamelCase(value: string): string {
+  return value.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
 function isIdentifierSafeServicePrefix(value: string): boolean {
@@ -1216,9 +1221,8 @@ function renderAwsConfigTypesTs(props: { config: AwsConfigModel }): string {
 
   return `import * as v from "valibot";
 import { iamPolicyDocumentSchema } from "@beesolve/iam-policy-ts";
+export * as iam from "@beesolve/iam-policy-ts";
 export {
-  iam,
-  iamAction,
   iamActionCatalog,
   iamActionCatalogActionCount,
   iamActionCatalogSourceSha256,
@@ -1234,10 +1238,6 @@ export {
   assertIamPolicyDocumentStrict,
 } from "@beesolve/iam-policy-ts";
 export type {
-  IamActionCatalog,
-  IamPolicyServicePrefix,
-  IamPolicyActionNameByService,
-  IamPolicyActionForService,
   IamPolicyVersion,
   IamPolicyScalar,
   IamPolicyScalarList,

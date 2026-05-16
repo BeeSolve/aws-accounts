@@ -54,8 +54,7 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
     assert.match(configRaw, /const awsConfig:/);
     assert.match(typesRaw, /export const awsConfigSchema/);
     assert.match(typesRaw, /@beesolve\/iam-policy-ts/);
-    assert.match(typesRaw, /export \{\s*iam,/s);
-    assert.match(typesRaw, /export type \{\s*IamActionCatalog,/s);
+    assert.match(typesRaw, /export \* as iam from "@beesolve\/iam-policy-ts"/);
     assert.match(configRaw, /\bname: "root"/);
     assert.match(configRaw, /\bmembers: \[/);
     assert.match(configRaw, /"alice"/);
@@ -114,7 +113,7 @@ test("writeAwsConfigFromState renders IAM action helpers for known inline policy
 
     const configRaw = await readFile(configPath, "utf8");
     assert.match(configRaw, /iam\.s3\("GetObject"\)/);
-    assert.match(configRaw, /iam\["sso-directory"\]\("SearchUsers"\)/);
+    assert.match(configRaw, /iam\.ssoDirectory\("SearchUsers"\)/);
     assert.match(configRaw, /"custom-service:DoThing"/);
   } finally {
     await workspace.cleanup();
@@ -838,7 +837,7 @@ const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
             Action: [
               iam.s3("GetObject"),
               iam.identitystore("CreateGroupMembership"),
-              iam["sso-directory"]("SearchUsers"),
+              iam.ssoDirectory("SearchUsers"),
             ],
             Resource: "*",
           },
