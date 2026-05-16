@@ -12,6 +12,7 @@ import {
 } from "./awsClientConfig.js";
 import { consoleLogger, type Logger } from "./logger.js";
 import { runGraveyardCommand } from "./commands/graveyard.js";
+import { runProfileCommand } from "./commands/profile.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
 import {
   runRemoteBootstrap,
@@ -33,6 +34,7 @@ const commands = [
   "init",
   "regenerate",
   "graveyard",
+  "profile",
   "plan",
   "apply",
   "upgrade",
@@ -55,6 +57,8 @@ async function main(): Promise<void> {
       "ignore-unsupported": { type: "boolean", default: false },
       "allow-destructive": { type: "boolean", default: false },
       refresh: { type: "boolean", default: false },
+      "sso-start-url": { type: "string" },
+      "sso-session": { type: "string", default: "sso" },
       help: { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -101,6 +105,23 @@ async function main(): Promise<void> {
       logger,
       cachePath: ".remote-state-cache.json",
       contextPath,
+    });
+    return;
+  }
+
+  if (command === "profile") {
+    const ssoStartUrl = args.values["sso-start-url"] ?? process.env.AWS_SSO_START_URL;
+    if (ssoStartUrl == null) {
+      printHelp(logger);
+      throw toUsageError("--sso-start-url is required for the profile command (or set AWS_SSO_START_URL).");
+    }
+    await runProfileCommand({
+      logger,
+      cachePath: ".remote-state-cache.json",
+      contextPath,
+      ssoStartUrl,
+      ssoSession: args.values["sso-session"] ?? "sso",
+      isTty: process.stdin.isTTY,
     });
     return;
   }
@@ -168,6 +189,9 @@ function printHelp(logger: Logger): void {
   );
   logger.log("  npm run cli -- regenerate [--yes]");
   logger.log("  npm run cli -- graveyard");
+  logger.log(
+    "  npm run cli -- profile --sso-start-url <url> [--sso-session <name>]  (env: AWS_SSO_START_URL)",
+  );
   logger.log(
     "  npm run cli -- plan [--profile <name>] [--region <region>] [--refresh]",
   );
