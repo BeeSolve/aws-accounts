@@ -59,6 +59,7 @@ After `init`, `aws.config.ts` is your source of truth. Edit it to add accounts, 
 | `apply` | Executes planned operations via Lambda |
 | `upgrade` | Updates the deployed Lambda function code |
 | `scan` | Refreshes remote state in S3 (advanced/recovery use) |
+| `validate` | Validates `aws.config.ts` locally without hitting AWS |
 | `graveyard` | Lists accounts parked in the Graveyard OU |
 | `profile` | Generates an AWS CLI SSO profile block from local state |
 
@@ -220,7 +221,7 @@ The CLI delegates all AWS operations to a deployed Lambda. Day-to-day usage requ
 
 `bootstrap` and `upgrade` require broader permissions for deploying infrastructure (S3, IAM, Lambda, SSO). See the full policy in the [docs](./docs/adr/002-architecture-and-technology-choices.md).
 
-Commands that need no AWS permissions: `regenerate` (local codegen only), `graveyard` (reads local cache only).
+Commands that need no AWS permissions: `regenerate` (local codegen only), `validate` (local config checks only), `graveyard` (reads local cache only).
 
 ## FAQ
 

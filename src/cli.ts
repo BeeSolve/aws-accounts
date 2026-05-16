@@ -14,6 +14,7 @@ import { consoleLogger, type Logger } from "./logger.js";
 import { runGraveyardCommand } from "./commands/graveyard.js";
 import { runProfileCommand } from "./commands/profile.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
+import { runValidateCommand } from "./commands/validate.js";
 import {
   runRemoteBootstrap,
   runRemoteScan,
@@ -33,6 +34,7 @@ const commands = [
   "scan",
   "init",
   "regenerate",
+  "validate",
   "graveyard",
   "profile",
   "plan",
@@ -96,6 +98,14 @@ async function main(): Promise<void> {
     logger.log("Regenerate complete.");
     for (const file of result.files) {
       logger.log(`${file.path}: ${file.status}`);
+    }
+    return;
+  }
+
+  if (command === "validate") {
+    const valid = await runValidateCommand({ logger });
+    if (!valid) {
+      process.exitCode = 1;
     }
     return;
   }
@@ -188,6 +198,7 @@ function printHelp(logger: Logger): void {
     "  npm run cli -- init [--profile <name>] [--region <region>] [--yes]",
   );
   logger.log("  npm run cli -- regenerate [--yes]");
+  logger.log("  npm run cli -- validate");
   logger.log("  npm run cli -- graveyard");
   logger.log(
     "  npm run cli -- profile --sso-start-url <url> [--sso-session <name>]  (env: AWS_SSO_START_URL)",
