@@ -128,6 +128,27 @@ When `init` generates your config, recognized IAM actions in inline policies are
 - Grant and revoke account assignments
 - Reprovision changed permission sets
 
+## Validating your config
+
+Run `validate` before `plan` to catch mistakes locally without making any AWS API calls:
+
+```bash
+npx aws-accounts validate
+```
+
+It checks two layers:
+
+**Schema and reference errors** — caught by compiling `aws.config.ts` against the generated types in `aws.config.types.ts`:
+- Type mismatches and missing required fields
+- References to unknown OUs, accounts, groups, users, or permission sets (enforced by the generated picklist types)
+
+**Semantic errors** — additional checks run after the schema passes:
+- Circular OU parent references (e.g. OU A has `parentName: "B"` and B has `parentName: "A"`)
+- Assignments with no principal or with both `group` and `user` set
+- Permission set inline policies exceeding the 10,240 character limit
+
+Exits with code 1 if any errors are found, making it safe to use in CI before running `plan`.
+
 ## Plan/Apply Safety
 
 - `plan` fetches current remote state from S3 before computing the diff.
