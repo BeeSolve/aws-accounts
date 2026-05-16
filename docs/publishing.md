@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Push access to `main` branch
-- `NPM_TOKEN` secret configured in GitHub repo settings (Settings → Secrets → Actions)
+- npm OIDC publishing configured (already set up — the workflow uses `id-token: write` permission and `--provenance` for tokenless publishing)
 
 ## Steps
 
@@ -27,7 +27,7 @@
    - Run typecheck and tests
    - Detect the new version isn't on npm yet
    - Build the CLI and Lambda
-   - Publish to npm with provenance
+   - Publish to npm with provenance (via OIDC, no token needed)
 
 ## Verify
 
@@ -37,16 +37,10 @@ Confirm the package is live: https://www.npmjs.com/package/@beesolve/aws-account
 
 ## Manual Publish (fallback)
 
-If CI is broken and you need to publish directly:
+If CI is broken and you need to publish directly, remove `--provenance` (it requires the GitHub Actions OIDC environment):
 
 ```bash
-npm publish --access public
+npm publish --access public --no-provenance
 ```
 
 The `prepublishOnly` script runs typecheck, build, and lambda build automatically.
-
-## NPM Token Setup
-
-1. Go to https://www.npmjs.com/settings/tokens
-2. Generate a new **Automation** token
-3. Add it as `NPM_TOKEN` in GitHub repo settings (Settings → Secrets and variables → Actions)
