@@ -72,6 +72,7 @@ const permissionSetArb = fc.record({
   permissionSetArn: nonEmptyStringArb,
   name: nonEmptyStringArb,
   description: fc.string({ maxLength: 50 }),
+  sessionDuration: fc.option(fc.string({ maxLength: 10 }), { nil: null }),
   inlinePolicy: fc.option(nonEmptyStringArb, { nil: null }),
   awsManagedPolicies: fc.array(nonEmptyStringArb, { maxLength: 3 }),
   customerManagedPolicies: fc.array(customerManagedPolicyReferenceArb, { maxLength: 3 }),

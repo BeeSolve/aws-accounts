@@ -77,6 +77,20 @@ After `init`, your project contains:
 - **`aws.config.ts`** — your desired state: OUs, accounts, users, groups, permission sets, assignments
 - **`aws.config.types.ts`** — generated types and helpers for IDE autocomplete
 
+### Permission Sets
+
+```ts
+permissionSets: [
+  {
+    name: "AdminAccess",
+    description: "Full administrator access",
+    sessionDuration: "PT8H", // ISO-8601 duration; omit to use the AWS default of 1h (max 12h)
+    awsManagedPolicies: ["arn:aws:iam::aws:policy/AdministratorAccess"],
+    customerManagedPolicies: [],
+  },
+],
+```
+
 ### IAM Policy Helpers
 
 `aws.config.types.ts` exports `iam` helpers with service-scoped action autocomplete:
@@ -107,6 +121,7 @@ When `init` generates your config, recognized IAM actions in inline policies are
 - Update group descriptions
 - Manage group memberships
 - Create, update, and delete permission sets
+- Set permission set session duration (ISO-8601, e.g. `"PT8H"` — default 1h, max 12h)
 - Manage inline policies, AWS managed policies, and customer-managed policy references
 - Grant and revoke account assignments
 - Reprovision changed permission sets

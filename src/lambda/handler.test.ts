@@ -565,6 +565,7 @@ const createIdcPermissionSetOpArb = fc.record({
   kind: fc.constant("createIdcPermissionSet" as const),
   permissionSetName: nonEmptyStringArb,
   description: nonEmptyStringArb,
+  sessionDuration: fc.option(fc.string({ maxLength: 10 }), { nil: null }),
 });
 
 /** Generate a valid updateIdcPermissionSetDescription operation */
@@ -572,6 +573,13 @@ const updateIdcPermissionSetDescriptionOpArb = fc.record({
   kind: fc.constant("updateIdcPermissionSetDescription" as const),
   permissionSetName: nonEmptyStringArb,
   description: nonEmptyStringArb,
+});
+
+/** Generate a valid updateIdcPermissionSetSessionDuration operation */
+const updateIdcPermissionSetSessionDurationOpArb = fc.record({
+  kind: fc.constant("updateIdcPermissionSetSessionDuration" as const),
+  permissionSetName: nonEmptyStringArb,
+  sessionDuration: fc.option(fc.string({ maxLength: 10 }), { nil: null }),
 });
 
 /** Generate a valid deleteIdcPermissionSet operation */
@@ -674,6 +682,7 @@ const validOperationArb = fc.oneof(
   removeIdcGroupMembershipOpArb,
   createIdcPermissionSetOpArb,
   updateIdcPermissionSetDescriptionOpArb,
+  updateIdcPermissionSetSessionDurationOpArb,
   deleteIdcPermissionSetOpArb,
   putIdcPermissionSetInlinePolicyOpArb,
   deleteIdcPermissionSetInlinePolicyOpArb,
@@ -773,6 +782,7 @@ test("Property 7: Operation schema validation reuses existing schema — valid o
               "removeIdcGroupMembership",
               "createIdcPermissionSet",
               "updateIdcPermissionSetDescription",
+              "updateIdcPermissionSetSessionDuration",
               "deleteIdcPermissionSet",
               "putIdcPermissionSetInlinePolicy",
               "deleteIdcPermissionSetInlinePolicy",

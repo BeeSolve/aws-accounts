@@ -79,6 +79,7 @@ test("operationSchema accepts supported organization and IdC operations", () => 
       kind: "createIdcPermissionSet",
       permissionSetName: "AdminAccess",
       description: "Admin",
+      sessionDuration: null,
     },
     {
       kind: "updateIdcPermissionSetDescription",

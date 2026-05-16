@@ -23,20 +23,21 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   addIdcGroupMembership: 12,
   createIdcPermissionSet: 13,
   updateIdcPermissionSetDescription: 14,
-  putIdcPermissionSetInlinePolicy: 15,
-  deleteIdcPermissionSetInlinePolicy: 16,
-  attachIdcManagedPolicyToPermissionSet: 17,
-  detachIdcManagedPolicyFromPermissionSet: 18,
-  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 19,
-  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 20,
-  provisionIdcPermissionSet: 21,
-  grantIdcAccountAssignment: 22,
-  removeIdcGroupMembership: 23,
-  revokeIdcAccountAssignment: 24,
-  deleteIdcUser: 25,
-  deleteIdcGroup: 26,
-  deleteIdcPermissionSet: 27,
-  deleteOu: 28,
+  updateIdcPermissionSetSessionDuration: 15,
+  putIdcPermissionSetInlinePolicy: 16,
+  deleteIdcPermissionSetInlinePolicy: 17,
+  attachIdcManagedPolicyToPermissionSet: 18,
+  detachIdcManagedPolicyFromPermissionSet: 19,
+  attachIdcCustomerManagedPolicyReferenceToPermissionSet: 20,
+  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 21,
+  provisionIdcPermissionSet: 22,
+  grantIdcAccountAssignment: 23,
+  removeIdcGroupMembership: 24,
+  revokeIdcAccountAssignment: 25,
+  deleteIdcUser: 26,
+  deleteIdcGroup: 27,
+  deleteIdcPermissionSet: 28,
+  deleteOu: 29,
 };
 
 type DiffStatesProps = {
@@ -575,6 +576,7 @@ export function diffStates(props: DiffStatesProps): Plan {
         kind: "createIdcPermissionSet",
         permissionSetName: nextPermissionSet.name,
         description: nextPermissionSet.description,
+        sessionDuration: nextPermissionSet.sessionDuration,
       });
     }
 
@@ -585,6 +587,13 @@ export function diffStates(props: DiffStatesProps): Plan {
           kind: "updateIdcPermissionSetDescription",
           permissionSetName: nextPermissionSet.name,
           description: nextPermissionSet.description,
+        });
+      }
+      if (currentPermissionSet.sessionDuration !== nextPermissionSet.sessionDuration) {
+        operations.push({
+          kind: "updateIdcPermissionSetSessionDuration",
+          permissionSetName: nextPermissionSet.name,
+          sessionDuration: nextPermissionSet.sessionDuration,
         });
       }
     }

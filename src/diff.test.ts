@@ -679,6 +679,7 @@ test("diffStates emits IdC entity creation operations", () => {
     permissionSetArn: "arn:ps-readonly",
     name: "ReadOnly",
     description: "Read only",
+    sessionDuration: null,
     inlinePolicy: null,
     awsManagedPolicies: [],
     customerManagedPolicies: [],
@@ -703,6 +704,7 @@ test("diffStates emits IdC entity creation operations", () => {
       kind: "createIdcPermissionSet",
       permissionSetName: "ReadOnly",
       description: "Read only",
+      sessionDuration: null,
     },
   ]);
   assert.deepEqual(plan.unsupported, []);
@@ -1001,6 +1003,7 @@ test("diffStates keeps deterministic mixed Organizations and IdC ordering", () =
     permissionSetArn: "__pending_creation__",
     name: "ReadOnly",
     description: "Read only",
+    sessionDuration: null,
     inlinePolicy: null,
     awsManagedPolicies: [],
     customerManagedPolicies: [],
@@ -1092,6 +1095,7 @@ function createBaseState(): StateFile {
           permissionSetArn: "arn:ps-admin",
           name: "Admin",
           description: "Admin access",
+          sessionDuration: null,
           inlinePolicy: null,
           awsManagedPolicies: [],
           customerManagedPolicies: [],

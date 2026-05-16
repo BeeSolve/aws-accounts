@@ -118,12 +118,19 @@ const createIdcPermissionSetOperationSchema = v.strictObject({
   kind: v.literal("createIdcPermissionSet"),
   permissionSetName: v.string(),
   description: v.string(),
+  sessionDuration: v.nullable(v.string()),
 });
 
 const updateIdcPermissionSetDescriptionOperationSchema = v.strictObject({
   kind: v.literal("updateIdcPermissionSetDescription"),
   permissionSetName: v.string(),
   description: v.string(),
+});
+
+const updateIdcPermissionSetSessionDurationOperationSchema = v.strictObject({
+  kind: v.literal("updateIdcPermissionSetSessionDuration"),
+  permissionSetName: v.string(),
+  sessionDuration: v.nullable(v.string()),
 });
 
 const deleteIdcPermissionSetOperationSchema = v.strictObject({
@@ -211,6 +218,7 @@ export const operationSchema = v.variant("kind", [
   removeIdcGroupMembershipOperationSchema,
   createIdcPermissionSetOperationSchema,
   updateIdcPermissionSetDescriptionOperationSchema,
+  updateIdcPermissionSetSessionDurationOperationSchema,
   deleteIdcPermissionSetOperationSchema,
   putIdcPermissionSetInlinePolicyOperationSchema,
   deleteIdcPermissionSetInlinePolicyOperationSchema,

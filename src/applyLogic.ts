@@ -1,7 +1,4 @@
-import {
-  AccountClient,
-  PutAccountNameCommand,
-} from "@aws-sdk/client-account";
+import { AccountClient, PutAccountNameCommand } from "@aws-sdk/client-account";
 import {
   CreateOrganizationalUnitCommand,
   DeleteOrganizationalUnitCommand,
@@ -251,7 +248,10 @@ export async function executeOperation(
       workingState: props.state,
       account: {
         ...account,
-        tags: Object.entries(operation.tags).map(([key, value]) => ({ key, value })),
+        tags: Object.entries(operation.tags).map(([key, value]) => ({
+          key,
+          value,
+        })),
       },
     });
   }
@@ -293,7 +293,9 @@ export async function executeOperation(
         DestinationParentId: operation.toOuId,
       }),
     );
-    props.logger.log(`Done: "${operation.accountName}" -> ${operation.toOuName}`);
+    props.logger.log(
+      `Done: "${operation.accountName}" -> ${operation.toOuName}`,
+    );
     return moveAccountInWorkingState({
       workingState: props.state,
       accountId: operation.accountId,
@@ -528,6 +530,7 @@ export async function executeOperation(
         Name: operation.permissionSetName,
         Description:
           operation.description.length > 0 ? operation.description : undefined,
+        SessionDuration: operation.sessionDuration ?? undefined,
       }),
     );
     const permissionSetArn = response.PermissionSet?.PermissionSetArn;
@@ -543,6 +546,7 @@ export async function executeOperation(
         permissionSetArn,
         name: operation.permissionSetName,
         description: operation.description,
+        sessionDuration: operation.sessionDuration,
         inlinePolicy: null,
         awsManagedPolicies: [],
         customerManagedPolicies: [],
@@ -573,6 +577,30 @@ export async function executeOperation(
       permissionSet: {
         ...permissionSet,
         description: operation.description,
+      },
+    });
+  }
+  if (operation.kind === "updateIdcPermissionSetSessionDuration") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Updating IdC permission set session duration for "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new UpdatePermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+        SessionDuration: operation.sessionDuration ?? undefined,
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertIdcPermissionSetInWorkingState({
+      workingState: props.state,
+      permissionSet: {
+        ...permissionSet,
+        sessionDuration: operation.sessionDuration,
       },
     });
   }
@@ -737,7 +765,8 @@ export async function executeOperation(
     });
   }
   if (
-    operation.kind === "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
+    operation.kind ===
+    "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
   ) {
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
@@ -762,11 +791,14 @@ export async function executeOperation(
       permissionSetName: operation.permissionSetName,
       update: (currentPermissionSet) => ({
         ...currentPermissionSet,
-        customerManagedPolicies: currentPermissionSet.customerManagedPolicies.filter(
-          (customerManagedPolicy) =>
-            customerManagedPolicy.name !== operation.customerManagedPolicyName ||
-            customerManagedPolicy.path !== operation.customerManagedPolicyPath,
-        ),
+        customerManagedPolicies:
+          currentPermissionSet.customerManagedPolicies.filter(
+            (customerManagedPolicy) =>
+              customerManagedPolicy.name !==
+                operation.customerManagedPolicyName ||
+              customerManagedPolicy.path !==
+                operation.customerManagedPolicyPath,
+          ),
       }),
     });
   }
@@ -798,7 +830,8 @@ export async function executeOperation(
       instanceArn: props.state.identityCenter.instanceArn,
       requestId,
       timeoutInMs: props.runtime.permissionSetProvisioning.timeoutInMs,
-      pollIntervalInMs: props.runtime.permissionSetProvisioning.pollIntervalInMs,
+      pollIntervalInMs:
+        props.runtime.permissionSetProvisioning.pollIntervalInMs,
       operationLabel: `"${operation.permissionSetName}"`,
     });
     props.logger.log(`Done: "${operation.permissionSetName}"`);
@@ -1001,10 +1034,7 @@ function resolveAssignmentDependencies(props: {
   };
 }
 
-function resolveUserByName(props: {
-  state: WorkingState;
-  userName: string;
-}) {
+function resolveUserByName(props: { state: WorkingState; userName: string }) {
   const user = props.state.identityCenter.usersByUserName[props.userName];
   if (user == null) {
     throw new Error(
@@ -1058,9 +1088,9 @@ function upsertPermissionSetPolicyState(props: {
     workingState: props.state,
     permissionSet: {
       ...nextPermissionSet,
-      awsManagedPolicies: [...new Set(nextPermissionSet.awsManagedPolicies)].sort(
-        (left, right) => left.localeCompare(right),
-      ),
+      awsManagedPolicies: [
+        ...new Set(nextPermissionSet.awsManagedPolicies),
+      ].sort((left, right) => left.localeCompare(right)),
       customerManagedPolicies: [
         ...nextPermissionSet.customerManagedPolicies,
       ].sort((left, right) => {
@@ -1108,11 +1138,13 @@ async function assertOrganizationalUnitIsEmpty(props: {
   });
   if (childOrganizationalUnit != null) {
     throw new Error(
-      `Refusing to delete OU "${props.organizationalUnitName}": live AWS preflight failed [child-ou-present]: ${formatLivePreflightResource({
-        resourceType: "child OU",
-        name: childOrganizationalUnit.Name,
-        id: childOrganizationalUnit.Id,
-      })} is still attached.`,
+      `Refusing to delete OU "${props.organizationalUnitName}": live AWS preflight failed [child-ou-present]: ${formatLivePreflightResource(
+        {
+          resourceType: "child OU",
+          name: childOrganizationalUnit.Name,
+          id: childOrganizationalUnit.Id,
+        },
+      )} is still attached.`,
     );
   }
   const account = await listFirstAccountForParent({
@@ -1121,11 +1153,13 @@ async function assertOrganizationalUnitIsEmpty(props: {
   });
   if (account != null) {
     throw new Error(
-      `Refusing to delete OU "${props.organizationalUnitName}": live AWS preflight failed [account-present]: ${formatLivePreflightResource({
-        resourceType: "account",
-        name: account.Name,
-        id: account.Id,
-      })} is still attached.`,
+      `Refusing to delete OU "${props.organizationalUnitName}": live AWS preflight failed [account-present]: ${formatLivePreflightResource(
+        {
+          resourceType: "account",
+          name: account.Name,
+          id: account.Id,
+        },
+      )} is still attached.`,
     );
   }
 }
@@ -1325,7 +1359,8 @@ function resolveGroupMembershipDependencies(props: {
   groupId: string;
   userId: string;
 } {
-  const group = props.state.identityCenter.groupsByDisplayName[props.groupDisplayName];
+  const group =
+    props.state.identityCenter.groupsByDisplayName[props.groupDisplayName];
   if (group == null) {
     throw new Error(
       `Could not resolve group "${props.groupDisplayName}" in working state.`,

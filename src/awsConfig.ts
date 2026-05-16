@@ -105,6 +105,7 @@ export const awsConfigModelSchema = v.strictObject({
     v.strictObject({
       name: v.string(),
       description: v.string(),
+      sessionDuration: v.optional(v.string()),
       inlinePolicy: v.optional(iamPolicyDocumentSchema),
       awsManagedPolicies: v.array(v.string()),
       customerManagedPolicies: v.array(
@@ -554,6 +555,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       (permissionSet) => ({
         name: permissionSet.name,
         description: permissionSet.description,
+        sessionDuration: permissionSet.sessionDuration ?? undefined,
         inlinePolicy:
           permissionSet.inlinePolicy == null
             ? undefined
@@ -825,6 +827,7 @@ export function mapAwsConfigToState(
           matchedPermissionSet?.permissionSetArn ?? pendingCreationId,
         name: permissionSet.name,
         description: permissionSet.description,
+        sessionDuration: permissionSet.sessionDuration ?? null,
         inlinePolicy: stableStringifyInlinePolicy(permissionSet.inlinePolicy),
         awsManagedPolicies: [...permissionSet.awsManagedPolicies],
         customerManagedPolicies: permissionSet.customerManagedPolicies.map(
@@ -1297,6 +1300,7 @@ export const awsConfigSchema = v.strictObject({
     v.strictObject({
       name: v.string(),
       description: v.string(),
+      sessionDuration: v.optional(v.string()),
       inlinePolicy: v.optional(iamPolicyDocumentSchema),
       awsManagedPolicies: v.array(v.string()),
       customerManagedPolicies: v.array(

@@ -147,6 +147,7 @@ function getFixtureState() {
           permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
           name: "AdminAccess",
           description: "Admin",
+          sessionDuration: null,
           inlinePolicy: null,
           awsManagedPolicies: [],
           customerManagedPolicies: [],

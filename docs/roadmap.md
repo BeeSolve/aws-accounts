@@ -6,25 +6,6 @@ Post-v1 features organized by priority tier. See [feature-parity-research.md](./
 
 ## Tier 1 — Immediate differentiators
 
-### Permission set session duration
-
-Add `sessionDuration` field to permission set config. The default 1h is too short for most workflows — this is table-stakes.
-
-```ts
-permissionSets: [
-  {
-    name: "AdminAccess",
-    description: "Admin",
-    sessionDuration: "PT8H", // ISO-8601, max 12h
-    // ...
-  },
-]
-```
-
-**Effort:** Trivial — one field on create/update, one field in scan.
-
----
-
 ### `profile` command — generate AWS CLI profiles
 
 Generate `~/.aws/config` profile blocks from account/permission-set assignments.

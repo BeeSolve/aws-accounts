@@ -177,6 +177,7 @@ test("working state helpers update IdC records immutably and regenerate access r
       permissionSetArn: "arn:ps-1",
       name: "AdminAccess",
       description: "Admin",
+      sessionDuration: null,
       inlinePolicy: null,
       awsManagedPolicies: [],
       customerManagedPolicies: [],

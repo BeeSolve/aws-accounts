@@ -400,6 +400,7 @@ async function listPermissionSets(props: {
         permissionSetArn: permissionSet.PermissionSetArn,
         name: permissionSet.Name,
         description: permissionSet.Description ?? "",
+        sessionDuration: permissionSet.SessionDuration ?? null,
         inlinePolicy,
         awsManagedPolicies,
         customerManagedPolicies,

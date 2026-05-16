@@ -55,6 +55,7 @@ const permissionSetSchema = v.strictObject({
   permissionSetArn: nonEmptyString,
   name: nonEmptyString,
   description: v.string(),
+  sessionDuration: v.nullable(v.string()),
   inlinePolicy: v.nullable(nonEmptyString),
   awsManagedPolicies: v.array(nonEmptyString),
   customerManagedPolicies: v.array(customerManagedPolicyReferenceSchema),
@@ -525,6 +526,7 @@ export function upsertIdcPermissionSetInWorkingState(props: {
       props.permissionSet.permissionSetArn &&
     currentPermissionSet.name === props.permissionSet.name &&
     currentPermissionSet.description === props.permissionSet.description &&
+    currentPermissionSet.sessionDuration === props.permissionSet.sessionDuration &&
     currentPermissionSet.inlinePolicy === props.permissionSet.inlinePolicy &&
     JSON.stringify(currentPermissionSet.awsManagedPolicies) ===
       JSON.stringify(props.permissionSet.awsManagedPolicies) &&
