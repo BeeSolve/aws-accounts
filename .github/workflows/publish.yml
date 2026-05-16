@@ -23,6 +23,8 @@ jobs:
 
       - run: npm run typecheck
 
+      - run: npm run build:lambda
+
       - run: npm test
 
       - run: npm install -g npm@latest
