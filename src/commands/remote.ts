@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
-import { resolve, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import {
@@ -344,6 +344,9 @@ async function ensureLambdaFunction(props: {
       throw new Error("Lambda function exists but ARN is empty.");
     }
 
+    // Wait for any in-progress update to complete
+    await waitForLambdaReady(props.lambdaClient, lambdaFunctionName);
+
     // Update function code
     await props.lambdaClient.send(
       new UpdateFunctionCodeCommand({
@@ -351,6 +354,9 @@ async function ensureLambdaFunction(props: {
         ZipFile: props.lambdaZip,
       }),
     );
+
+    // Wait for the code update to complete before updating configuration
+    await waitForLambdaReady(props.lambdaClient, lambdaFunctionName);
 
     // Ensure environment variables are set
     await props.lambdaClient.send(
@@ -689,6 +695,7 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
   const lambdaZip = await readLambdaZip();
 
   input.logger.log(`Updating Lambda function code: ${deployment.lambdaArn}`);
+  await waitForLambdaReady(input.lambdaClient, deployment.lambdaArn);
   const updateResult = await input.lambdaClient.send(
     new UpdateFunctionCodeCommand({
       FunctionName: deployment.lambdaArn,
@@ -1134,4 +1141,27 @@ async function readLambdaZip(): Promise<Buffer> {
       `Lambda zip not found at ${zipPath}. The package may be corrupted — try reinstalling @beesolve/aws-accounts.`,
     );
   }
+}
+
+async function waitForLambdaReady(
+  lambdaClient: LambdaClient,
+  functionName: string,
+): Promise<void> {
+  const maxAttempts = 30;
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await lambdaClient.send(
+      new GetFunctionCommand({ FunctionName: functionName }),
+    );
+    const lastUpdateStatus = response.Configuration?.LastUpdateStatus;
+    if (lastUpdateStatus === "Successful" || lastUpdateStatus === undefined) {
+      return;
+    }
+    if (lastUpdateStatus === "Failed") {
+      throw new Error(
+        `Lambda function update failed: ${response.Configuration?.LastUpdateStatusReason ?? "unknown reason"}`,
+      );
+    }
+    await delay(2000);
+  }
+  throw new Error("Timed out waiting for Lambda function to become ready.");
 }
