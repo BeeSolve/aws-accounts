@@ -157,6 +157,16 @@ export const awsConfigModelSchema = v.strictObject({
           }),
         ),
       ),
+      aiServicesOptOutPolicies: v.optional(
+        v.array(
+          v.strictObject({
+            name: v.string(),
+            description: v.optional(v.string()),
+            content: v.record(v.string(), v.unknown()),
+            targets: v.array(v.string()),
+          }),
+        ),
+      ),
     }),
   ),
 });
@@ -657,6 +667,17 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       ),
     }));
 
+  const aiServicesOptOutPolicies = orgPolicies
+    .filter((p) => p.type === "AISERVICES_OPT_OUT_POLICY")
+    .map((p) => ({
+      name: p.name,
+      description: p.description.length > 0 ? p.description : undefined,
+      content: JSON.parse(p.content) as Record<string, unknown>,
+      targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    }));
+
   const mapped: AwsConfigModel = {
     organizationalUnits,
     users: props.state.identityCenter.users.map((user) => ({
@@ -692,11 +713,18 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     ),
     assignments: [...assignmentsByKey.values()],
     policies:
-      scps.length > 0 || rcps.length > 0 || tagPolicies.length > 0
+      scps.length > 0 ||
+      rcps.length > 0 ||
+      tagPolicies.length > 0 ||
+      aiServicesOptOutPolicies.length > 0
         ? {
             serviceControlPolicies: scps.length > 0 ? scps : undefined,
             resourceControlPolicies: rcps.length > 0 ? rcps : undefined,
             tagPolicies: tagPolicies.length > 0 ? tagPolicies : undefined,
+            aiServicesOptOutPolicies:
+              aiServicesOptOutPolicies.length > 0
+                ? aiServicesOptOutPolicies
+                : undefined,
           }
         : undefined,
   };
@@ -1009,7 +1037,11 @@ export function mapAwsConfigToState(
   const allConfigPolicies: Array<{
     name: string;
     description: string;
-    type: "SERVICE_CONTROL_POLICY" | "RESOURCE_CONTROL_POLICY" | "TAG_POLICY";
+    type:
+      | "SERVICE_CONTROL_POLICY"
+      | "RESOURCE_CONTROL_POLICY"
+      | "TAG_POLICY"
+      | "AISERVICES_OPT_OUT_POLICY";
     content: string;
     targets: Array<{
       targetId: string;
@@ -1072,6 +1104,16 @@ export function mapAwsConfigToState(
       name: policy.name,
       description: policy.description ?? "",
       type: "TAG_POLICY",
+      content: JSON.stringify(policy.content),
+      targets: policy.targets.map((t) => resolveTargetId(t)),
+    });
+  }
+
+  for (const policy of configPolicies?.aiServicesOptOutPolicies ?? []) {
+    allConfigPolicies.push({
+      name: policy.name,
+      description: policy.description ?? "",
+      type: "AISERVICES_OPT_OUT_POLICY",
       content: JSON.stringify(policy.content),
       targets: policy.targets.map((t) => resolveTargetId(t)),
     });
@@ -1181,6 +1223,12 @@ export function mapAwsConfigToState(
   assertUniqueNames({
     values: (props.config.policies?.tagPolicies ?? []).map((p) => p.name),
     entityName: "tag policy",
+  });
+  assertUniqueNames({
+    values: (props.config.policies?.aiServicesOptOutPolicies ?? []).map(
+      (p) => p.name,
+    ),
+    entityName: "AI services opt-out policy",
   });
 
   return validateState(mapped);
@@ -1312,6 +1360,18 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
               props.config.policies.tagPolicies == null
                 ? undefined
                 : [...props.config.policies.tagPolicies]
+                    .map((p) => ({
+                      ...p,
+                      content: sortJsonRecord(p.content),
+                      targets: [...p.targets].sort((a, b) =>
+                        a.localeCompare(b),
+                      ),
+                    }))
+                    .sort((a, b) => a.name.localeCompare(b.name)),
+            aiServicesOptOutPolicies:
+              props.config.policies.aiServicesOptOutPolicies == null
+                ? undefined
+                : [...props.config.policies.aiServicesOptOutPolicies]
                     .map((p) => ({
                       ...p,
                       content: sortJsonRecord(p.content),
@@ -1638,6 +1698,16 @@ export const awsConfigSchema = v.strictObject({
         ),
       ),
       tagPolicies: v.optional(
+        v.array(
+          v.strictObject({
+            name: v.string(),
+            description: v.optional(v.string()),
+            content: v.record(v.string(), v.unknown()),
+            targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
+          }),
+        ),
+      ),
+      aiServicesOptOutPolicies: v.optional(
         v.array(
           v.strictObject({
             name: v.string(),

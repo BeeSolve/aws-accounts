@@ -16,6 +16,7 @@ const orgPolicyTypeSchema = v.picklist([
   "SERVICE_CONTROL_POLICY",
   "RESOURCE_CONTROL_POLICY",
   "TAG_POLICY",
+  "AISERVICES_OPT_OUT_POLICY",
 ]);
 
 const orgPolicySchema = v.strictObject({

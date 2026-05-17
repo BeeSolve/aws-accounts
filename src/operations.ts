@@ -206,6 +206,7 @@ const createOrgPolicyOperationSchema = v.strictObject({
     "SERVICE_CONTROL_POLICY",
     "RESOURCE_CONTROL_POLICY",
     "TAG_POLICY",
+    "AISERVICES_OPT_OUT_POLICY",
   ]),
   description: v.string(),
   content: v.string(),
