@@ -5,6 +5,7 @@ import {
   ListUsersCommand,
 } from "@aws-sdk/client-identitystore";
 import {
+  DescribeOrganizationCommand,
   DescribePolicyCommand,
   ListAccountsCommand,
   ListOrganizationalUnitsForParentCommand,
@@ -45,11 +46,15 @@ export async function scanOrganization(props: {
   organizationsClient: OrganizationsClient;
   accountClient: AccountClient;
 }): Promise<StateFile["organization"]> {
-  const roots = await props.organizationsClient.send(new ListRootsCommand({}));
-  const root = roots.Roots?.[0];
+  const [rootsResponse, orgResponse] = await Promise.all([
+    props.organizationsClient.send(new ListRootsCommand({})),
+    props.organizationsClient.send(new DescribeOrganizationCommand({})),
+  ]);
+  const root = rootsResponse.Roots?.[0];
   if (root?.Id == null) {
     throw new Error("No organization root found.");
   }
+  const managementAccountId = orgResponse.Organization?.MasterAccountId;
 
   const organizationalUnits = await collectOrganizationalUnits({
     organizationsClient: props.organizationsClient,
@@ -84,6 +89,7 @@ export async function scanOrganization(props: {
       const alternateContacts = await scanAlternateContacts({
         accountClient: props.accountClient,
         accountId: account.Id,
+        isManagementAccount: account.Id === managementAccountId,
       });
       accounts.push({
         id: account.Id,
@@ -317,11 +323,25 @@ async function scanAccessControlAttributes(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
 }): Promise<AccessControlAttributeState[]> {
-  const response = await props.ssoAdminClient.send(
-    new DescribeInstanceAccessControlAttributeConfigurationCommand({
-      InstanceArn: props.instanceArn,
-    }),
-  );
+  let response;
+  try {
+    response = await props.ssoAdminClient.send(
+      new DescribeInstanceAccessControlAttributeConfigurationCommand({
+        InstanceArn: props.instanceArn,
+      }),
+    );
+  } catch (err) {
+    // ABAC is not configured on this SSO instance — treat as empty
+    if (
+      err != null &&
+      typeof err === "object" &&
+      "name" in err &&
+      err.name === "ResourceNotFoundException"
+    ) {
+      return [];
+    }
+    throw err;
+  }
   const attributes =
     response.InstanceAccessControlAttributeConfiguration
       ?.AccessControlAttributes ?? [];
@@ -707,13 +727,14 @@ const ALTERNATE_CONTACT_TYPES = [
 async function scanAlternateContacts(props: {
   accountClient: AccountClient;
   accountId: string;
+  isManagementAccount: boolean;
 }): Promise<AlternateContactState[]> {
   const results = await Promise.all(
     ALTERNATE_CONTACT_TYPES.map(async (contactType) => {
       try {
         const response = await props.accountClient.send(
           new GetAlternateContactCommand({
-            AccountId: props.accountId,
+            AccountId: props.isManagementAccount ? undefined : props.accountId,
             AlternateContactType: contactType,
           }),
         );

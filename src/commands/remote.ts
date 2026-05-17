@@ -63,6 +63,7 @@ import {
 import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 import { validateState, type StateFile } from "../state.js";
 import { assertUnreachable, delay } from "../helpers.js";
+import { toPreconditionError } from "../error.js";
 import { sts, organizations, sso, identitystore, s3, logs, account, iam, lambda } from "@beesolve/iam-policy-ts";
 
 const remoteCommandSchema = v.object({
@@ -226,28 +227,10 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
   input.logger.log(`  State bucket: ${bucketName}`);
 }
 
-async function ensureIamRole(props: {
+async function applyLambdaRolePolicy(props: {
   iamClient: IAMClient;
   bucketName: string;
-  logger: Logger;
-}): Promise<{ roleArn: string }> {
-  const trustPolicy = JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Principal: { Service: "lambda.amazonaws.com" },
-        Action: sts("AssumeRole"),
-      },
-    ],
-  });
-
-  const { roleArn } = await getOrCreateIamRole({
-    iamClient: props.iamClient,
-    trustPolicy,
-    logger: props.logger,
-  });
-
+}): Promise<void> {
   const inlinePolicy = JSON.stringify({
     Version: "2012-10-17",
     Statement: [
@@ -280,7 +263,12 @@ async function ensureIamRole(props: {
       },
       {
         Effect: "Allow",
-        Action: [account("PutAccountName")],
+        Action: [
+          account("PutAccountName"),
+          account("GetAlternateContact"),
+          account("PutAlternateContact"),
+          account("DeleteAlternateContact"),
+        ],
         Resource: "*",
       },
     ],
@@ -293,6 +281,34 @@ async function ensureIamRole(props: {
       PolicyDocument: inlinePolicy,
     }),
   );
+}
+
+async function ensureIamRole(props: {
+  iamClient: IAMClient;
+  bucketName: string;
+  logger: Logger;
+}): Promise<{ roleArn: string }> {
+  const trustPolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { Service: "lambda.amazonaws.com" },
+        Action: sts("AssumeRole"),
+      },
+    ],
+  });
+
+  const { roleArn } = await getOrCreateIamRole({
+    iamClient: props.iamClient,
+    trustPolicy,
+    logger: props.logger,
+  });
+
+  await applyLambdaRolePolicy({
+    iamClient: props.iamClient,
+    bucketName: props.bucketName,
+  });
 
   return { roleArn };
 }
@@ -764,7 +780,14 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
   );
 
   const lastModified = updateResult.LastModified ?? "unknown";
-  input.logger.log(`Upgrade complete. Last modified: ${lastModified}`);
+  input.logger.log(`Lambda updated. Last modified: ${lastModified}`);
+
+  input.logger.log("Updating IAM role policy...");
+  await applyLambdaRolePolicy({
+    iamClient: input.iamClient,
+    bucketName: deployment.stateBucketName,
+  });
+  input.logger.log("IAM role policy updated.");
 
   const context = await readAwsContextFromFile(contextFilePath);
   const ordered: Record<string, unknown> = {
@@ -799,9 +822,19 @@ function warnIfRemotePoliciesNotInConfig(props: {
 }
 
 async function readDeploymentFromContext(): Promise<Deployment> {
-  const context = await readAwsContextFromFile(contextFilePath);
+  let context: AwsContextFile;
+  try {
+    context = await readAwsContextFromFile(contextFilePath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      throw toPreconditionError(
+        "aws.context.json not found. Run `aws-accounts bootstrap` first.",
+      );
+    }
+    throw err;
+  }
   if (context.deployment == null) {
-    throw new Error(
+    throw toPreconditionError(
       "No deployment found in aws.context.json. Run `aws-accounts bootstrap` first.",
     );
   }

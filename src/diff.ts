@@ -1334,7 +1334,7 @@ function getOperationSortKey(operation: Operation): string {
 
 function normalizeJsonContent(content: string): string {
   try {
-    return JSON.stringify(JSON.parse(content) as unknown);
+    return JSON.stringify(sortJsonValue(JSON.parse(content) as unknown));
   } catch {
     return content;
   }

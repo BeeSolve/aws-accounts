@@ -1557,7 +1557,7 @@ function renderTsObject(
   const childIndent = "  ".repeat(props.indentLevel + 1);
   const renderedEntries = entries.map(([key, entryValue]) => {
     const nextWithinInlinePolicy =
-      props.withinInlinePolicy || key === "inlinePolicy";
+      props.withinInlinePolicy || key === "inlinePolicy" || key === "content";
     const renderedValue = renderTsValue(entryValue, {
       indentLevel: props.indentLevel + 1,
       withinInlinePolicy: nextWithinInlinePolicy,
