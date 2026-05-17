@@ -118,6 +118,10 @@ const stateFileArb: fc.Arbitrary<StateFile> = fc.record({
     permissionSets: fc.array(permissionSetArb, { maxLength: 5 }),
     accountAssignments: fc.array(accountAssignmentArb, { maxLength: 10 }),
     accessRoles: fc.array(accessRoleArb, { maxLength: 5 }),
+    accessControlAttributes: fc.array(
+      fc.record({ key: nonEmptyStringArb, source: fc.array(nonEmptyStringArb, { maxLength: 3 }) }),
+      { maxLength: 3 },
+    ),
   }),
 });
 

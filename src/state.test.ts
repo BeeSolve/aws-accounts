@@ -38,7 +38,8 @@ test("validateState rejects unknown fields", () => {
       groupMemberships: [],
       permissionSets: [],
       accountAssignments: [],
-      accessRoles: []
+      accessRoles: [],
+      accessControlAttributes: []
     },
     extra: true
   };
@@ -70,7 +71,8 @@ test("validateState rejects invalid principalType", () => {
           principalType: "ROLE"
         }
       ],
-      accessRoles: []
+      accessRoles: [],
+      accessControlAttributes: []
     }
   };
 
@@ -301,7 +303,8 @@ function createSampleState() {
       groupMemberships: [],
       permissionSets: [],
       accountAssignments: [],
-      accessRoles: []
+      accessRoles: [],
+      accessControlAttributes: []
     }
   };
 }

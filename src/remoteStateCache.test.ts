@@ -29,6 +29,7 @@ function createSampleState(): StateFile {
       permissionSets: [],
       accountAssignments: [],
       accessRoles: [],
+      accessControlAttributes: [],
     },
   };
 }

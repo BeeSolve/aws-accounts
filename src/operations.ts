@@ -199,6 +199,16 @@ const revokeIdcAccountAssignmentOperationSchema = v.strictObject({
   principalName: v.string(),
 });
 
+const setIdcAccessControlAttributesOperationSchema = v.strictObject({
+  kind: v.literal("setIdcAccessControlAttributes"),
+  attributes: v.array(
+    v.strictObject({
+      key: v.string(),
+      source: v.array(v.string()),
+    }),
+  ),
+});
+
 const alternateContactTypeSchema = v.picklist([
   "BILLING",
   "OPERATIONS",
@@ -310,6 +320,7 @@ export const operationSchema = v.variant("kind", [
   deleteOrgPolicyOperationSchema,
   putAlternateContactOperationSchema,
   deleteAlternateContactOperationSchema,
+  setIdcAccessControlAttributesOperationSchema,
 ]);
 
 const unsupportedDiffKindSchema = v.picklist([

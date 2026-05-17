@@ -162,6 +162,7 @@ function getFixtureState() {
         },
       ],
       accessRoles: [],
+      accessControlAttributes: [],
     },
   };
 }

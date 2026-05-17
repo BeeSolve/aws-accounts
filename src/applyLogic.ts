@@ -49,6 +49,7 @@ import {
   ProvisionPermissionSetCommand,
   PutInlinePolicyToPermissionSetCommand,
   SSOAdminClient,
+  UpdateInstanceAccessControlAttributeConfigurationCommand,
   UpdatePermissionSetCommand,
 } from "@aws-sdk/client-sso-admin";
 import { createAccountAndMoveToOu } from "./accountCreation.js";
@@ -1182,6 +1183,30 @@ export async function executeOperation(
         ),
       },
     });
+  }
+  if (operation.kind === "setIdcAccessControlAttributes") {
+    props.logger.log(
+      `Setting IdC access control attributes (${operation.attributes.length} attribute(s))...`,
+    );
+    await props.ssoAdminClient.send(
+      new UpdateInstanceAccessControlAttributeConfigurationCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        InstanceAccessControlAttributeConfiguration: {
+          AccessControlAttributes: operation.attributes.map((attr) => ({
+            Key: attr.key,
+            Value: { Source: attr.source },
+          })),
+        },
+      }),
+    );
+    props.logger.log(`Done: access control attributes updated`);
+    return {
+      ...props.state,
+      identityCenter: {
+        ...props.state.identityCenter,
+        accessControlAttributes: operation.attributes,
+      },
+    };
   }
   assertUnreachable(operation, "Unsupported operation kind in apply.");
 }

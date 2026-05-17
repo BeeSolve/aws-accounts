@@ -43,6 +43,7 @@ function createBaseInput(overrides?: Partial<RemoteCommandInput>): RemoteCommand
       refresh: false,
       allowDestructive: false,
       ignoreUnsupported: false,
+      update: false,
       ...overrides?.flags,
     },
     logger: overrides?.logger ?? noopLogger,
@@ -363,7 +364,7 @@ test("--refresh flag causes fetchCurrentState to skip cache check", async () => 
     const logger = createCollectingLogger();
     const input = createBaseInput({
       subcommand: "plan",
-      flags: { yes: false, refresh: true, allowDestructive: false, ignoreUnsupported: false },
+      flags: { yes: false, refresh: true, allowDestructive: false, ignoreUnsupported: false, update: false },
       logger,
     });
 
@@ -423,7 +424,7 @@ test("without --refresh flag, fresh cache is used", async () => {
     const logger = createCollectingLogger();
     const input = createBaseInput({
       subcommand: "plan",
-      flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false },
+      flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, update: false },
       logger,
     });
 
@@ -486,7 +487,7 @@ test("runRemoteApply displays concurrency conflict message", async () => {
     const logger = createCollectingLogger();
     const input = createBaseInput({
       subcommand: "apply",
-      flags: { yes: true, refresh: false, allowDestructive: false, ignoreUnsupported: false },
+      flags: { yes: true, refresh: false, allowDestructive: false, ignoreUnsupported: false, update: false },
       logger,
     });
 
@@ -564,6 +565,7 @@ function createMinimalState() {
       permissionSets: [],
       accountAssignments: [],
       accessRoles: [],
+      accessControlAttributes: [],
     },
   };
 }

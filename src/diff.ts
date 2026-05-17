@@ -46,6 +46,7 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   deleteOrgPolicy: 35,
   putAlternateContact: 36,
   deleteAlternateContact: 37,
+  setIdcAccessControlAttributes: 38,
 };
 
 type DiffStatesProps = {
@@ -796,6 +797,28 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
+  const currentAccessControlAttributes =
+    props.current.identityCenter.accessControlAttributes ?? [];
+  const nextAccessControlAttributes =
+    props.next.identityCenter.accessControlAttributes ?? [];
+  if (
+    JSON.stringify(
+      [...currentAccessControlAttributes].sort((a, b) =>
+        a.key.localeCompare(b.key),
+      ),
+    ) !==
+    JSON.stringify(
+      [...nextAccessControlAttributes].sort((a, b) =>
+        a.key.localeCompare(b.key),
+      ),
+    )
+  ) {
+    operations.push({
+      kind: "setIdcAccessControlAttributes",
+      attributes: nextAccessControlAttributes,
+    });
+  }
+
   const currentPolicies = props.current.organization.policies ?? [];
   const nextPolicies = props.next.organization.policies ?? [];
   const currentPolicyAttachments =
@@ -1294,6 +1317,17 @@ function getOperationSortKey(operation: Operation): string {
     return [operation.kind, operation.policyName, operation.targetName].join(
       "|",
     );
+  }
+  if (
+    operation.kind === "putAlternateContact" ||
+    operation.kind === "deleteAlternateContact"
+  ) {
+    return [operation.kind, operation.accountName, operation.contactType].join(
+      "|",
+    );
+  }
+  if (operation.kind === "setIdcAccessControlAttributes") {
+    return operation.kind;
   }
   return "zzzz";
 }

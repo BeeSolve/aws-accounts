@@ -136,6 +136,14 @@ export const awsConfigModelSchema = v.strictObject({
       accounts: v.array(v.string()),
     }),
   ),
+  accessControlAttributes: v.optional(
+    v.array(
+      v.strictObject({
+        key: v.string(),
+        source: v.array(v.string()),
+      }),
+    ),
+  ),
   policies: v.optional(
     v.strictObject({
       serviceControlPolicies: v.optional(
@@ -726,6 +734,13 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       }),
     ),
     assignments: [...assignmentsByKey.values()],
+    accessControlAttributes:
+      props.state.identityCenter.accessControlAttributes.length > 0
+        ? props.state.identityCenter.accessControlAttributes.map((attr) => ({
+            key: attr.key,
+            source: [...attr.source],
+          }))
+        : undefined,
     policies:
       scps.length > 0 ||
       rcps.length > 0 ||
@@ -1198,6 +1213,9 @@ export function mapAwsConfigToState(
         principalType: assignment.principalType,
         roleName: createAccessRoleName(assignment),
       })),
+      accessControlAttributes: (props.config.accessControlAttributes ?? []).map(
+        (attr) => ({ key: attr.key, source: [...attr.source] }),
+      ),
     },
   };
 
@@ -1355,6 +1373,15 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
         }
         return left.permissionSet.localeCompare(right.permissionSet);
       }),
+    accessControlAttributes:
+      props.config.accessControlAttributes == null
+        ? undefined
+        : [...props.config.accessControlAttributes]
+            .map((attr) => ({
+              ...attr,
+              source: [...attr.source].sort((a, b) => a.localeCompare(b)),
+            }))
+            .sort((a, b) => a.key.localeCompare(b.key)),
     policies:
       props.config.policies == null
         ? undefined
@@ -1712,6 +1739,14 @@ export const awsConfigSchema = v.strictObject({
       user: v.optional(userNameSchema),
       accounts: v.array(accountNameSchema),
     }),
+  ),
+  accessControlAttributes: v.optional(
+    v.array(
+      v.strictObject({
+        key: v.string(),
+        source: v.array(v.string()),
+      }),
+    ),
   ),
   policies: v.optional(
     v.strictObject({

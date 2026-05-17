@@ -1110,6 +1110,7 @@ function createBaseState(): StateFile {
         },
       ],
       accessRoles: [],
+      accessControlAttributes: [],
     },
   };
 }

@@ -250,6 +250,7 @@ async function writeFixtureFiles(props: {
       permissionSets: [],
       accountAssignments: [],
       accessRoles: [],
+      accessControlAttributes: [],
     },
   };
   const cache = {

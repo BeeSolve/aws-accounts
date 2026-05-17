@@ -113,6 +113,10 @@ const stateFileArb: fc.Arbitrary<StateFile> = fc.record({
     permissionSets: fc.array(permissionSetArb, { maxLength: 3 }),
     accountAssignments: fc.array(accountAssignmentArb, { maxLength: 5 }),
     accessRoles: fc.array(accessRoleArb, { maxLength: 5 }),
+    accessControlAttributes: fc.array(
+      fc.record({ key: nonEmptyStringArb, source: fc.array(nonEmptyStringArb, { maxLength: 3 }) }),
+      { maxLength: 3 },
+    ),
   }),
 });
 
@@ -143,6 +147,7 @@ test("Property 2: Cache freshness determination — isCacheFresh returns true if
       permissionSets: [],
       accountAssignments: [],
       accessRoles: [],
+      accessControlAttributes: [],
     },
   };
 

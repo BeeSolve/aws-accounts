@@ -107,6 +107,11 @@ const accessRoleSchema = v.strictObject({
   roleName: nonEmptyString,
 });
 
+const accessControlAttributeSchema = v.strictObject({
+  key: nonEmptyString,
+  source: v.array(nonEmptyString),
+});
+
 export const stateSchema = v.strictObject({
   version: nonEmptyString,
   generatedAt: nonEmptyString,
@@ -126,6 +131,7 @@ export const stateSchema = v.strictObject({
     permissionSets: v.array(permissionSetSchema),
     accountAssignments: v.array(accountAssignmentSchema),
     accessRoles: v.array(accessRoleSchema),
+    accessControlAttributes: v.array(accessControlAttributeSchema),
   }),
 });
 
@@ -136,7 +142,9 @@ export type OrgPolicyState = v.InferOutput<typeof orgPolicySchema>;
 export type OrgPolicyAttachmentState = v.InferOutput<
   typeof orgPolicyAttachmentSchema
 >;
-export type AlternateContactState = v.InferOutput<typeof alternateContactSchema>;
+export type AlternateContactState = v.InferOutput<
+  typeof alternateContactSchema
+>;
 export type AccountState = v.InferOutput<typeof accountSchema>;
 export type UserState = v.InferOutput<typeof userSchema>;
 export type GroupState = v.InferOutput<typeof groupSchema>;
@@ -149,6 +157,9 @@ export type AccountAssignmentState = v.InferOutput<
   typeof accountAssignmentSchema
 >;
 export type AccessRoleState = v.InferOutput<typeof accessRoleSchema>;
+export type AccessControlAttributeState = v.InferOutput<
+  typeof accessControlAttributeSchema
+>;
 export type StateFile = v.InferOutput<typeof stateSchema>;
 
 type WorkingIdentityCenterState = {
@@ -165,6 +176,7 @@ type WorkingIdentityCenterState = {
   accountAssignments: AccountAssignmentState[];
   accountAssignmentsByKey: Record<string, AccountAssignmentState>;
   accessRoles: AccessRoleState[];
+  accessControlAttributes: AccessControlAttributeState[];
 };
 
 export type WorkingState = {
@@ -251,6 +263,9 @@ export function materializeWorkingState(props: {
       ),
       accessRoles: structuredClone(
         props.workingState.identityCenter.accessRoles,
+      ),
+      accessControlAttributes: structuredClone(
+        props.workingState.identityCenter.accessControlAttributes,
       ),
     },
   };
@@ -485,9 +500,10 @@ export function removeIdcUserFromWorkingState(props: {
         users: props.workingState.identityCenter.users.filter(
           (currentUser) => currentUser.userName !== props.userName,
         ),
-        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
-          (groupMembership) => groupMembership.userId !== user.userId,
-        ),
+        groupMemberships:
+          props.workingState.identityCenter.groupMemberships.filter(
+            (groupMembership) => groupMembership.userId !== user.userId,
+          ),
         accountAssignments:
           props.workingState.identityCenter.accountAssignments.filter(
             (accountAssignment) =>
@@ -550,12 +566,12 @@ export function removeIdcGroupFromWorkingState(props: {
           identityCenter: props.workingState.identityCenter,
         }),
         groups: props.workingState.identityCenter.groups.filter(
-          (currentGroup) =>
-            currentGroup.displayName !== props.groupDisplayName,
+          (currentGroup) => currentGroup.displayName !== props.groupDisplayName,
         ),
-        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
-          (groupMembership) => groupMembership.groupId !== group.groupId,
-        ),
+        groupMemberships:
+          props.workingState.identityCenter.groupMemberships.filter(
+            (groupMembership) => groupMembership.groupId !== group.groupId,
+          ),
         accountAssignments:
           props.workingState.identityCenter.accountAssignments.filter(
             (accountAssignment) =>
@@ -581,7 +597,8 @@ export function upsertIdcPermissionSetInWorkingState(props: {
       props.permissionSet.permissionSetArn &&
     currentPermissionSet.name === props.permissionSet.name &&
     currentPermissionSet.description === props.permissionSet.description &&
-    currentPermissionSet.sessionDuration === props.permissionSet.sessionDuration &&
+    currentPermissionSet.sessionDuration ===
+      props.permissionSet.sessionDuration &&
     currentPermissionSet.inlinePolicy === props.permissionSet.inlinePolicy &&
     JSON.stringify(currentPermissionSet.awsManagedPolicies) ===
       JSON.stringify(props.permissionSet.awsManagedPolicies) &&
@@ -822,9 +839,10 @@ export function removeOrgPolicyFromWorkingState(props: {
   const nextPolicies = Object.values(
     props.workingState.organization.policiesById,
   ).filter((p) => p.id !== props.policyId);
-  const nextAttachments = props.workingState.organization.policyAttachments.filter(
-    (a) => a.policyId !== props.policyId,
-  );
+  const nextAttachments =
+    props.workingState.organization.policyAttachments.filter(
+      (a) => a.policyId !== props.policyId,
+    );
   return {
     ...props.workingState,
     organization: {
@@ -880,11 +898,14 @@ export function removeOrgPolicyAttachmentFromWorkingState(props: {
   if (props.workingState.organization.policyAttachmentsByKey[key] == null) {
     return props.workingState;
   }
-  const nextAttachments = props.workingState.organization.policyAttachments.filter(
-    (a) =>
-      createOrgPolicyAttachmentKey({ policyId: a.policyId, targetId: a.targetId }) !==
-      key,
-  );
+  const nextAttachments =
+    props.workingState.organization.policyAttachments.filter(
+      (a) =>
+        createOrgPolicyAttachmentKey({
+          policyId: a.policyId,
+          targetId: a.targetId,
+        }) !== key,
+    );
   return {
     ...props.workingState,
     organization: {
@@ -944,6 +965,9 @@ function createWorkingIdentityCenterState(props: {
     accessRoles: createAccessRoles({
       accountAssignments,
     }),
+    accessControlAttributes: structuredClone(
+      props.identityCenter.accessControlAttributes ?? [],
+    ),
   };
 }
 
@@ -961,6 +985,9 @@ function materializeWorkingIdentityCenterState(props: {
       props.identityCenter.accountAssignments,
     ),
     accessRoles: structuredClone(props.identityCenter.accessRoles),
+    accessControlAttributes: structuredClone(
+      props.identityCenter.accessControlAttributes,
+    ),
   };
 }
 

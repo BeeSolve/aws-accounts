@@ -973,6 +973,7 @@ function getFixtureState() {
         },
       ],
       accessRoles: [],
+      accessControlAttributes: [],
     },
   };
 }

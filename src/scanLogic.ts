@@ -21,6 +21,7 @@ import {
   ListAccountAssignmentsCommand,
   ListAccountsForProvisionedPermissionSetCommand,
   ListCustomerManagedPolicyReferencesInPermissionSetCommand,
+  DescribeInstanceAccessControlAttributeConfigurationCommand,
   ListInstancesCommand,
   ListManagedPoliciesInPermissionSetCommand,
   ListPermissionSetsCommand,
@@ -32,6 +33,7 @@ import {
 } from "@aws-sdk/client-account";
 import {
   createAccessRoleName,
+  type AccessControlAttributeState,
   type AccountAssignmentState,
   type AlternateContactState,
   type OrgPolicyAttachmentState,
@@ -264,20 +266,25 @@ export async function scanIdentityCenter(props: {
     requestedInstanceArn: props.requestedInstanceArn,
   });
 
-  const [users, groups, permissionSets] = await Promise.all([
-    listIdentityStoreUsers({
-      identityStoreClient: props.identityStoreClient,
-      identityStoreId: instance.identityStoreId,
-    }),
-    listIdentityStoreGroups({
-      identityStoreClient: props.identityStoreClient,
-      identityStoreId: instance.identityStoreId,
-    }),
-    listPermissionSets({
-      ssoAdminClient: props.ssoAdminClient,
-      instanceArn: instance.instanceArn,
-    }),
-  ]);
+  const [users, groups, permissionSets, accessControlAttributes] =
+    await Promise.all([
+      listIdentityStoreUsers({
+        identityStoreClient: props.identityStoreClient,
+        identityStoreId: instance.identityStoreId,
+      }),
+      listIdentityStoreGroups({
+        identityStoreClient: props.identityStoreClient,
+        identityStoreId: instance.identityStoreId,
+      }),
+      listPermissionSets({
+        ssoAdminClient: props.ssoAdminClient,
+        instanceArn: instance.instanceArn,
+      }),
+      scanAccessControlAttributes({
+        ssoAdminClient: props.ssoAdminClient,
+        instanceArn: instance.instanceArn,
+      }),
+    ]);
   const groupMemberships = await listGroupMemberships({
     identityStoreClient: props.identityStoreClient,
     identityStoreId: instance.identityStoreId,
@@ -302,7 +309,28 @@ export async function scanIdentityCenter(props: {
     permissionSets,
     accountAssignments,
     accessRoles,
+    accessControlAttributes,
   };
+}
+
+async function scanAccessControlAttributes(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+}): Promise<AccessControlAttributeState[]> {
+  const response = await props.ssoAdminClient.send(
+    new DescribeInstanceAccessControlAttributeConfigurationCommand({
+      InstanceArn: props.instanceArn,
+    }),
+  );
+  const attributes =
+    response.InstanceAccessControlAttributeConfiguration
+      ?.AccessControlAttributes ?? [];
+  return attributes
+    .filter((attr) => attr.Key != null)
+    .map((attr) => ({
+      key: attr.Key as string,
+      source: attr.Value?.Source ?? [],
+    }));
 }
 
 function selectIdentityCenterInstance(props: {

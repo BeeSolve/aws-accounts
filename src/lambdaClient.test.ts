@@ -62,6 +62,7 @@ function createValidScanResponse() {
           { accountId: "222222222222", permissionSetArn: "arn:ps:1", principalId: "g-1", principalType: "GROUP" },
         ],
         accessRoles: [],
+        accessControlAttributes: [],
       },
     },
   };

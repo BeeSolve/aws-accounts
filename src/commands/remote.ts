@@ -1009,6 +1009,9 @@ function formatOperationLine(operation: Operation): string {
   if (operation.kind === "deleteAlternateContact") {
     return `  [destructive] delete ${operation.contactType} alternate contact for "${operation.accountName}" (${operation.accountId})`;
   }
+  if (operation.kind === "setIdcAccessControlAttributes") {
+    return `  set IdC access control attributes (${operation.attributes.length} attribute(s))`;
+  }
   assertUnreachable(operation, "Unsupported operation kind in formatOperationLine.");
 }
 

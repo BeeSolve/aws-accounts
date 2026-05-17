@@ -23,6 +23,7 @@ const minimalState: StateFile = {
     permissionSets: [],
     accountAssignments: [],
     accessRoles: [],
+    accessControlAttributes: [],
   },
 };
 

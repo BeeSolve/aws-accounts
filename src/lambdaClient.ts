@@ -282,6 +282,7 @@ function buildEmptyStateForError(): StateFile {
       permissionSets: [],
       accountAssignments: [],
       accessRoles: [],
+      accessControlAttributes: [],
     },
   };
 }
