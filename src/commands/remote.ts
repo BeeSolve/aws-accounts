@@ -924,6 +924,7 @@ function isDestructiveOperation(operation: Operation): boolean {
     operation.kind === "deleteIdcUser" ||
     operation.kind === "deleteIdcGroup" ||
     operation.kind === "deleteIdcPermissionSet" ||
+    operation.kind === "deleteIdcPermissionSetPermissionsBoundary" ||
     operation.kind === "detachOrgPolicy" ||
     operation.kind === "deleteOrgPolicy"
   );
@@ -1004,6 +1005,17 @@ function formatOperationLine(operation: Operation): string {
   }
   if (operation.kind === "provisionIdcPermissionSet") {
     return `  provision IdC permission set "${operation.permissionSetName}" to all provisioned accounts`;
+  }
+  if (operation.kind === "putIdcPermissionSetPermissionsBoundary") {
+    const b = operation.permissionsBoundary;
+    const label =
+      "managedPolicyArn" in b
+        ? b.managedPolicyArn
+        : `${b.customerManagedPolicyPath}${b.customerManagedPolicyName}`;
+    return `  put permissions boundary "${label}" on IdC permission set "${operation.permissionSetName}"`;
+  }
+  if (operation.kind === "deleteIdcPermissionSetPermissionsBoundary") {
+    return `  [destructive] delete permissions boundary from IdC permission set "${operation.permissionSetName}"`;
   }
   if (operation.kind === "removeIdcGroupMembership") {
     return `  remove user "${operation.userName}" from IdC group "${operation.groupDisplayName}"`;

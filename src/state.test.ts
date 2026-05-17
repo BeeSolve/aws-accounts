@@ -183,6 +183,7 @@ test("working state helpers update IdC records immutably and regenerate access r
       inlinePolicy: null,
       awsManagedPolicies: [],
       customerManagedPolicies: [],
+      permissionsBoundary: null,
     },
   });
   const withMembership = addGroupMembershipToWorkingState({

@@ -81,6 +81,16 @@ const permissionSetArb = fc.record({
   customerManagedPolicies: fc.array(customerManagedPolicyReferenceArb, {
     maxLength: 3,
   }),
+  permissionsBoundary: fc.option(
+    fc.oneof(
+      fc.record({ managedPolicyArn: nonEmptyStringArb }),
+      fc.record({
+        customerManagedPolicyName: nonEmptyStringArb,
+        customerManagedPolicyPath: nonEmptyStringArb,
+      }),
+    ),
+    { nil: null },
+  ),
 });
 
 /** Generate a valid AccountAssignment */

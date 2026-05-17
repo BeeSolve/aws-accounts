@@ -31,22 +31,24 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   attachIdcCustomerManagedPolicyReferenceToPermissionSet: 20,
   detachIdcCustomerManagedPolicyReferenceFromPermissionSet: 21,
   provisionIdcPermissionSet: 22,
-  grantIdcAccountAssignment: 23,
-  removeIdcGroupMembership: 24,
-  revokeIdcAccountAssignment: 25,
-  deleteIdcUser: 26,
-  deleteIdcGroup: 27,
-  deleteIdcPermissionSet: 28,
-  deleteOu: 29,
-  createOrgPolicy: 30,
-  updateOrgPolicyContent: 31,
-  updateOrgPolicyDescription: 32,
-  attachOrgPolicy: 33,
-  detachOrgPolicy: 34,
-  deleteOrgPolicy: 35,
-  putAlternateContact: 36,
-  deleteAlternateContact: 37,
-  setIdcAccessControlAttributes: 38,
+  putIdcPermissionSetPermissionsBoundary: 23,
+  deleteIdcPermissionSetPermissionsBoundary: 24,
+  grantIdcAccountAssignment: 25,
+  removeIdcGroupMembership: 26,
+  revokeIdcAccountAssignment: 27,
+  deleteIdcUser: 28,
+  deleteIdcGroup: 29,
+  deleteIdcPermissionSet: 30,
+  deleteOu: 31,
+  createOrgPolicy: 32,
+  updateOrgPolicyContent: 33,
+  updateOrgPolicyDescription: 34,
+  attachOrgPolicy: 35,
+  detachOrgPolicy: 36,
+  deleteOrgPolicy: 37,
+  putAlternateContact: 38,
+  deleteAlternateContact: 39,
+  setIdcAccessControlAttributes: 40,
 };
 
 type DiffStatesProps = {
@@ -724,6 +726,27 @@ export function diffStates(props: DiffStatesProps): Plan {
         permissionSetName: nextPermissionSet.name,
         customerManagedPolicyName: customerManagedPolicy.name,
         customerManagedPolicyPath: customerManagedPolicy.path,
+      });
+    }
+
+    const currentBoundary = currentPermissionSet?.permissionsBoundary ?? null;
+    const nextBoundary = nextPermissionSet.permissionsBoundary ?? null;
+    if (nextBoundary != null) {
+      if (
+        currentBoundary == null ||
+        JSON.stringify(currentBoundary) !== JSON.stringify(nextBoundary)
+      ) {
+        operations.push({
+          kind: "putIdcPermissionSetPermissionsBoundary",
+          permissionSetName: nextPermissionSet.name,
+          permissionsBoundary: nextBoundary,
+        });
+      }
+    }
+    if (nextBoundary == null && currentBoundary != null) {
+      operations.push({
+        kind: "deleteIdcPermissionSetPermissionsBoundary",
+        permissionSetName: nextPermissionSet.name,
       });
     }
 

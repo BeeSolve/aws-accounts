@@ -82,6 +82,14 @@ const customerManagedPolicyReferenceSchema = v.strictObject({
   path: nonEmptyString,
 });
 
+const permissionsBoundarySchema = v.union([
+  v.strictObject({ managedPolicyArn: nonEmptyString }),
+  v.strictObject({
+    customerManagedPolicyName: nonEmptyString,
+    customerManagedPolicyPath: nonEmptyString,
+  }),
+]);
+
 const permissionSetSchema = v.strictObject({
   permissionSetArn: nonEmptyString,
   name: nonEmptyString,
@@ -90,6 +98,7 @@ const permissionSetSchema = v.strictObject({
   inlinePolicy: v.nullable(nonEmptyString),
   awsManagedPolicies: v.array(nonEmptyString),
   customerManagedPolicies: v.array(customerManagedPolicyReferenceSchema),
+  permissionsBoundary: v.nullable(permissionsBoundarySchema),
 });
 
 const accountAssignmentSchema = v.strictObject({
@@ -603,7 +612,9 @@ export function upsertIdcPermissionSetInWorkingState(props: {
     JSON.stringify(currentPermissionSet.awsManagedPolicies) ===
       JSON.stringify(props.permissionSet.awsManagedPolicies) &&
     JSON.stringify(currentPermissionSet.customerManagedPolicies) ===
-      JSON.stringify(props.permissionSet.customerManagedPolicies)
+      JSON.stringify(props.permissionSet.customerManagedPolicies) &&
+    JSON.stringify(currentPermissionSet.permissionsBoundary) ===
+      JSON.stringify(props.permissionSet.permissionsBoundary)
   ) {
     return props.workingState;
   }

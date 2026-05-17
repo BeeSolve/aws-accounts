@@ -183,6 +183,25 @@ const provisionIdcPermissionSetOperationSchema = v.strictObject({
   targetScope: v.literal("ALL_PROVISIONED_ACCOUNTS"),
 });
 
+const permissionsBoundaryOperationValueSchema = v.union([
+  v.strictObject({ managedPolicyArn: v.string() }),
+  v.strictObject({
+    customerManagedPolicyName: v.string(),
+    customerManagedPolicyPath: v.string(),
+  }),
+]);
+
+const putIdcPermissionSetPermissionsBoundaryOperationSchema = v.strictObject({
+  kind: v.literal("putIdcPermissionSetPermissionsBoundary"),
+  permissionSetName: v.string(),
+  permissionsBoundary: permissionsBoundaryOperationValueSchema,
+});
+
+const deleteIdcPermissionSetPermissionsBoundaryOperationSchema = v.strictObject({
+  kind: v.literal("deleteIdcPermissionSetPermissionsBoundary"),
+  permissionSetName: v.string(),
+});
+
 const grantIdcAccountAssignmentOperationSchema = v.strictObject({
   kind: v.literal("grantIdcAccountAssignment"),
   accountName: v.string(),
@@ -310,6 +329,8 @@ export const operationSchema = v.variant("kind", [
   attachIdcCustomerManagedPolicyReferenceToPermissionSetOperationSchema,
   detachIdcCustomerManagedPolicyReferenceFromPermissionSetOperationSchema,
   provisionIdcPermissionSetOperationSchema,
+  putIdcPermissionSetPermissionsBoundaryOperationSchema,
+  deleteIdcPermissionSetPermissionsBoundaryOperationSchema,
   grantIdcAccountAssignmentOperationSchema,
   revokeIdcAccountAssignmentOperationSchema,
   createOrgPolicyOperationSchema,

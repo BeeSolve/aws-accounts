@@ -126,6 +126,15 @@ export const awsConfigModelSchema = v.strictObject({
           path: v.string(),
         }),
       ),
+      permissionsBoundary: v.optional(
+        v.union([
+          v.strictObject({ managedPolicyArn: v.string() }),
+          v.strictObject({
+            customerManagedPolicyName: v.string(),
+            customerManagedPolicyPath: v.string(),
+          }),
+        ]),
+      ),
     }),
   ),
   assignments: v.array(
@@ -731,6 +740,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
             path: customerManagedPolicy.path,
           }),
         ),
+        permissionsBoundary: permissionSet.permissionsBoundary ?? undefined,
       }),
     ),
     assignments: [...assignmentsByKey.values()],
@@ -1023,6 +1033,7 @@ export function mapAwsConfigToState(
             path: customerManagedPolicy.path,
           }),
         ),
+        permissionsBoundary: permissionSet.permissionsBoundary ?? null,
       };
     });
   const mappedPermissionSetByName = toRecordByProperty(
@@ -1729,6 +1740,15 @@ export const awsConfigSchema = v.strictObject({
           name: v.string(),
           path: v.string(),
         }),
+      ),
+      permissionsBoundary: v.optional(
+        v.union([
+          v.strictObject({ managedPolicyArn: v.string() }),
+          v.strictObject({
+            customerManagedPolicyName: v.string(),
+            customerManagedPolicyPath: v.string(),
+          }),
+        ]),
       ),
     }),
   ),

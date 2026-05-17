@@ -151,6 +151,7 @@ function getFixtureState() {
           inlinePolicy: null,
           awsManagedPolicies: [],
           customerManagedPolicies: [],
+          permissionsBoundary: null,
         },
       ],
       accountAssignments: [

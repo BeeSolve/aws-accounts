@@ -683,6 +683,7 @@ test("diffStates emits IdC entity creation operations", () => {
     inlinePolicy: null,
     awsManagedPolicies: [],
     customerManagedPolicies: [],
+    permissionsBoundary: null,
   });
   const plan = diffStates({
     current,
@@ -1007,6 +1008,7 @@ test("diffStates keeps deterministic mixed Organizations and IdC ordering", () =
     inlinePolicy: null,
     awsManagedPolicies: [],
     customerManagedPolicies: [],
+    permissionsBoundary: null,
   });
   next.identityCenter.accountAssignments.push({
     accountId: "__pending_creation__",
@@ -1099,6 +1101,7 @@ function createBaseState(): StateFile {
           inlinePolicy: null,
           awsManagedPolicies: [],
           customerManagedPolicies: [],
+          permissionsBoundary: null,
         },
       ],
       accountAssignments: [

@@ -19,6 +19,7 @@ import {
 import {
   DescribePermissionSetCommand,
   GetInlinePolicyForPermissionSetCommand,
+  GetPermissionsBoundaryForPermissionSetCommand,
   ListAccountAssignmentsCommand,
   ListAccountsForProvisionedPermissionSetCommand,
   ListCustomerManagedPolicyReferencesInPermissionSetCommand,
@@ -540,6 +541,7 @@ async function listPermissionSets(props: {
         inlinePolicy,
         awsManagedPolicies,
         customerManagedPolicies,
+        permissionsBoundary,
       ] = await Promise.all([
         getInlinePolicyForPermissionSet({
           ssoAdminClient: props.ssoAdminClient,
@@ -556,6 +558,11 @@ async function listPermissionSets(props: {
           instanceArn: props.instanceArn,
           permissionSetArn: permissionSet.PermissionSetArn,
         }),
+        getPermissionsBoundaryForPermissionSet({
+          ssoAdminClient: props.ssoAdminClient,
+          instanceArn: props.instanceArn,
+          permissionSetArn: permissionSet.PermissionSetArn,
+        }),
       ]);
       return {
         permissionSetArn: permissionSet.PermissionSetArn,
@@ -565,6 +572,7 @@ async function listPermissionSets(props: {
         inlinePolicy,
         awsManagedPolicies,
         customerManagedPolicies,
+        permissionsBoundary,
       };
     }),
   );
@@ -587,6 +595,34 @@ async function getInlinePolicyForPermissionSet(props: {
   );
   const inlinePolicy = response.InlinePolicy?.trim();
   return inlinePolicy != null && inlinePolicy.length > 0 ? inlinePolicy : null;
+}
+
+async function getPermissionsBoundaryForPermissionSet(props: {
+  ssoAdminClient: SSOAdminClient;
+  instanceArn: string;
+  permissionSetArn: string;
+}): Promise<StateFile["identityCenter"]["permissionSets"][number]["permissionsBoundary"]> {
+  const response = await props.ssoAdminClient.send(
+    new GetPermissionsBoundaryForPermissionSetCommand({
+      InstanceArn: props.instanceArn,
+      PermissionSetArn: props.permissionSetArn,
+    }),
+  );
+  const boundary = response.PermissionsBoundary;
+  if (boundary == null) {
+    return null;
+  }
+  if (boundary.ManagedPolicyArn != null) {
+    return { managedPolicyArn: boundary.ManagedPolicyArn };
+  }
+  const ref = boundary.CustomerManagedPolicyReference;
+  if (ref?.Name != null) {
+    return {
+      customerManagedPolicyName: ref.Name,
+      customerManagedPolicyPath: ref.Path ?? "/",
+    };
+  }
+  return null;
 }
 
 async function listManagedPoliciesInPermissionSet(props: {

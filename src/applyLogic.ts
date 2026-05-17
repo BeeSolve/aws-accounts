@@ -40,6 +40,7 @@ import {
   CreatePermissionSetCommand,
   DeleteAccountAssignmentCommand,
   DeleteInlinePolicyFromPermissionSetCommand,
+  DeletePermissionsBoundaryFromPermissionSetCommand,
   DeletePermissionSetCommand,
   DescribeAccountAssignmentCreationStatusCommand,
   DescribeAccountAssignmentDeletionStatusCommand,
@@ -48,6 +49,7 @@ import {
   DetachManagedPolicyFromPermissionSetCommand,
   ProvisionPermissionSetCommand,
   PutInlinePolicyToPermissionSetCommand,
+  PutPermissionsBoundaryToPermissionSetCommand,
   SSOAdminClient,
   UpdateInstanceAccessControlAttributeConfigurationCommand,
   UpdatePermissionSetCommand,
@@ -565,6 +567,7 @@ export async function executeOperation(
         inlinePolicy: null,
         awsManagedPolicies: [],
         customerManagedPolicies: [],
+        permissionsBoundary: null,
       },
     });
   }
@@ -851,6 +854,56 @@ export async function executeOperation(
     });
     props.logger.log(`Done: "${operation.permissionSetName}"`);
     return props.state;
+  }
+  if (operation.kind === "putIdcPermissionSetPermissionsBoundary") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Putting permissions boundary on IdC permission set "${operation.permissionSetName}"...`,
+    );
+    const boundary = operation.permissionsBoundary;
+    await props.ssoAdminClient.send(
+      new PutPermissionsBoundaryToPermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+        PermissionsBoundary:
+          "managedPolicyArn" in boundary
+            ? { ManagedPolicyArn: boundary.managedPolicyArn }
+            : {
+                CustomerManagedPolicyReference: {
+                  Name: boundary.customerManagedPolicyName,
+                  Path: boundary.customerManagedPolicyPath,
+                },
+              },
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertIdcPermissionSetInWorkingState({
+      workingState: props.state,
+      permissionSet: { ...permissionSet, permissionsBoundary: boundary },
+    });
+  }
+  if (operation.kind === "deleteIdcPermissionSetPermissionsBoundary") {
+    const permissionSet = resolvePermissionSetByName({
+      state: props.state,
+      permissionSetName: operation.permissionSetName,
+    });
+    props.logger.log(
+      `Deleting permissions boundary from IdC permission set "${operation.permissionSetName}"...`,
+    );
+    await props.ssoAdminClient.send(
+      new DeletePermissionsBoundaryFromPermissionSetCommand({
+        InstanceArn: props.state.identityCenter.instanceArn,
+        PermissionSetArn: permissionSet.permissionSetArn,
+      }),
+    );
+    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    return upsertIdcPermissionSetInWorkingState({
+      workingState: props.state,
+      permissionSet: { ...permissionSet, permissionsBoundary: null },
+    });
   }
   if (operation.kind === "removeIdcGroupMembership") {
     const resolvedMembership = resolveGroupMembershipDependencies({

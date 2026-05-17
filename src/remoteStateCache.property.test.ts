@@ -76,6 +76,16 @@ const permissionSetArb = fc.record({
   inlinePolicy: fc.option(nonEmptyStringArb, { nil: null }),
   awsManagedPolicies: fc.array(nonEmptyStringArb, { maxLength: 3 }),
   customerManagedPolicies: fc.array(customerManagedPolicyReferenceArb, { maxLength: 3 }),
+  permissionsBoundary: fc.option(
+    fc.oneof(
+      fc.record({ managedPolicyArn: nonEmptyStringArb }),
+      fc.record({
+        customerManagedPolicyName: nonEmptyStringArb,
+        customerManagedPolicyPath: nonEmptyStringArb,
+      }),
+    ),
+    { nil: null },
+  ),
 });
 
 /** Generate a valid AccountAssignment */

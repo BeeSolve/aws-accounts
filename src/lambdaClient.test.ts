@@ -56,7 +56,7 @@ function createValidScanResponse() {
         users: [{ userId: "u-1", userName: "alice", displayName: "Alice", email: "alice@x.com" }],
         groups: [{ groupId: "g-1", displayName: "Admins" }],
         groupMemberships: [],
-        permissionSets: [{ permissionSetArn: "arn:ps:1", name: "Admin", description: "Full access", sessionDuration: null, inlinePolicy: null, awsManagedPolicies: ["arn:aws:iam::aws:policy/AdministratorAccess"], customerManagedPolicies: [] }],
+        permissionSets: [{ permissionSetArn: "arn:ps:1", name: "Admin", description: "Full access", sessionDuration: null, inlinePolicy: null, awsManagedPolicies: ["arn:aws:iam::aws:policy/AdministratorAccess"], customerManagedPolicies: [], permissionsBoundary: null }],
         accountAssignments: [
           { accountId: "111111111111", permissionSetArn: "arn:ps:1", principalId: "g-1", principalType: "GROUP" },
           { accountId: "222222222222", permissionSetArn: "arn:ps:1", principalId: "g-1", principalType: "GROUP" },
