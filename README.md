@@ -25,7 +25,7 @@ npm install @beesolve/aws-accounts
 mkdir my-org && cd my-org
 npm init -y
 npm pkg set type=module
-npm install @beesolve/aws-accounts
+npm install @beesolve/aws-accounts typescript
 
 # 2. Initialize git and add a .gitignore
 git init
