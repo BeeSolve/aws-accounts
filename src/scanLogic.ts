@@ -27,8 +27,13 @@ import {
   SSOAdminClient,
 } from "@aws-sdk/client-sso-admin";
 import {
+  AccountClient,
+  GetAlternateContactCommand,
+} from "@aws-sdk/client-account";
+import {
   createAccessRoleName,
   type AccountAssignmentState,
+  type AlternateContactState,
   type OrgPolicyAttachmentState,
   type OrgPolicyState,
   type StateFile,
@@ -36,6 +41,7 @@ import {
 
 export async function scanOrganization(props: {
   organizationsClient: OrganizationsClient;
+  accountClient: AccountClient;
 }): Promise<StateFile["organization"]> {
   const roots = await props.organizationsClient.send(new ListRootsCommand({}));
   const root = roots.Roots?.[0];
@@ -73,6 +79,10 @@ export async function scanOrganization(props: {
           ResourceId: account.Id,
         }),
       );
+      const alternateContacts = await scanAlternateContacts({
+        accountClient: props.accountClient,
+        accountId: account.Id,
+      });
       accounts.push({
         id: account.Id,
         arn: account.Arn,
@@ -91,6 +101,7 @@ export async function scanOrganization(props: {
             },
           ];
         }),
+        alternateContacts: alternateContacts.length > 0 ? alternateContacts : undefined,
       });
     }
     nextToken = response.NextToken;
@@ -657,4 +668,50 @@ async function listAccountsForPermissionSet(props: {
     nextToken = response.NextToken;
   } while (nextToken != null);
   return accountIds;
+}
+
+const ALTERNATE_CONTACT_TYPES = [
+  "BILLING",
+  "OPERATIONS",
+  "SECURITY",
+] as const;
+
+async function scanAlternateContacts(props: {
+  accountClient: AccountClient;
+  accountId: string;
+}): Promise<AlternateContactState[]> {
+  const results = await Promise.all(
+    ALTERNATE_CONTACT_TYPES.map(async (contactType) => {
+      try {
+        const response = await props.accountClient.send(
+          new GetAlternateContactCommand({
+            AccountId: props.accountId,
+            AlternateContactType: contactType,
+          }),
+        );
+        const c = response.AlternateContact;
+        if (c == null || c.EmailAddress == null || c.Name == null) {
+          return null;
+        }
+        return {
+          contactType,
+          name: c.Name,
+          email: c.EmailAddress,
+          phone: c.PhoneNumber ?? "",
+          ...(c.Title != null ? { title: c.Title } : {}),
+        } satisfies AlternateContactState;
+      } catch (error: unknown) {
+        if (
+          error != null &&
+          typeof error === "object" &&
+          "name" in error &&
+          error.name === "ResourceNotFoundException"
+        ) {
+          return null;
+        }
+        throw error;
+      }
+    }),
+  );
+  return results.filter((c): c is AlternateContactState => c != null);
 }

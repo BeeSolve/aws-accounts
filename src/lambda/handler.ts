@@ -161,7 +161,7 @@ export async function handler(event: unknown): Promise<LambdaResponse> {
     }
 
     if (request.action === "scan") {
-      const response = await handleScan({ s3Client, bucket, organizationsClient, ssoAdminClient, identityStoreClient });
+      const response = await handleScan({ s3Client, bucket, organizationsClient, ssoAdminClient, identityStoreClient, accountClient });
       return validateResponse(response);
     }
     if (request.action === "getStateUrl") {
@@ -281,12 +281,13 @@ async function handleScan(props: {
   organizationsClient: OrganizationsClient;
   ssoAdminClient: SSOAdminClient;
   identityStoreClient: IdentitystoreClient;
+  accountClient: AccountClient;
 }): Promise<LambdaResponse> {
   const identityCenterInstanceArn =
     process.env.IDENTITY_CENTER_INSTANCE_ARN || undefined;
 
   const [organization, identityCenter] = await Promise.all([
-    scanOrganization({ organizationsClient: props.organizationsClient }),
+    scanOrganization({ organizationsClient: props.organizationsClient, accountClient: props.accountClient }),
     scanIdentityCenter({
       ssoAdminClient: props.ssoAdminClient,
       identityStoreClient: props.identityStoreClient,

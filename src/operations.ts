@@ -199,6 +199,30 @@ const revokeIdcAccountAssignmentOperationSchema = v.strictObject({
   principalName: v.string(),
 });
 
+const alternateContactTypeSchema = v.picklist([
+  "BILLING",
+  "OPERATIONS",
+  "SECURITY",
+]);
+
+const putAlternateContactOperationSchema = v.strictObject({
+  kind: v.literal("putAlternateContact"),
+  accountId: v.string(),
+  accountName: v.string(),
+  contactType: alternateContactTypeSchema,
+  name: v.string(),
+  email: v.string(),
+  phone: v.string(),
+  title: v.optional(v.string()),
+});
+
+const deleteAlternateContactOperationSchema = v.strictObject({
+  kind: v.literal("deleteAlternateContact"),
+  accountId: v.string(),
+  accountName: v.string(),
+  contactType: alternateContactTypeSchema,
+});
+
 const createOrgPolicyOperationSchema = v.strictObject({
   kind: v.literal("createOrgPolicy"),
   policyName: v.string(),
@@ -284,6 +308,8 @@ export const operationSchema = v.variant("kind", [
   attachOrgPolicyOperationSchema,
   detachOrgPolicyOperationSchema,
   deleteOrgPolicyOperationSchema,
+  putAlternateContactOperationSchema,
+  deleteAlternateContactOperationSchema,
 ]);
 
 const unsupportedDiffKindSchema = v.picklist([

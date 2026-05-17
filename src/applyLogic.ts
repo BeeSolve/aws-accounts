@@ -1,4 +1,9 @@
-import { AccountClient, PutAccountNameCommand } from "@aws-sdk/client-account";
+import {
+  AccountClient,
+  DeleteAlternateContactCommand,
+  PutAccountNameCommand,
+  PutAlternateContactCommand,
+} from "@aws-sdk/client-account";
 import {
   AttachPolicyCommand,
   CreateOrganizationalUnitCommand,
@@ -1111,6 +1116,71 @@ export async function executeOperation(
     return removeOrgPolicyFromWorkingState({
       workingState: props.state,
       policyId: operation.policyId,
+    });
+  }
+  if (operation.kind === "putAlternateContact") {
+    props.logger.log(
+      `Setting ${operation.contactType} alternate contact for "${operation.accountName}" (${operation.accountId})...`,
+    );
+    await props.accountClient.send(
+      new PutAlternateContactCommand({
+        AccountId: operation.accountId,
+        AlternateContactType: operation.contactType,
+        Name: operation.name,
+        EmailAddress: operation.email,
+        PhoneNumber: operation.phone,
+        Title: operation.title,
+      }),
+    );
+    props.logger.log(`Done: ${operation.contactType} contact for "${operation.accountName}"`);
+    const account = props.state.organization.accountsById[operation.accountId];
+    if (account == null) {
+      throw new Error(
+        `Could not resolve account (${operation.accountId}) in working state.`,
+      );
+    }
+    const updatedContacts = [
+      ...(account.alternateContacts ?? []).filter(
+        (c) => c.contactType !== operation.contactType,
+      ),
+      {
+        contactType: operation.contactType,
+        name: operation.name,
+        email: operation.email,
+        phone: operation.phone,
+        title: operation.title,
+      },
+    ];
+    return upsertAccountInWorkingState({
+      workingState: props.state,
+      account: { ...account, alternateContacts: updatedContacts },
+    });
+  }
+  if (operation.kind === "deleteAlternateContact") {
+    props.logger.log(
+      `Deleting ${operation.contactType} alternate contact for "${operation.accountName}" (${operation.accountId})...`,
+    );
+    await props.accountClient.send(
+      new DeleteAlternateContactCommand({
+        AccountId: operation.accountId,
+        AlternateContactType: operation.contactType,
+      }),
+    );
+    props.logger.log(`Done: removed ${operation.contactType} contact for "${operation.accountName}"`);
+    const account = props.state.organization.accountsById[operation.accountId];
+    if (account == null) {
+      throw new Error(
+        `Could not resolve account (${operation.accountId}) in working state.`,
+      );
+    }
+    return upsertAccountInWorkingState({
+      workingState: props.state,
+      account: {
+        ...account,
+        alternateContacts: (account.alternateContacts ?? []).filter(
+          (c) => c.contactType !== operation.contactType,
+        ),
+      },
     });
   }
   assertUnreachable(operation, "Unsupported operation kind in apply.");

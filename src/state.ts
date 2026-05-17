@@ -39,6 +39,14 @@ const accountTagSchema = v.strictObject({
   value: v.string(),
 });
 
+const alternateContactSchema = v.strictObject({
+  contactType: v.picklist(["BILLING", "OPERATIONS", "SECURITY"]),
+  name: v.string(),
+  email: v.string(),
+  phone: v.string(),
+  title: v.optional(v.string()),
+});
+
 const accountSchema = v.strictObject({
   id: nonEmptyString,
   arn: nonEmptyString,
@@ -47,6 +55,7 @@ const accountSchema = v.strictObject({
   status: nonEmptyString,
   parentId: nonEmptyString,
   tags: v.array(accountTagSchema),
+  alternateContacts: v.optional(v.array(alternateContactSchema)),
 });
 
 const userSchema = v.strictObject({
@@ -127,6 +136,7 @@ export type OrgPolicyState = v.InferOutput<typeof orgPolicySchema>;
 export type OrgPolicyAttachmentState = v.InferOutput<
   typeof orgPolicyAttachmentSchema
 >;
+export type AlternateContactState = v.InferOutput<typeof alternateContactSchema>;
 export type AccountState = v.InferOutput<typeof accountSchema>;
 export type UserState = v.InferOutput<typeof userSchema>;
 export type GroupState = v.InferOutput<typeof groupSchema>;

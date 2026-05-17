@@ -44,6 +44,8 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   attachOrgPolicy: 33,
   detachOrgPolicy: 34,
   deleteOrgPolicy: 35,
+  putAlternateContact: 36,
+  deleteAlternateContact: 37,
 };
 
 type DiffStatesProps = {
@@ -177,6 +179,13 @@ export function diffStates(props: DiffStatesProps): Plan {
           ),
         });
       }
+      diffAlternateContacts({
+        operations,
+        accountId: nextAccount.id,
+        accountName: nextAccount.name,
+        currentContacts: currentAccount.alternateContacts ?? [],
+        nextContacts: nextAccount.alternateContacts ?? [],
+      });
       continue;
     }
     if (
@@ -214,6 +223,13 @@ export function diffStates(props: DiffStatesProps): Plan {
       fromOuName,
       toOuId: nextAccount.parentId,
       toOuName,
+    });
+    diffAlternateContacts({
+      operations,
+      accountId: nextAccount.id,
+      accountName: nextAccount.name,
+      currentContacts: currentAccount.alternateContacts ?? [],
+      nextContacts: nextAccount.alternateContacts ?? [],
     });
   }
 
@@ -1516,4 +1532,52 @@ function isResolvableOrganizationalUnitId(props: {
     return true;
   }
   return props.organizationalUnitNameById.has(props.organizationalUnitId);
+}
+
+type AlternateContact = NonNullable<
+  StateFile["organization"]["accounts"][number]["alternateContacts"]
+>[number];
+
+function diffAlternateContacts(props: {
+  operations: Operation[];
+  accountId: string;
+  accountName: string;
+  currentContacts: AlternateContact[];
+  nextContacts: AlternateContact[];
+}): void {
+  const currentByType = new Map(
+    props.currentContacts.map((c) => [c.contactType, c]),
+  );
+  const nextByType = new Map(props.nextContacts.map((c) => [c.contactType, c]));
+  for (const next of props.nextContacts) {
+    const current = currentByType.get(next.contactType);
+    if (
+      current == null ||
+      current.name !== next.name ||
+      current.email !== next.email ||
+      current.phone !== next.phone ||
+      current.title !== next.title
+    ) {
+      props.operations.push({
+        kind: "putAlternateContact",
+        accountId: props.accountId,
+        accountName: props.accountName,
+        contactType: next.contactType,
+        name: next.name,
+        email: next.email,
+        phone: next.phone,
+        title: next.title,
+      });
+    }
+  }
+  for (const current of props.currentContacts) {
+    if (!nextByType.has(current.contactType)) {
+      props.operations.push({
+        kind: "deleteAlternateContact",
+        accountId: props.accountId,
+        accountName: props.accountName,
+        contactType: current.contactType,
+      });
+    }
+  }
 }

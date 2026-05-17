@@ -84,6 +84,17 @@ export const awsConfigModelSchema = v.strictObject({
               value: v.string(),
             }),
           ),
+          alternateContacts: v.optional(
+            v.array(
+              v.strictObject({
+                contactType: v.picklist(["BILLING", "OPERATIONS", "SECURITY"]),
+                name: v.string(),
+                email: v.string(),
+                phone: v.string(),
+                title: v.optional(v.string()),
+              }),
+            ),
+          ),
         }),
       ),
     }),
@@ -493,10 +504,13 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
         `Could not map account "${account.name}" to organizational unit "${ownerOuName}".`,
       );
     }
+    const contacts = account.alternateContacts;
     ownerOu.accounts.push({
       name: account.name,
       email: account.email,
       tags: account.tags ?? [],
+      alternateContacts:
+        contacts != null && contacts.length > 0 ? contacts : undefined,
     });
   }
 
@@ -917,6 +931,11 @@ export function mapAwsConfigToState(
         status: matchedAccount?.status ?? "ACTIVE",
         parentId: ownerParentId,
         tags: account.tags,
+        alternateContacts:
+          account.alternateContacts != null &&
+          account.alternateContacts.length > 0
+            ? account.alternateContacts
+            : undefined,
       });
       mappedAccountIdByName.set(account.name, mappedId);
     }
@@ -1274,9 +1293,17 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
     for (const child of children) {
       orderedOrganizationalUnits.push({
         ...child,
-        accounts: [...child.accounts].sort((left, right) =>
-          left.name.localeCompare(right.name),
-        ),
+        accounts: [...child.accounts]
+          .sort((left, right) => left.name.localeCompare(right.name))
+          .map((account) => ({
+            ...account,
+            alternateContacts:
+              account.alternateContacts == null
+                ? undefined
+                : [...account.alternateContacts].sort((a, b) =>
+                    a.contactType.localeCompare(b.contactType),
+                  ),
+          })),
       });
       queue.push(child.name);
     }
@@ -1633,6 +1660,17 @@ export const awsConfigSchema = v.strictObject({
               key: v.string(),
               value: v.string(),
             }),
+          ),
+          alternateContacts: v.optional(
+            v.array(
+              v.strictObject({
+                contactType: v.picklist(["BILLING", "OPERATIONS", "SECURITY"]),
+                name: v.string(),
+                email: v.string(),
+                phone: v.string(),
+                title: v.optional(v.string()),
+              }),
+            ),
           ),
         }),
       ),

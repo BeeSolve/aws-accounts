@@ -1003,6 +1003,12 @@ function formatOperationLine(operation: Operation): string {
   if (operation.kind === "deleteOrgPolicy") {
     return `  [destructive] delete org policy "${operation.policyName}"`;
   }
+  if (operation.kind === "putAlternateContact") {
+    return `  set ${operation.contactType} alternate contact for "${operation.accountName}" (${operation.accountId})`;
+  }
+  if (operation.kind === "deleteAlternateContact") {
+    return `  [destructive] delete ${operation.contactType} alternate contact for "${operation.accountName}" (${operation.accountId})`;
+  }
   assertUnreachable(operation, "Unsupported operation kind in formatOperationLine.");
 }
 
