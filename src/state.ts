@@ -12,6 +12,26 @@ const organizationalUnitSchema = v.strictObject({
   name: nonEmptyString,
 });
 
+const orgPolicyTypeSchema = v.picklist([
+  "SERVICE_CONTROL_POLICY",
+  "RESOURCE_CONTROL_POLICY",
+]);
+
+const orgPolicySchema = v.strictObject({
+  id: nonEmptyString,
+  arn: nonEmptyString,
+  name: nonEmptyString,
+  description: v.string(),
+  type: orgPolicyTypeSchema,
+  content: nonEmptyString,
+});
+
+const orgPolicyAttachmentSchema = v.strictObject({
+  policyId: nonEmptyString,
+  targetId: nonEmptyString,
+  targetType: v.picklist(["ROOT", "ORGANIZATIONAL_UNIT", "ACCOUNT"]),
+});
+
 const accountTagSchema = v.strictObject({
   key: nonEmptyString,
   value: v.string(),
@@ -83,6 +103,8 @@ export const stateSchema = v.strictObject({
     rootId: nonEmptyString,
     organizationalUnits: v.array(organizationalUnitSchema),
     accounts: v.array(accountSchema),
+    policies: v.optional(v.array(orgPolicySchema)),
+    policyAttachments: v.optional(v.array(orgPolicyAttachmentSchema)),
   }),
   identityCenter: v.strictObject({
     instanceArn: nonEmptyString,
@@ -98,6 +120,10 @@ export const stateSchema = v.strictObject({
 
 export type OrganizationalUnitState = v.InferOutput<
   typeof organizationalUnitSchema
+>;
+export type OrgPolicyState = v.InferOutput<typeof orgPolicySchema>;
+export type OrgPolicyAttachmentState = v.InferOutput<
+  typeof orgPolicyAttachmentSchema
 >;
 export type AccountState = v.InferOutput<typeof accountSchema>;
 export type UserState = v.InferOutput<typeof userSchema>;
@@ -137,6 +163,10 @@ export type WorkingState = {
     organizationalUnitsById: Record<string, OrganizationalUnitState>;
     accountsById: Record<string, AccountState>;
     accountsByName: Record<string, AccountState>;
+    policiesById: Record<string, OrgPolicyState>;
+    policiesByName: Record<string, OrgPolicyState>;
+    policyAttachments: OrgPolicyAttachmentState[];
+    policyAttachmentsByKey: Record<string, OrgPolicyAttachmentState>;
   };
   identityCenter: WorkingIdentityCenterState;
 };
@@ -146,6 +176,8 @@ export function validateState(value: unknown): StateFile {
 }
 
 export function createWorkingState(props: { state: StateFile }): WorkingState {
+  const policies = props.state.organization.policies ?? [];
+  const policyAttachments = props.state.organization.policyAttachments ?? [];
   return {
     version: props.state.version,
     generatedAt: props.state.generatedAt,
@@ -159,6 +191,13 @@ export function createWorkingState(props: { state: StateFile }): WorkingState {
       accountsByName: toRecordByProperty(
         props.state.organization.accounts,
         "name",
+      ),
+      policiesById: toRecordByProperty(policies, "id"),
+      policiesByName: toRecordByProperty(policies, "name"),
+      policyAttachments: structuredClone(policyAttachments),
+      policyAttachmentsByKey: toRecordByProperty(
+        policyAttachments,
+        createOrgPolicyAttachmentKey,
       ),
     },
     identityCenter: createWorkingIdentityCenterState({
@@ -179,6 +218,10 @@ export function materializeWorkingState(props: {
         props.workingState.organization.organizationalUnitsById,
       ),
       accounts: Object.values(props.workingState.organization.accountsById),
+      policies: Object.values(props.workingState.organization.policiesById),
+      policyAttachments: structuredClone(
+        props.workingState.organization.policyAttachments,
+      ),
     },
     identityCenter: {
       instanceArn: props.workingState.identityCenter.instanceArn,
@@ -716,6 +759,130 @@ export function removeAccountAssignmentFromWorkingState(props: {
           ),
       },
     }),
+  };
+}
+
+export function createOrgPolicyAttachmentKey(props: {
+  policyId: string;
+  targetId: string;
+}): string {
+  return [props.policyId, props.targetId].join("|");
+}
+
+export function upsertOrgPolicyInWorkingState(props: {
+  workingState: WorkingState;
+  policy: OrgPolicyState;
+}): WorkingState {
+  const currentPolicy =
+    props.workingState.organization.policiesById[props.policy.id];
+  if (
+    currentPolicy != null &&
+    currentPolicy.id === props.policy.id &&
+    currentPolicy.arn === props.policy.arn &&
+    currentPolicy.name === props.policy.name &&
+    currentPolicy.description === props.policy.description &&
+    currentPolicy.type === props.policy.type &&
+    currentPolicy.content === props.policy.content
+  ) {
+    return props.workingState;
+  }
+  const remainingPolicies = Object.values(
+    props.workingState.organization.policiesById,
+  ).filter((p) => p.id !== props.policy.id);
+  const nextPolicies = [...remainingPolicies, props.policy];
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      policiesById: toRecordByProperty(nextPolicies, "id"),
+      policiesByName: toRecordByProperty(nextPolicies, "name"),
+    },
+  };
+}
+
+export function removeOrgPolicyFromWorkingState(props: {
+  workingState: WorkingState;
+  policyId: string;
+}): WorkingState {
+  if (props.workingState.organization.policiesById[props.policyId] == null) {
+    return props.workingState;
+  }
+  const nextPolicies = Object.values(
+    props.workingState.organization.policiesById,
+  ).filter((p) => p.id !== props.policyId);
+  const nextAttachments = props.workingState.organization.policyAttachments.filter(
+    (a) => a.policyId !== props.policyId,
+  );
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      policiesById: toRecordByProperty(nextPolicies, "id"),
+      policiesByName: toRecordByProperty(nextPolicies, "name"),
+      policyAttachments: nextAttachments,
+      policyAttachmentsByKey: toRecordByProperty(
+        nextAttachments,
+        createOrgPolicyAttachmentKey,
+      ),
+    },
+  };
+}
+
+export function addOrgPolicyAttachmentToWorkingState(props: {
+  workingState: WorkingState;
+  attachment: OrgPolicyAttachmentState;
+}): WorkingState {
+  const key = createOrgPolicyAttachmentKey({
+    policyId: props.attachment.policyId,
+    targetId: props.attachment.targetId,
+  });
+  if (props.workingState.organization.policyAttachmentsByKey[key] != null) {
+    return props.workingState;
+  }
+  const nextAttachments = [
+    ...props.workingState.organization.policyAttachments,
+    props.attachment,
+  ];
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      policyAttachments: nextAttachments,
+      policyAttachmentsByKey: toRecordByProperty(
+        nextAttachments,
+        createOrgPolicyAttachmentKey,
+      ),
+    },
+  };
+}
+
+export function removeOrgPolicyAttachmentFromWorkingState(props: {
+  workingState: WorkingState;
+  policyId: string;
+  targetId: string;
+}): WorkingState {
+  const key = createOrgPolicyAttachmentKey({
+    policyId: props.policyId,
+    targetId: props.targetId,
+  });
+  if (props.workingState.organization.policyAttachmentsByKey[key] == null) {
+    return props.workingState;
+  }
+  const nextAttachments = props.workingState.organization.policyAttachments.filter(
+    (a) =>
+      createOrgPolicyAttachmentKey({ policyId: a.policyId, targetId: a.targetId }) !==
+      key,
+  );
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      policyAttachments: nextAttachments,
+      policyAttachmentsByKey: toRecordByProperty(
+        nextAttachments,
+        createOrgPolicyAttachmentKey,
+      ),
+    },
   };
 }
 

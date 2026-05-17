@@ -5,11 +5,14 @@ import {
   ListUsersCommand,
 } from "@aws-sdk/client-identitystore";
 import {
+  DescribePolicyCommand,
   ListAccountsCommand,
   ListOrganizationalUnitsForParentCommand,
   ListParentsCommand,
+  ListPoliciesCommand,
   ListRootsCommand,
   ListTagsForResourceCommand,
+  ListTargetsForPolicyCommand,
   OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import {
@@ -26,6 +29,8 @@ import {
 import {
   createAccessRoleName,
   type AccountAssignmentState,
+  type OrgPolicyAttachmentState,
+  type OrgPolicyState,
   type StateFile,
 } from "./state.js";
 
@@ -91,11 +96,106 @@ export async function scanOrganization(props: {
     nextToken = response.NextToken;
   } while (nextToken != null);
 
+  const { policies, policyAttachments } = await scanOrganizationPolicies({
+    organizationsClient: props.organizationsClient,
+  });
+
   return {
     rootId: root.Id,
     organizationalUnits,
     accounts,
+    policies,
+    policyAttachments,
   };
+}
+
+const ORG_POLICY_TYPES = [
+  "SERVICE_CONTROL_POLICY",
+  "RESOURCE_CONTROL_POLICY",
+] as const;
+
+async function scanOrganizationPolicies(props: {
+  organizationsClient: OrganizationsClient;
+}): Promise<{
+  policies: OrgPolicyState[];
+  policyAttachments: OrgPolicyAttachmentState[];
+}> {
+  const policies: OrgPolicyState[] = [];
+  const policyAttachments: OrgPolicyAttachmentState[] = [];
+
+  for (const policyType of ORG_POLICY_TYPES) {
+    let nextToken: string | undefined;
+    const policyIds: string[] = [];
+    do {
+      const response = await props.organizationsClient.send(
+        new ListPoliciesCommand({ Filter: policyType, NextToken: nextToken }),
+      );
+      for (const summary of response.Policies ?? []) {
+        if (summary.Id == null || summary.AwsManaged === true) {
+          continue;
+        }
+        policyIds.push(summary.Id);
+      }
+      nextToken = response.NextToken;
+    } while (nextToken != null);
+
+    for (const policyId of policyIds) {
+      const describeResponse = await props.organizationsClient.send(
+        new DescribePolicyCommand({ PolicyId: policyId }),
+      );
+      const policy = describeResponse.Policy;
+      if (
+        policy?.PolicySummary?.Id == null ||
+        policy.PolicySummary.Arn == null ||
+        policy.PolicySummary.Name == null
+      ) {
+        continue;
+      }
+      const content = policy.Content;
+      if (content == null || content.length === 0) {
+        continue;
+      }
+      policies.push({
+        id: policy.PolicySummary.Id,
+        arn: policy.PolicySummary.Arn,
+        name: policy.PolicySummary.Name,
+        description: policy.PolicySummary.Description ?? "",
+        type: policyType,
+        content,
+      });
+
+      let targetsNextToken: string | undefined;
+      do {
+        const targetsResponse = await props.organizationsClient.send(
+          new ListTargetsForPolicyCommand({
+            PolicyId: policyId,
+            NextToken: targetsNextToken,
+          }),
+        );
+        for (const target of targetsResponse.Targets ?? []) {
+          if (target.TargetId == null || target.Type == null) {
+            continue;
+          }
+          const targetType = target.Type as OrgPolicyAttachmentState["targetType"];
+          if (
+            targetType !== "ROOT" &&
+            targetType !== "ORGANIZATIONAL_UNIT" &&
+            targetType !== "ACCOUNT"
+          ) {
+            continue;
+          }
+          policyAttachments.push({
+            policyId,
+            targetId: target.TargetId,
+            targetType,
+          });
+        }
+        targetsNextToken = targetsResponse.NextToken;
+      } while (targetsNextToken != null);
+    }
+  }
+
+  return { policies, policyAttachments };
 }
 
 async function collectOrganizationalUnits(props: {

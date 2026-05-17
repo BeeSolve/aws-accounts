@@ -38,6 +38,12 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   deleteIdcGroup: 27,
   deleteIdcPermissionSet: 28,
   deleteOu: 29,
+  createOrgPolicy: 30,
+  updateOrgPolicyContent: 31,
+  updateOrgPolicyDescription: 32,
+  attachOrgPolicy: 33,
+  detachOrgPolicy: 34,
+  deleteOrgPolicy: 35,
 };
 
 type DiffStatesProps = {
@@ -120,14 +126,16 @@ export function diffStates(props: DiffStatesProps): Plan {
     if (currentAccount == null) {
       if (nextAccount.id === pendingCreationId) {
         const targetOuName = resolveOrganizationalUnitName({
-          organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
+          organizationalUnitNameById:
+            nextOrganization.organizationalUnitNameById,
           rootId: nextOrganization.rootId,
           organizationalUnitId: nextAccount.parentId,
         });
         if (
           isResolvableOrganizationalUnitId({
             rootId: nextOrganization.rootId,
-            organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
+            organizationalUnitNameById:
+              nextOrganization.organizationalUnitNameById,
             organizationalUnitId: nextAccount.parentId,
           }) === false
         ) {
@@ -180,7 +188,8 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     const fromOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
+      organizationalUnitNameById:
+        currentOrganization.organizationalUnitNameById,
       rootId: currentOrganization.rootId,
       organizationalUnitId: currentAccount.parentId,
     });
@@ -229,7 +238,8 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     const fromOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
+      organizationalUnitNameById:
+        currentOrganization.organizationalUnitNameById,
       rootId: currentOrganization.rootId,
       organizationalUnitId: currentAccount.parentId,
     });
@@ -245,9 +255,10 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const nextOrganizationalUnit of nextOrganization.organizationalUnits) {
-    const currentOrganizationalUnit = currentOrganization.organizationalUnitByName.get(
-      nextOrganizationalUnit.name,
-    );
+    const currentOrganizationalUnit =
+      currentOrganization.organizationalUnitByName.get(
+        nextOrganizationalUnit.name,
+      );
     if (currentOrganizationalUnit == null) {
       continue;
     }
@@ -257,7 +268,8 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     const fromParentOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
+      organizationalUnitNameById:
+        currentOrganization.organizationalUnitNameById,
       rootId: currentOrganization.rootId,
       organizationalUnitId: currentOrganizationalUnit.parentId,
     });
@@ -279,7 +291,9 @@ export function diffStates(props: DiffStatesProps): Plan {
     [];
   for (const nextOrganizationalUnit of nextOrganization.organizationalUnits) {
     if (
-      currentOrganization.organizationalUnitByName.has(nextOrganizationalUnit.name)
+      currentOrganization.organizationalUnitByName.has(
+        nextOrganizationalUnit.name,
+      )
     ) {
       continue;
     }
@@ -287,7 +301,9 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
   for (const currentOrganizationalUnit of currentOrganization.organizationalUnits) {
     if (
-      nextOrganization.organizationalUnitByName.has(currentOrganizationalUnit.name)
+      nextOrganization.organizationalUnitByName.has(
+        currentOrganizationalUnit.name,
+      )
     ) {
       continue;
     }
@@ -423,7 +439,8 @@ export function diffStates(props: DiffStatesProps): Plan {
   for (const removedOrganizationalUnit of pendingRemovedOrganizationalUnits) {
     if (deleteEligibilityByOuId.get(removedOrganizationalUnit.id) === true) {
       const parentOuName = resolveOrganizationalUnitName({
-        organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
+        organizationalUnitNameById:
+          currentOrganization.organizationalUnitNameById,
         rootId: currentOrganization.rootId,
         organizationalUnitId: removedOrganizationalUnit.parentId,
       });
@@ -469,7 +486,10 @@ export function diffStates(props: DiffStatesProps): Plan {
     }
     const emailWouldChange =
       currentUser.email !== nextUser.email && nextUser.email.length > 0;
-    if (currentUser.displayName === nextUser.displayName && emailWouldChange === false) {
+    if (
+      currentUser.displayName === nextUser.displayName &&
+      emailWouldChange === false
+    ) {
       continue;
     }
     operations.push({
@@ -569,8 +589,9 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const nextPermissionSet of props.next.identityCenter.permissionSets) {
-    const currentPermissionSet =
-      currentIdcView.permissionSetsByName.get(nextPermissionSet.name);
+    const currentPermissionSet = currentIdcView.permissionSetsByName.get(
+      nextPermissionSet.name,
+    );
     if (currentPermissionSet == null) {
       operations.push({
         kind: "createIdcPermissionSet",
@@ -589,7 +610,10 @@ export function diffStates(props: DiffStatesProps): Plan {
           description: nextPermissionSet.description,
         });
       }
-      if (currentPermissionSet.sessionDuration !== nextPermissionSet.sessionDuration) {
+      if (
+        currentPermissionSet.sessionDuration !==
+        nextPermissionSet.sessionDuration
+      ) {
         operations.push({
           kind: "updateIdcPermissionSetSessionDuration",
           permissionSetName: nextPermissionSet.name,
@@ -621,7 +645,9 @@ export function diffStates(props: DiffStatesProps): Plan {
     const currentAwsManagedPolicies = new Set(
       currentPermissionSet?.awsManagedPolicies ?? [],
     );
-    const nextAwsManagedPolicies = new Set(nextPermissionSet.awsManagedPolicies);
+    const nextAwsManagedPolicies = new Set(
+      nextPermissionSet.awsManagedPolicies,
+    );
     for (const managedPolicyArn of nextAwsManagedPolicies) {
       if (currentAwsManagedPolicies.has(managedPolicyArn)) {
         continue;
@@ -655,7 +681,10 @@ export function diffStates(props: DiffStatesProps): Plan {
         policy,
       ]),
     );
-    for (const [policyKey, customerManagedPolicy] of nextCustomerManagedPolicies) {
+    for (const [
+      policyKey,
+      customerManagedPolicy,
+    ] of nextCustomerManagedPolicies) {
       if (currentCustomerManagedPolicies.has(policyKey)) {
         continue;
       }
@@ -666,7 +695,10 @@ export function diffStates(props: DiffStatesProps): Plan {
         customerManagedPolicyPath: customerManagedPolicy.path,
       });
     }
-    for (const [policyKey, customerManagedPolicy] of currentCustomerManagedPolicies) {
+    for (const [
+      policyKey,
+      customerManagedPolicy,
+    ] of currentCustomerManagedPolicies) {
       if (nextCustomerManagedPolicies.has(policyKey)) {
         continue;
       }
@@ -745,6 +777,169 @@ export function diffStates(props: DiffStatesProps): Plan {
     operations.push({
       kind: "deleteIdcPermissionSet",
       permissionSetName: removedPermissionSetName,
+    });
+  }
+
+  const currentPolicies = props.current.organization.policies ?? [];
+  const nextPolicies = props.next.organization.policies ?? [];
+  const currentPolicyAttachments =
+    props.current.organization.policyAttachments ?? [];
+  const nextPolicyAttachments = props.next.organization.policyAttachments ?? [];
+
+  const currentPoliciesByName = new Map(
+    currentPolicies.map((p) => [`${p.type}|${p.name}`, p]),
+  );
+  const nextPoliciesByName = new Map(
+    nextPolicies.map((p) => [`${p.type}|${p.name}`, p]),
+  );
+
+  const currentAttachmentsByKey = new Set(
+    currentPolicyAttachments.map((a) => `${a.policyId}|${a.targetId}`),
+  );
+
+  const nextPoliciesByPendingId = new Map<
+    string,
+    (typeof nextPolicies)[number]
+  >();
+
+  for (const nextPolicy of nextPolicies) {
+    const currentPolicy = currentPoliciesByName.get(
+      `${nextPolicy.type}|${nextPolicy.name}`,
+    );
+    if (currentPolicy == null) {
+      operations.push({
+        kind: "createOrgPolicy",
+        policyName: nextPolicy.name,
+        policyType: nextPolicy.type,
+        description: nextPolicy.description,
+        content: nextPolicy.content,
+      });
+      nextPoliciesByPendingId.set(nextPolicy.id, nextPolicy);
+      continue;
+    }
+
+    if (
+      normalizeJsonContent(currentPolicy.content) !==
+      normalizeJsonContent(nextPolicy.content)
+    ) {
+      operations.push({
+        kind: "updateOrgPolicyContent",
+        policyId: currentPolicy.id,
+        policyName: currentPolicy.name,
+        content: nextPolicy.content,
+      });
+    }
+    if (currentPolicy.description !== nextPolicy.description) {
+      operations.push({
+        kind: "updateOrgPolicyDescription",
+        policyId: currentPolicy.id,
+        policyName: currentPolicy.name,
+        description: nextPolicy.description,
+      });
+    }
+  }
+
+  const nextPoliciesById = new Map(nextPolicies.map((p) => [p.id, p]));
+  const currentPoliciesById = new Map(currentPolicies.map((p) => [p.id, p]));
+
+  const nextOuNameById = new Map(
+    props.next.organization.organizationalUnits.map((ou) => [ou.id, ou.name]),
+  );
+  const nextAccountNameById = new Map(
+    props.next.organization.accounts.map((account) => [account.id, account.name]),
+  );
+  const currentOuNameById = new Map(
+    props.current.organization.organizationalUnits.map((ou) => [ou.id, ou.name]),
+  );
+  const currentAccountNameById = new Map(
+    props.current.organization.accounts.map((account) => [account.id, account.name]),
+  );
+
+  function resolveNextTargetName(targetId: string, targetType: string): string {
+    if (targetType === "ROOT") return "root";
+    if (targetType === "ORGANIZATIONAL_UNIT") return nextOuNameById.get(targetId) ?? "unknown";
+    return nextAccountNameById.get(targetId) ?? "unknown";
+  }
+
+  function resolveCurrentTargetName(targetId: string, targetType: string): string {
+    if (targetType === "ROOT") return "root";
+    if (targetType === "ORGANIZATIONAL_UNIT") return currentOuNameById.get(targetId) ?? "unknown";
+    return currentAccountNameById.get(targetId) ?? "unknown";
+  }
+
+  for (const nextAttachment of nextPolicyAttachments) {
+    if (nextAttachment.policyId === pendingCreationId) {
+      continue;
+    }
+    if (nextAttachment.targetId === pendingCreationId) {
+      continue;
+    }
+    const attachmentKey = `${nextAttachment.policyId}|${nextAttachment.targetId}`;
+    if (currentAttachmentsByKey.has(attachmentKey)) {
+      continue;
+    }
+    const policy =
+      nextPoliciesById.get(nextAttachment.policyId) ??
+      currentPoliciesById.get(nextAttachment.policyId);
+    if (policy == null) {
+      continue;
+    }
+    operations.push({
+      kind: "attachOrgPolicy",
+      policyId: nextAttachment.policyId,
+      policyName: policy.name,
+      targetId: nextAttachment.targetId,
+      targetName: resolveNextTargetName(
+        nextAttachment.targetId,
+        nextAttachment.targetType,
+      ),
+    });
+  }
+
+  const nextAttachmentKeys = new Set(
+    nextPolicyAttachments
+      .filter(
+        (a) =>
+          a.policyId !== pendingCreationId && a.targetId !== pendingCreationId,
+      )
+      .map((a) => `${a.policyId}|${a.targetId}`),
+  );
+  const nextPolicyIds = new Set(
+    nextPolicies.filter((p) => p.id !== pendingCreationId).map((p) => p.id),
+  );
+
+  for (const currentAttachment of currentPolicyAttachments) {
+    const attachmentKey = `${currentAttachment.policyId}|${currentAttachment.targetId}`;
+    const policyBeingDeleted =
+      !nextPolicyIds.has(currentAttachment.policyId) &&
+      currentPoliciesById.has(currentAttachment.policyId);
+    if (nextAttachmentKeys.has(attachmentKey) && !policyBeingDeleted) {
+      continue;
+    }
+    const policy = currentPoliciesById.get(currentAttachment.policyId);
+    if (policy == null) {
+      continue;
+    }
+    operations.push({
+      kind: "detachOrgPolicy",
+      policyId: currentAttachment.policyId,
+      policyName: policy.name,
+      targetId: currentAttachment.targetId,
+      targetName: resolveCurrentTargetName(
+        currentAttachment.targetId,
+        currentAttachment.targetType,
+      ),
+    });
+  }
+
+  for (const currentPolicy of currentPolicies) {
+    if (nextPoliciesByName.has(`${currentPolicy.type}|${currentPolicy.name}`)) {
+      continue;
+    }
+    operations.push({
+      kind: "deleteOrgPolicy",
+      policyId: currentPolicy.id,
+      policyName: currentPolicy.name,
     });
   }
 
@@ -836,7 +1031,10 @@ function normalizeOrganizationState(props: {
   const accountByName = new Map(
     props.state.organization.accounts.map((account) => [account.name, account]),
   );
-  const accountById = new Map<string, StateFile["organization"]["accounts"][number]>();
+  const accountById = new Map<
+    string,
+    StateFile["organization"]["accounts"][number]
+  >();
   for (const account of props.state.organization.accounts) {
     if (account.id !== pendingCreationId) {
       accountById.set(account.id, account);
@@ -1039,8 +1237,10 @@ function getOperationSortKey(operation: Operation): string {
     ].join("|");
   }
   if (
-    operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet" ||
-    operation.kind === "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
+    operation.kind ===
+      "attachIdcCustomerManagedPolicyReferenceToPermissionSet" ||
+    operation.kind ===
+      "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
   ) {
     return [
       operation.kind,
@@ -1061,7 +1261,33 @@ function getOperationSortKey(operation: Operation): string {
       operation.principalName,
     ].join("|");
   }
+  if (operation.kind === "createOrgPolicy") {
+    return `${operation.kind}|${operation.policyType}|${operation.policyName}`;
+  }
+  if (
+    operation.kind === "updateOrgPolicyContent" ||
+    operation.kind === "updateOrgPolicyDescription" ||
+    operation.kind === "deleteOrgPolicy"
+  ) {
+    return `${operation.kind}|${operation.policyName}`;
+  }
+  if (
+    operation.kind === "attachOrgPolicy" ||
+    operation.kind === "detachOrgPolicy"
+  ) {
+    return [operation.kind, operation.policyName, operation.targetName].join(
+      "|",
+    );
+  }
   return "zzzz";
+}
+
+function normalizeJsonContent(content: string): string {
+  try {
+    return JSON.stringify(JSON.parse(content) as unknown);
+  } catch {
+    return content;
+  }
 }
 
 function normalizeAccountTags(
@@ -1071,7 +1297,9 @@ function normalizeAccountTags(
     return [];
   }
   return [...tags].sort((left, right) =>
-    [left.key, left.value].join("|").localeCompare([right.key, right.value].join("|")),
+    [left.key, left.value]
+      .join("|")
+      .localeCompare([right.key, right.value].join("|")),
   );
 }
 
@@ -1190,7 +1418,9 @@ function normalizeIdentityCenterState(props: {
 function createNormalizedIdcMembershipKey(props: {
   membership: NormalizedIdcMembership;
 }): string {
-  return [props.membership.groupDisplayName, props.membership.userName].join("|");
+  return [props.membership.groupDisplayName, props.membership.userName].join(
+    "|",
+  );
 }
 
 function resolveAssignmentPrincipalName(props: {

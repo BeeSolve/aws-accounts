@@ -199,6 +199,50 @@ const revokeIdcAccountAssignmentOperationSchema = v.strictObject({
   principalName: v.string(),
 });
 
+const createOrgPolicyOperationSchema = v.strictObject({
+  kind: v.literal("createOrgPolicy"),
+  policyName: v.string(),
+  policyType: v.picklist(["SERVICE_CONTROL_POLICY", "RESOURCE_CONTROL_POLICY"]),
+  description: v.string(),
+  content: v.string(),
+});
+
+const updateOrgPolicyContentOperationSchema = v.strictObject({
+  kind: v.literal("updateOrgPolicyContent"),
+  policyId: v.string(),
+  policyName: v.string(),
+  content: v.string(),
+});
+
+const updateOrgPolicyDescriptionOperationSchema = v.strictObject({
+  kind: v.literal("updateOrgPolicyDescription"),
+  policyId: v.string(),
+  policyName: v.string(),
+  description: v.string(),
+});
+
+const attachOrgPolicyOperationSchema = v.strictObject({
+  kind: v.literal("attachOrgPolicy"),
+  policyId: v.string(),
+  policyName: v.string(),
+  targetId: v.string(),
+  targetName: v.string(),
+});
+
+const detachOrgPolicyOperationSchema = v.strictObject({
+  kind: v.literal("detachOrgPolicy"),
+  policyId: v.string(),
+  policyName: v.string(),
+  targetId: v.string(),
+  targetName: v.string(),
+});
+
+const deleteOrgPolicyOperationSchema = v.strictObject({
+  kind: v.literal("deleteOrgPolicy"),
+  policyId: v.string(),
+  policyName: v.string(),
+});
+
 export const operationSchema = v.variant("kind", [
   moveAccountOperationSchema,
   createOuOperationSchema,
@@ -229,6 +273,12 @@ export const operationSchema = v.variant("kind", [
   provisionIdcPermissionSetOperationSchema,
   grantIdcAccountAssignmentOperationSchema,
   revokeIdcAccountAssignmentOperationSchema,
+  createOrgPolicyOperationSchema,
+  updateOrgPolicyContentOperationSchema,
+  updateOrgPolicyDescriptionOperationSchema,
+  attachOrgPolicyOperationSchema,
+  detachOrgPolicyOperationSchema,
+  deleteOrgPolicyOperationSchema,
 ]);
 
 const unsupportedDiffKindSchema = v.picklist([

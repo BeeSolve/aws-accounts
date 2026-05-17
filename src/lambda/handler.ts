@@ -51,6 +51,8 @@ const scanResponseSchema = v.strictObject({
     groups: v.number(),
     permissionSets: v.number(),
     accountAssignments: v.number(),
+    policies: v.number(),
+    policyAttachments: v.number(),
   }),
   state: stateSchema,
 });
@@ -315,6 +317,8 @@ async function handleScan(props: {
       groups: state.identityCenter.groups.length,
       permissionSets: state.identityCenter.permissionSets.length,
       accountAssignments: state.identityCenter.accountAssignments.length,
+      policies: state.organization.policies?.length ?? 0,
+      policyAttachments: state.organization.policyAttachments?.length ?? 0,
     },
     state,
   };

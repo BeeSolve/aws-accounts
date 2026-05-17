@@ -41,6 +41,8 @@ const scanResponseSchema = v.strictObject({
     groups: v.number(),
     permissionSets: v.number(),
     accountAssignments: v.number(),
+    policies: v.number(),
+    policyAttachments: v.number(),
   }),
   state: stateSchema,
 });

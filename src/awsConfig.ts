@@ -124,6 +124,30 @@ export const awsConfigModelSchema = v.strictObject({
       accounts: v.array(v.string()),
     }),
   ),
+  policies: v.optional(
+    v.strictObject({
+      serviceControlPolicies: v.optional(
+        v.array(
+          v.strictObject({
+            name: v.string(),
+            description: v.optional(v.string()),
+            content: v.record(v.string(), v.unknown()),
+            targets: v.array(v.string()),
+          }),
+        ),
+      ),
+      resourceControlPolicies: v.optional(
+        v.array(
+          v.strictObject({
+            name: v.string(),
+            description: v.optional(v.string()),
+            content: v.record(v.string(), v.unknown()),
+            targets: v.array(v.string()),
+          }),
+        ),
+      ),
+    }),
+  ),
 });
 
 export type AwsConfigModel = v.InferOutput<typeof awsConfigModelSchema>;
@@ -539,6 +563,63 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     }
   }
 
+  const orgPolicies = props.state.organization.policies ?? [];
+  const orgPolicyAttachments = props.state.organization.policyAttachments ?? [];
+  const ouById = toRecordByProperty(
+    props.state.organization.organizationalUnits,
+    "id",
+  );
+  const orgAccountById = toRecordByProperty(
+    props.state.organization.accounts,
+    "id",
+  );
+
+  function resolveTargetName(targetId: string, targetType: string): string | null {
+    if (targetType === "ROOT") {
+      return "root";
+    }
+    if (targetType === "ORGANIZATIONAL_UNIT") {
+      return ouById[targetId]?.name ?? null;
+    }
+    if (targetType === "ACCOUNT") {
+      return orgAccountById[targetId]?.name ?? null;
+    }
+    return null;
+  }
+
+  const attachmentsByPolicyId = new Map<string, string[]>();
+  for (const attachment of orgPolicyAttachments) {
+    const targetName = resolveTargetName(attachment.targetId, attachment.targetType);
+    if (targetName == null) {
+      continue;
+    }
+    const targets = attachmentsByPolicyId.get(attachment.policyId) ?? [];
+    targets.push(targetName);
+    attachmentsByPolicyId.set(attachment.policyId, targets);
+  }
+
+  const scps = orgPolicies
+    .filter((p) => p.type === "SERVICE_CONTROL_POLICY")
+    .map((p) => ({
+      name: p.name,
+      description: p.description.length > 0 ? p.description : undefined,
+      content: JSON.parse(p.content) as Record<string, unknown>,
+      targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    }));
+
+  const rcps = orgPolicies
+    .filter((p) => p.type === "RESOURCE_CONTROL_POLICY")
+    .map((p) => ({
+      name: p.name,
+      description: p.description.length > 0 ? p.description : undefined,
+      content: JSON.parse(p.content) as Record<string, unknown>,
+      targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    }));
+
   const mapped: AwsConfigModel = {
     organizationalUnits,
     users: props.state.identityCenter.users.map((user) => ({
@@ -573,6 +654,13 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       }),
     ),
     assignments: [...assignmentsByKey.values()],
+    policies:
+      scps.length > 0 || rcps.length > 0
+        ? {
+            serviceControlPolicies: scps.length > 0 ? scps : undefined,
+            resourceControlPolicies: rcps.length > 0 ? rcps : undefined,
+          }
+        : undefined,
   };
 
   assertUniqueNames({
@@ -880,6 +968,93 @@ export function mapAwsConfigToState(
     }
   }
 
+  const configPolicies = props.config.policies;
+  const allConfigPolicies: Array<{
+    name: string;
+    description: string;
+    type: "SERVICE_CONTROL_POLICY" | "RESOURCE_CONTROL_POLICY";
+    content: string;
+    targets: Array<{ targetId: string; targetType: "ROOT" | "ORGANIZATIONAL_UNIT" | "ACCOUNT" }>;
+  }> = [];
+
+  const ouByName = toRecordByProperty(
+    props.currentState.organization.organizationalUnits,
+    "name",
+  );
+  const stateAccountByName = toRecordByProperty(
+    props.currentState.organization.accounts,
+    "name",
+  );
+
+  function resolveTargetId(targetName: string): { targetId: string; targetType: "ROOT" | "ORGANIZATIONAL_UNIT" | "ACCOUNT" } {
+    if (targetName === "root") {
+      return { targetId: props.context.organization.rootId, targetType: "ROOT" };
+    }
+    const ou = ouByName[targetName];
+    if (ou != null) {
+      return { targetId: ou.id, targetType: "ORGANIZATIONAL_UNIT" };
+    }
+    const acct = stateAccountByName[targetName];
+    if (acct != null) {
+      return { targetId: acct.id, targetType: "ACCOUNT" };
+    }
+    return { targetId: pendingCreationId, targetType: "ACCOUNT" };
+  }
+
+  for (const policy of configPolicies?.serviceControlPolicies ?? []) {
+    allConfigPolicies.push({
+      name: policy.name,
+      description: policy.description ?? "",
+      type: "SERVICE_CONTROL_POLICY",
+      content: JSON.stringify(policy.content),
+      targets: policy.targets.map((t) => resolveTargetId(t)),
+    });
+  }
+
+  for (const policy of configPolicies?.resourceControlPolicies ?? []) {
+    allConfigPolicies.push({
+      name: policy.name,
+      description: policy.description ?? "",
+      type: "RESOURCE_CONTROL_POLICY",
+      content: JSON.stringify(policy.content),
+      targets: policy.targets.map((t) => resolveTargetId(t)),
+    });
+  }
+
+  const currentPoliciesByNameAndType = new Map(
+    (props.currentState.organization.policies ?? []).map((p) => [
+      `${p.type}|${p.name}`,
+      p,
+    ]),
+  );
+
+  const mappedPolicies: NonNullable<StateFile["organization"]["policies"]> =
+    allConfigPolicies.map((p) => {
+      const current = currentPoliciesByNameAndType.get(`${p.type}|${p.name}`);
+      return {
+        id: current?.id ?? pendingCreationId,
+        arn: current?.arn ?? pendingCreationId,
+        name: p.name,
+        description: p.description,
+        type: p.type,
+        content: p.content,
+      };
+    });
+
+  const mappedPolicyAttachments: NonNullable<StateFile["organization"]["policyAttachments"]> =
+    [];
+  for (let i = 0; i < allConfigPolicies.length; i++) {
+    const configPolicy = allConfigPolicies[i]!;
+    const mappedPolicy = mappedPolicies[i]!;
+    for (const target of configPolicy.targets) {
+      mappedPolicyAttachments.push({
+        policyId: mappedPolicy.id,
+        targetId: target.targetId,
+        targetType: target.targetType,
+      });
+    }
+  }
+
   const mapped: StateFile = {
     version: props.currentState.version,
     generatedAt: props.currentState.generatedAt,
@@ -887,6 +1062,8 @@ export function mapAwsConfigToState(
       rootId: props.context.organization.rootId,
       organizationalUnits: mappedOrganizationalUnits,
       accounts: mappedAccounts,
+      policies: mappedPolicies,
+      policyAttachments: mappedPolicyAttachments,
     },
     identityCenter: {
       instanceArn: props.context.identityCenter.instanceArn,
@@ -931,6 +1108,18 @@ export function mapAwsConfigToState(
       (permissionSet) => permissionSet.name,
     ),
     entityName: "permission set",
+  });
+  assertUniqueNames({
+    values: (props.config.policies?.serviceControlPolicies ?? []).map(
+      (p) => p.name,
+    ),
+    entityName: "SCP",
+  });
+  assertUniqueNames({
+    values: (props.config.policies?.resourceControlPolicies ?? []).map(
+      (p) => p.name,
+    ),
+    entityName: "RCP",
   });
 
   return validateState(mapped);
@@ -1029,6 +1218,29 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
         }
         return left.permissionSet.localeCompare(right.permissionSet);
       }),
+    policies:
+      props.config.policies == null
+        ? undefined
+        : {
+            serviceControlPolicies: props.config.policies.serviceControlPolicies == null
+              ? undefined
+              : [...props.config.policies.serviceControlPolicies]
+                  .map((p) => ({
+                    ...p,
+                    content: sortJsonRecord(p.content),
+                    targets: [...p.targets].sort((a, b) => a.localeCompare(b)),
+                  }))
+                  .sort((a, b) => a.name.localeCompare(b.name)),
+            resourceControlPolicies: props.config.policies.resourceControlPolicies == null
+              ? undefined
+              : [...props.config.policies.resourceControlPolicies]
+                  .map((p) => ({
+                    ...p,
+                    content: sortJsonRecord(p.content),
+                    targets: [...p.targets].sort((a, b) => a.localeCompare(b)),
+                  }))
+                  .sort((a, b) => a.name.localeCompare(b.name)),
+          },
   };
 }
 
@@ -1317,6 +1529,30 @@ export const awsConfigSchema = v.strictObject({
       group: v.optional(groupNameSchema),
       user: v.optional(userNameSchema),
       accounts: v.array(accountNameSchema),
+    }),
+  ),
+  policies: v.optional(
+    v.strictObject({
+      serviceControlPolicies: v.optional(
+        v.array(
+          v.strictObject({
+            name: v.string(),
+            description: v.optional(v.string()),
+            content: v.record(v.string(), v.unknown()),
+            targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
+          }),
+        ),
+      ),
+      resourceControlPolicies: v.optional(
+        v.array(
+          v.strictObject({
+            name: v.string(),
+            description: v.optional(v.string()),
+            content: v.record(v.string(), v.unknown()),
+            targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
+          }),
+        ),
+      ),
     }),
   ),
 });

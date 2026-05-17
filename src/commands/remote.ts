@@ -496,6 +496,8 @@ export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
   input.logger.log(`  Groups: ${response.summary.groups}`);
   input.logger.log(`  Permission Sets: ${response.summary.permissionSets}`);
   input.logger.log(`  Account Assignments: ${response.summary.accountAssignments}`);
+  input.logger.log(`  Policies: ${response.summary.policies}`);
+  input.logger.log(`  Policy Attachments: ${response.summary.policyAttachments}`);
 
   await writeStateCache(cachePath, response.state);
   input.logger.log("State cache updated.");
@@ -527,6 +529,8 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   input.logger.log(`  Groups: ${response.summary.groups}`);
   input.logger.log(`  Permission Sets: ${response.summary.permissionSets}`);
   input.logger.log(`  Account Assignments: ${response.summary.accountAssignments}`);
+  input.logger.log(`  Policies: ${response.summary.policies}`);
+  input.logger.log(`  Policy Attachments: ${response.summary.policyAttachments}`);
 
   await writeStateCache(cachePath, response.state);
   input.logger.log("State cache updated.");
@@ -830,7 +834,9 @@ function isDestructiveOperation(operation: Operation): boolean {
     operation.kind === "removeAccount" ||
     operation.kind === "deleteIdcUser" ||
     operation.kind === "deleteIdcGroup" ||
-    operation.kind === "deleteIdcPermissionSet"
+    operation.kind === "deleteIdcPermissionSet" ||
+    operation.kind === "detachOrgPolicy" ||
+    operation.kind === "deleteOrgPolicy"
   );
 }
 
@@ -922,6 +928,24 @@ function formatOperationLine(operation: Operation): string {
   if (operation.kind === "updateIdcPermissionSetSessionDuration") {
     const duration = operation.sessionDuration ?? "default";
     return `  update IdC permission set session duration "${operation.permissionSetName}" -> ${duration}`;
+  }
+  if (operation.kind === "createOrgPolicy") {
+    return `  create org policy "${operation.policyName}" (${operation.policyType})`;
+  }
+  if (operation.kind === "updateOrgPolicyContent") {
+    return `  update org policy content "${operation.policyName}"`;
+  }
+  if (operation.kind === "updateOrgPolicyDescription") {
+    return `  update org policy description "${operation.policyName}"`;
+  }
+  if (operation.kind === "attachOrgPolicy") {
+    return `  attach org policy "${operation.policyName}" to "${operation.targetName}"`;
+  }
+  if (operation.kind === "detachOrgPolicy") {
+    return `  [destructive] detach org policy "${operation.policyName}" from "${operation.targetName}"`;
+  }
+  if (operation.kind === "deleteOrgPolicy") {
+    return `  [destructive] delete org policy "${operation.policyName}"`;
   }
   assertUnreachable(operation, "Unsupported operation kind in formatOperationLine.");
 }

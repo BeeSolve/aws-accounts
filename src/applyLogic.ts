@@ -1,7 +1,11 @@
 import { AccountClient, PutAccountNameCommand } from "@aws-sdk/client-account";
 import {
+  AttachPolicyCommand,
   CreateOrganizationalUnitCommand,
+  CreatePolicyCommand,
   DeleteOrganizationalUnitCommand,
+  DeletePolicyCommand,
+  DetachPolicyCommand,
   ListAccountsForParentCommand,
   ListOrganizationalUnitsForParentCommand,
   MoveAccountCommand,
@@ -9,6 +13,7 @@ import {
   TagResourceCommand,
   UntagResourceCommand,
   UpdateOrganizationalUnitCommand,
+  UpdatePolicyCommand,
 } from "@aws-sdk/client-organizations";
 import {
   CreateGroupMembershipCommand,
@@ -47,6 +52,7 @@ import type { Operation } from "./operations.js";
 import {
   addGroupMembershipToWorkingState,
   addAccountAssignmentToWorkingState,
+  addOrgPolicyAttachmentToWorkingState,
   createGroupMembershipKey,
   moveAccountInWorkingState,
   removeAccountAssignmentFromWorkingState,
@@ -55,6 +61,8 @@ import {
   removeIdcPermissionSetFromWorkingState,
   removeIdcUserFromWorkingState,
   removeOrganizationalUnitFromWorkingState,
+  removeOrgPolicyAttachmentFromWorkingState,
+  removeOrgPolicyFromWorkingState,
   renameOrganizationalUnitInWorkingState,
   type WorkingState,
   upsertIdcGroupInWorkingState,
@@ -62,6 +70,7 @@ import {
   upsertIdcUserInWorkingState,
   upsertAccountInWorkingState,
   upsertOrganizationalUnitInWorkingState,
+  upsertOrgPolicyInWorkingState,
 } from "./state.js";
 import type { Logger } from "./logger.js";
 
@@ -977,6 +986,133 @@ export async function executeOperation(
       },
     });
   }
+  if (operation.kind === "createOrgPolicy") {
+    props.logger.log(
+      `Creating org policy "${operation.policyName}" (${operation.policyType})...`,
+    );
+    const response = await props.organizationsClient.send(
+      new CreatePolicyCommand({
+        Name: operation.policyName,
+        Description: operation.description.length > 0 ? operation.description : undefined,
+        Content: operation.content,
+        Type: operation.policyType,
+      }),
+    );
+    const policy = response.Policy?.PolicySummary;
+    if (policy?.Id == null || policy.Arn == null) {
+      throw new Error(
+        `CreatePolicy for "${operation.policyName}" returned incomplete data.`,
+      );
+    }
+    props.logger.log(`Done: "${operation.policyName}"`);
+    return upsertOrgPolicyInWorkingState({
+      workingState: props.state,
+      policy: {
+        id: policy.Id,
+        arn: policy.Arn,
+        name: operation.policyName,
+        description: operation.description,
+        type: operation.policyType,
+        content: operation.content,
+      },
+    });
+  }
+  if (operation.kind === "updateOrgPolicyContent") {
+    props.logger.log(`Updating org policy content "${operation.policyName}"...`);
+    await props.organizationsClient.send(
+      new UpdatePolicyCommand({
+        PolicyId: operation.policyId,
+        Content: operation.content,
+      }),
+    );
+    props.logger.log(`Done: "${operation.policyName}"`);
+    const currentPolicy = props.state.organization.policiesById[operation.policyId];
+    if (currentPolicy == null) {
+      return props.state;
+    }
+    return upsertOrgPolicyInWorkingState({
+      workingState: props.state,
+      policy: { ...currentPolicy, content: operation.content },
+    });
+  }
+  if (operation.kind === "updateOrgPolicyDescription") {
+    props.logger.log(
+      `Updating org policy description "${operation.policyName}"...`,
+    );
+    await props.organizationsClient.send(
+      new UpdatePolicyCommand({
+        PolicyId: operation.policyId,
+        Description: operation.description,
+      }),
+    );
+    props.logger.log(`Done: "${operation.policyName}"`);
+    const currentPolicy = props.state.organization.policiesById[operation.policyId];
+    if (currentPolicy == null) {
+      return props.state;
+    }
+    return upsertOrgPolicyInWorkingState({
+      workingState: props.state,
+      policy: { ...currentPolicy, description: operation.description },
+    });
+  }
+  if (operation.kind === "attachOrgPolicy") {
+    props.logger.log(
+      `Attaching org policy "${operation.policyName}" to "${operation.targetName}"...`,
+    );
+    const resolvedPolicyId = resolvePolicyId({
+      state: props.state,
+      policyId: operation.policyId,
+      policyName: operation.policyName,
+    });
+    await props.organizationsClient.send(
+      new AttachPolicyCommand({
+        PolicyId: resolvedPolicyId,
+        TargetId: operation.targetId,
+      }),
+    );
+    props.logger.log(`Done: "${operation.policyName}" -> "${operation.targetName}"`);
+    const targetType = operation.targetId === props.context.organization.rootId
+      ? "ROOT" as const
+      : props.state.organization.organizationalUnitsById[operation.targetId] != null
+        ? "ORGANIZATIONAL_UNIT" as const
+        : "ACCOUNT" as const;
+    return addOrgPolicyAttachmentToWorkingState({
+      workingState: props.state,
+      attachment: {
+        policyId: resolvedPolicyId,
+        targetId: operation.targetId,
+        targetType,
+      },
+    });
+  }
+  if (operation.kind === "detachOrgPolicy") {
+    props.logger.log(
+      `Detaching org policy "${operation.policyName}" from "${operation.targetName}"...`,
+    );
+    await props.organizationsClient.send(
+      new DetachPolicyCommand({
+        PolicyId: operation.policyId,
+        TargetId: operation.targetId,
+      }),
+    );
+    props.logger.log(`Done: "${operation.policyName}" x "${operation.targetName}"`);
+    return removeOrgPolicyAttachmentFromWorkingState({
+      workingState: props.state,
+      policyId: operation.policyId,
+      targetId: operation.targetId,
+    });
+  }
+  if (operation.kind === "deleteOrgPolicy") {
+    props.logger.log(`Deleting org policy "${operation.policyName}"...`);
+    await props.organizationsClient.send(
+      new DeletePolicyCommand({ PolicyId: operation.policyId }),
+    );
+    props.logger.log(`Done: "${operation.policyName}"`);
+    return removeOrgPolicyFromWorkingState({
+      workingState: props.state,
+      policyId: operation.policyId,
+    });
+  }
   assertUnreachable(operation, "Unsupported operation kind in apply.");
 }
 
@@ -1056,6 +1192,21 @@ function resolveGroupByDisplayName(props: {
     );
   }
   return group;
+}
+
+function resolvePolicyId(props: {
+  state: WorkingState;
+  policyId: string;
+  policyName: string;
+}): string {
+  if (props.policyId !== "__pending_creation__") return props.policyId;
+  const policy = props.state.organization.policiesByName[props.policyName];
+  if (policy == null) {
+    throw new Error(
+      `Could not resolve policy "${props.policyName}" in working state.`,
+    );
+  }
+  return policy.id;
 }
 
 function resolvePermissionSetByName(props: {

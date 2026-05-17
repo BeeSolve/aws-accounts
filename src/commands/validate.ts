@@ -8,6 +8,7 @@ type ValidateCommandInput = {
 };
 
 const INLINE_POLICY_MAX_CHARS = 10_240;
+const ORG_POLICY_CONTENT_MAX_BYTES = 5_120;
 
 export async function runValidateCommand(input: ValidateCommandInput): Promise<boolean> {
   const configPath = input.configPath ?? "aws.config.ts";
@@ -26,6 +27,8 @@ export async function runValidateCommand(input: ValidateCommandInput): Promise<b
   checkCircularOuReferences(config, errors);
   checkAssignmentPrincipals(config, errors);
   checkInlinePolicySizes(config, errors);
+  checkOrgPolicySizes(config, errors);
+  checkOrgPolicyTargets(config, errors);
 
   if (errors.length > 0) {
     for (const error of errors) {
@@ -77,6 +80,51 @@ function checkAssignmentPrincipals(config: AwsConfigModel, errors: string[]): vo
       errors.push(
         `Assignment for permission set "${assignment.permissionSet}" has no principal — "group" or "user" is required.`,
       );
+    }
+  }
+}
+
+function checkOrgPolicySizes(config: AwsConfigModel, errors: string[]): void {
+  for (const policy of config.policies?.serviceControlPolicies ?? []) {
+    const contentBytes = Buffer.byteLength(JSON.stringify(policy.content), "utf8");
+    if (contentBytes > ORG_POLICY_CONTENT_MAX_BYTES) {
+      errors.push(
+        `Service control policy "${policy.name}" content is ${contentBytes} bytes (limit: ${ORG_POLICY_CONTENT_MAX_BYTES}).`,
+      );
+    }
+  }
+  for (const policy of config.policies?.resourceControlPolicies ?? []) {
+    const contentBytes = Buffer.byteLength(JSON.stringify(policy.content), "utf8");
+    if (contentBytes > ORG_POLICY_CONTENT_MAX_BYTES) {
+      errors.push(
+        `Resource control policy "${policy.name}" content is ${contentBytes} bytes (limit: ${ORG_POLICY_CONTENT_MAX_BYTES}).`,
+      );
+    }
+  }
+}
+
+function checkOrgPolicyTargets(config: AwsConfigModel, errors: string[]): void {
+  const ouNames = new Set(config.organizationalUnits.map((ou) => ou.name));
+  const accountNames = new Set(
+    config.organizationalUnits.flatMap((ou) => ou.accounts.map((a) => a.name)),
+  );
+
+  for (const policy of config.policies?.serviceControlPolicies ?? []) {
+    for (const target of policy.targets) {
+      if (target !== "root" && !ouNames.has(target) && !accountNames.has(target)) {
+        errors.push(
+          `Service control policy "${policy.name}" references unknown target "${target}".`,
+        );
+      }
+    }
+  }
+  for (const policy of config.policies?.resourceControlPolicies ?? []) {
+    for (const target of policy.targets) {
+      if (target !== "root" && !ouNames.has(target) && !accountNames.has(target)) {
+        errors.push(
+          `Resource control policy "${policy.name}" references unknown target "${target}".`,
+        );
+      }
     }
   }
 }
