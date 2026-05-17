@@ -202,7 +202,11 @@ const revokeIdcAccountAssignmentOperationSchema = v.strictObject({
 const createOrgPolicyOperationSchema = v.strictObject({
   kind: v.literal("createOrgPolicy"),
   policyName: v.string(),
-  policyType: v.picklist(["SERVICE_CONTROL_POLICY", "RESOURCE_CONTROL_POLICY"]),
+  policyType: v.picklist([
+    "SERVICE_CONTROL_POLICY",
+    "RESOURCE_CONTROL_POLICY",
+    "TAG_POLICY",
+  ]),
   description: v.string(),
   content: v.string(),
 });

@@ -112,6 +112,7 @@ export async function scanOrganization(props: {
 const ORG_POLICY_TYPES = [
   "SERVICE_CONTROL_POLICY",
   "RESOURCE_CONTROL_POLICY",
+  "TAG_POLICY",
 ] as const;
 
 async function scanOrganizationPolicies(props: {

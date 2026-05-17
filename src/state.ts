@@ -15,6 +15,7 @@ const organizationalUnitSchema = v.strictObject({
 const orgPolicyTypeSchema = v.picklist([
   "SERVICE_CONTROL_POLICY",
   "RESOURCE_CONTROL_POLICY",
+  "TAG_POLICY",
 ]);
 
 const orgPolicySchema = v.strictObject({
