@@ -11,7 +11,10 @@ import {
   resolveAwsRegion,
 } from "./awsClientConfig.js";
 import { consoleLogger, type Logger } from "./logger.js";
-import { runGraveyardCommand } from "./commands/graveyard.js";
+import {
+  runGraveyardCloseCommand,
+  runGraveyardCommand,
+} from "./commands/graveyard.js";
 import { runProfileCommand } from "./commands/profile.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
 import { runValidateCommand } from "./commands/validate.js";
@@ -113,6 +116,21 @@ async function main(): Promise<void> {
   }
 
   if (command === "graveyard") {
+    const subcommand = args.positionals[1];
+    if (subcommand === "close") {
+      await runGraveyardCloseCommand({
+        logger,
+        cachePath: ".remote-state-cache.json",
+        contextPath,
+      });
+      return;
+    }
+    if (subcommand != null) {
+      printHelp(logger);
+      throw toUsageError(
+        `Unknown graveyard subcommand: "${subcommand}". Valid subcommands: close`,
+      );
+    }
     await runGraveyardCommand({
       logger,
       cachePath: ".remote-state-cache.json",
@@ -207,6 +225,7 @@ function printHelp(logger: Logger): void {
   logger.log("  npm run cli -- regenerate [--yes]");
   logger.log("  npm run cli -- validate");
   logger.log("  npm run cli -- graveyard");
+  logger.log("  npm run cli -- graveyard close");
   logger.log(
     "  npm run cli -- profile --sso-start-url <url> [--sso-session <name>]  (env: AWS_SSO_START_URL)",
   );

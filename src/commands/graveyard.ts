@@ -2,6 +2,45 @@ import { readAwsContextFromFile } from "../awsConfig.js";
 import type { Logger } from "../logger.js";
 import { readStateCache } from "../remoteStateCache.js";
 
+type GraveyardCloseCommandInput = {
+  logger: Logger;
+  cachePath: string;
+  contextPath: string;
+};
+
+export async function runGraveyardCloseCommand(
+  props: GraveyardCloseCommandInput,
+): Promise<void> {
+  const [cache, context] = await Promise.all([
+    readStateCache(props.cachePath),
+    readAwsContextFromFile(props.contextPath),
+  ]);
+  if (cache == null) {
+    throw new Error(
+      `No remote state cache found at "${props.cachePath}". Run a scan or apply command first to populate the cache.`,
+    );
+  }
+
+  const graveyardOuId = context.organization.graveyardOuId;
+  const eligible = cache.state.organization.accounts
+    .filter((a) => a.parentId === graveyardOuId && a.status === "ACTIVE")
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (eligible.length === 0) {
+    props.logger.log("No accounts eligible for closure in Graveyard.");
+    return;
+  }
+
+  props.logger.log(`${eligible.length} account(s) eligible for closure:\n`);
+  for (const account of eligible) {
+    props.logger.log(`# ${account.name} (${account.id})`);
+    props.logger.log(
+      `aws organizations close-account --account-id ${account.id}`,
+    );
+    props.logger.log("");
+  }
+}
+
 type GraveyardCommandInput = {
   logger: Logger;
   cachePath: string;

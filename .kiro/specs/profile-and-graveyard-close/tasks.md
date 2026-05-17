@@ -6,8 +6,8 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
 
 ## Tasks
 
-- [ ] 1. Create profile command module with types and pure functions
-  - [ ] 1.1 Create `src/commands/profile.ts` with types and pure functions
+- [x] 1. Create profile command module with types and pure functions
+  - [x] 1.1 Create `src/commands/profile.ts` with types and pure functions
     - Define `ProfileCombination`, `ProfileBlockInput`, `ProfileCommandInput` types
     - Implement `toKebabCase` — converts account/permission-set names to kebab-case
     - Implement `deriveStartUrl` — constructs `https://<identityStoreId>.awsapps.com/start`
@@ -46,8 +46,8 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
     - Test `buildProfileCombinations` with empty state, single assignment, multiple assignments, graveyard filtering, deduplication
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 4.6, 5.4, 6.1_
 
-- [ ] 2. Implement profile command interactive picker and I/O
-  - [ ] 2.1 Implement `runProfileCommand` in `src/commands/profile.ts`
+- [x] 2. Implement profile command interactive picker and I/O
+  - [x] 2.1 Implement `runProfileCommand` in `src/commands/profile.ts`
     - Read state cache and context file
     - Handle missing cache/context errors
     - Check stdin is TTY, throw if not
@@ -68,11 +68,11 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
     - Test invalid input re-prompts
     - _Requirements: 1.3, 1.4, 3.3, 3.4, 3.5_
 
-- [ ] 3. Checkpoint
+- [x] 3. Checkpoint
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Implement graveyard close subcommand
-  - [ ] 4.1 Add `runGraveyardCloseCommand` to `src/commands/graveyard.ts`
+- [x] 4. Implement graveyard close subcommand
+  - [x] 4.1 Add `runGraveyardCloseCommand` to `src/commands/graveyard.ts`
     - Define `GraveyardCloseCommandInput` type
     - Read state cache and context file
     - Filter accounts: parentId === graveyardOuId AND status === "ACTIVE"
@@ -89,7 +89,7 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
     - Assert SUSPENDED accounts never appear in output
     - **Validates: Requirements 8.1, 8.2**
 
-  - [ ]* 4.3 Write unit tests for `runGraveyardCloseCommand`
+  - [x]* 4.3 Write unit tests for `runGraveyardCloseCommand`
     - Test with ACTIVE accounts in graveyard — outputs closure commands
     - Test with SUSPENDED accounts — skipped
     - Test with mixed ACTIVE/SUSPENDED — only ACTIVE output
@@ -98,8 +98,8 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
     - Test output sorted alphabetically by account name
     - _Requirements: 7.2, 7.3, 7.4, 7.5, 8.1, 8.2, 8.3_
 
-- [ ] 5. Wire commands into CLI router
-  - [ ] 5.1 Update `src/cli.ts` to register `profile` command and graveyard subcommand routing
+- [x] 5. Wire commands into CLI router
+  - [x] 5.1 Update `src/cli.ts` to register `profile` command and graveyard subcommand routing
     - Add `"profile"` to the `commands` array
     - Import `runProfileCommand` from `./commands/profile.js`
     - Import `runGraveyardCloseCommand` from `./commands/graveyard.js`
@@ -123,7 +123,7 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
     - Test `profile` routes to `runProfileCommand`
     - _Requirements: 9.1, 9.2, 9.3_
 
-- [ ] 6. Final checkpoint
+- [x] 6. Final checkpoint
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
