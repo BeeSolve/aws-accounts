@@ -1,6 +1,6 @@
 # Feature Parity Research: AWS Organizations & IAM Identity Center
 
-Research conducted May 2026. Compares current tool capabilities against available AWS APIs to identify gaps and prioritize additions.
+Research conducted May 2026. Compares current tool capabilities against available AWS APIs to identify gaps and prioritize additions. Updated to reflect v1.1.0 and v1.2.0 releases.
 
 ---
 
@@ -13,6 +13,10 @@ Research conducted May 2026. Compares current tool capabilities against availabl
 - Create and rename member accounts
 - Reconcile account resource tags
 - Park removed accounts in Graveyard OU
+- Service Control Policies and Resource Control Policies (create/update/delete, attach/detach to roots/OUs/accounts)
+- Tag policies
+- AI services opt-out policies
+- Account alternate contacts (billing, operations, security)
 
 ### IAM Identity Center (supported)
 
@@ -20,9 +24,10 @@ Research conducted May 2026. Compares current tool capabilities against availabl
 - Update user display name and email
 - Update group descriptions
 - Manage group memberships
-- Create/update/delete permission sets (inline policies, AWS managed policies, customer-managed policy references)
+- Create/update/delete permission sets (inline policies, AWS managed policies, customer-managed policy references, session duration)
 - Grant/revoke account assignments
 - Reprovision changed permission sets
+- ABAC (access control attributes on the Identity Center instance)
 
 ---
 
@@ -30,7 +35,7 @@ Research conducted May 2026. Compares current tool capabilities against availabl
 
 | Property | API | Status | Impact |
 |----------|-----|--------|--------|
-| Session duration | `SessionDuration` on `CreatePermissionSet` / `UpdatePermissionSet` (ISO-8601, max 12h) | **Missing** | **High** — default 1h is too short for most workflows. Every user configures this. |
+| Session duration | `SessionDuration` on `CreatePermissionSet` / `UpdatePermissionSet` (ISO-8601, max 12h) | ✅ Done (v1.1.0) | **High** |
 | Relay state | `RelayState` on permission set | Missing | Low — niche, sends users to a specific console page on login. |
 | Permissions boundary | `PutPermissionsBoundaryToPermissionSet` | Missing (on roadmap) | Medium |
 | Tags on permission sets | `TagResource` / `UntagResource` on permission set ARN | Missing | Low — useful for governance/cost allocation. |
@@ -39,15 +44,15 @@ Research conducted May 2026. Compares current tool capabilities against availabl
 
 ## Gaps: Organization policy types
 
-AWS Organizations supports 6 policy types. We support none.
+AWS Organizations supports 6 policy types.
 
 | Policy type | API type constant | Complexity | Impact |
 |-------------|-------------------|------------|--------|
-| **Service Control Policies (SCPs)** | `SERVICE_CONTROL_POLICY` | Medium-high | **Very high** — #1 governance primitive. Controls maximum permissions for all accounts. |
-| **Resource Control Policies (RCPs)** | `RESOURCE_CONTROL_POLICY` | Medium | High — newer (2024), controls resource-level access. Same API pattern as SCPs. |
-| **Tag policies** | `TAG_POLICY` | Low-medium | **High** — enforces tag standardization org-wide. Universal governance need. |
+| **Service Control Policies (SCPs)** | `SERVICE_CONTROL_POLICY` | Medium-high | ✅ Done (v1.1.0) |
+| **Resource Control Policies (RCPs)** | `RESOURCE_CONTROL_POLICY` | Medium | ✅ Done (v1.1.0) |
+| **Tag policies** | `TAG_POLICY` | Low-medium | ✅ Done (v1.1.0) |
 | **Backup policies** | `BACKUP_POLICY` | Medium | Medium — centralized backup plans across accounts. |
-| **AI services opt-out policies** | `AISERVICES_OPT_OUT_POLICY` | Low | Medium — increasingly relevant. Very simple structure (list of service names). |
+| **AI services opt-out policies** | `AISERVICES_OPT_OUT_POLICY` | Low | ✅ Done (v1.1.0) |
 | **Declarative policies** (EC2, VPC) | `DECLARATIVE_POLICY_EC2` | Low-medium | Low — very new (2024), limited adoption so far. |
 
 All policy types share the same API pattern: `CreatePolicy` / `UpdatePolicy` / `DeletePolicy` / `AttachPolicy` / `DetachPolicy` / `ListPolicies` / `ListPoliciesForTarget` / `DescribePolicy`.
@@ -58,8 +63,8 @@ All policy types share the same API pattern: `CreatePolicy` / `UpdatePolicy` / `
 
 | Feature | API | Complexity | Impact |
 |---------|-----|------------|--------|
-| Account alternate contacts | `PutAlternateContact` / `GetAlternateContact` (billing, operations, security) | Low | Medium — CIS Benchmark requirement. Easy to add as fields on account config. |
-| Account closure | `CloseAccount` | Low | Low — already on roadmap as `graveyard close`. |
+| Account alternate contacts | `PutAlternateContact` / `GetAlternateContact` (billing, operations, security) | Low | ✅ Done (v1.2.0) |
+| Account closure | `CloseAccount` | Low | ✅ Done (v1.1.0) — `graveyard close` subcommand |
 | Delegated administrator | `RegisterDelegatedAdministrator` / `DeregisterDelegatedAdministrator` | Low | Medium — lets you run SSO admin from a non-management account. |
 
 ---
@@ -68,7 +73,7 @@ All policy types share the same API pattern: `CreatePolicy` / `UpdatePolicy` / `
 
 | Feature | API | Complexity | Impact |
 |---------|-----|------------|--------|
-| ABAC (access control attributes) | `CreateInstanceAccessControlAttributeConfiguration` | Low-medium | Medium — already on roadmap. Enables tag-based policies. |
+| ABAC (access control attributes) | `CreateInstanceAccessControlAttributeConfiguration` | Low-medium | ✅ Done (v1.2.0) |
 | Trusted token issuers | `CreateTrustedTokenIssuer` | Medium | Low — M2M and cross-service auth. |
 | Applications (SAML/OIDC) | `CreateApplication` / `CreateApplicationAssignment` | High | Low — for app integrations, not account access. |
 | Multi-region replication | Instance replication APIs (2025) | High | Low — enterprise-only, complex. |
@@ -88,26 +93,26 @@ All policy types share the same API pattern: `CreatePolicy` / `UpdatePolicy` / `
 
 ## Priority tiers
 
-### Tier 1 — Immediate differentiators (high impact, low-medium effort)
+### Tier 1 — Immediate differentiators ✅ Complete
 
-1. **Permission set session duration** — One field addition. Table-stakes that every user needs.
-2. **`profile` command** — #1 quality-of-life feature. Eliminates need for aws-sso-util.
-3. **SCPs** — The primary governance primitive. Biggest gap vs. Terraform/OrgFormation.
+1. **Permission set session duration** ✅ Done (v1.1.0)
+2. **`profile` command** ✅ Done (v1.1.0)
+3. **SCPs / RCPs** ✅ Done (v1.1.0)
 
-### Tier 2 — Strong value-add (high impact, medium effort)
+### Tier 2 — Strong value-add ✅ Complete
 
-4. **Tag policies** — Universal governance need. Same API pattern as SCPs (implement together).
-5. **Account alternate contacts** — Simple API, CIS Benchmark compliance. Field on account config.
-6. **AI services opt-out policies** — Quick win, signals the tool is current. Simple structure.
-7. **`validate` command** — Fast local feedback, no AWS calls needed.
+4. **Tag policies** ✅ Done (v1.1.0)
+5. **Account alternate contacts** ✅ Done (v1.2.0)
+6. **AI services opt-out policies** ✅ Done (v1.1.0)
+7. **`validate` command** ✅ Done (v1.1.0)
 
-### Tier 3 — Solid additions (medium impact)
+### Tier 3 — Solid additions (partially done)
 
-8. **RCPs** — Same API as SCPs, implement alongside.
-9. **ABAC** — Unlocks tag-based permission set policies.
-10. **`graveyard close`** — Trivial, completes account lifecycle.
-11. **Permission set boundaries** — Niche but supported by API.
-12. **Delegated administrator** — Useful for security-conscious orgs.
+8. **RCPs** ✅ Done (v1.1.0)
+9. **ABAC** ✅ Done (v1.2.0)
+10. **`graveyard close`** ✅ Done (v1.1.0)
+11. **Permission set boundaries** — Missing. Niche but supported by API.
+12. **Delegated administrator** — Missing. Useful for security-conscious orgs.
 
 ### Tier 4 — Long-term (lower impact or high complexity)
 

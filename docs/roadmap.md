@@ -4,195 +4,27 @@ Post-v1 features organized by priority tier. See [feature-parity-research.md](./
 
 ---
 
-## Tier 1 — Immediate differentiators
+## Implemented
 
-### `profile` command — generate AWS CLI profiles
+### v1.1.0
 
-Generate `~/.aws/config` profile blocks from account/permission-set assignments.
+- **Permission set session duration** — ISO-8601 session duration on permission sets (e.g. `PT4H`). Table-stakes for every org.
+- **`profile` command** — interactive picker to generate `~/.aws/config` SSO profile blocks from cached state. Eliminates need for `aws-sso-util`.
+- **`validate` command** — local config validation without AWS calls (duplicate names, dangling references, policy size limits).
+- **Organization policies: SCPs and RCPs** — create/update/delete Service Control Policies and Resource Control Policies, attach/detach to roots/OUs/accounts, with destructive gates.
+- **Tag policies** — enforce tag standardization org-wide via `TAG_POLICY` type (implemented alongside SCPs).
+- **AI services opt-out policies** — opt out of AWS AI service data usage for training.
+- **Upgrade state sync and `init --update` mode** — version banner on mismatch, post-upgrade guidance, additive init to safely populate new config sections, scan safety guard for undeclared policies. See [ADR 004](./adr/004-upgrade-state-sync-and-version-tracking.md).
+- **`graveyard close`** — outputs `aws organizations close-account` commands for eligible graveyarded accounts.
 
-**Phase 1:** Interactive picker — list all account/permission-set combinations from state, user selects one, output the profile block to stdout:
+### v1.2.0
 
-```ini
-[profile my-org-dev-admin]
-sso_session = my-org
-sso_account_id = 123456789012
-sso_role_name = AdminAccess
-
-[sso-session my-org]
-sso_start_url = https://d-xxxxxxxxxx.awsapps.com/start
-sso_region = eu-central-1
-sso_registration_scopes = sso:account:access
-```
-
-**Phase 2:** Read existing `~/.aws/config`, detect conflicts, offer to append or update the file directly.
-
-**Effort:** Low. Eliminates need for `aws-sso-util` (Python).
+- **Account alternate contacts** — manage billing, operations, and security contacts per account. Satisfies CIS AWS Foundations Benchmark 1.1/1.2.
+- **ABAC — Attributes for Access Control** — define attribute mappings on the Identity Center instance that enable `${aws:PrincipalTag/key}` conditions in permission set policies.
 
 ---
 
-### Organization Policies — SCPs and RCPs
-
-Manage Service Control Policies and Resource Control Policies attached to OUs and accounts. The #1 governance primitive — biggest gap vs. Terraform/OrgFormation.
-
-**API surface:**
-
-- `CreatePolicy` / `UpdatePolicy` / `DeletePolicy` (type: `SERVICE_CONTROL_POLICY` or `RESOURCE_CONTROL_POLICY`)
-- `AttachPolicy` / `DetachPolicy` (target: root, OU, or account)
-- `ListPolicies` / `ListPoliciesForTarget` / `DescribePolicy`
-
-**Proposed config model:**
-
-```ts
-policies: {
-  serviceControlPolicies: [
-    {
-      name: "DenyLeaveOrg",
-      description: "Prevent accounts from leaving the organization",
-      content: { Version: "2012-10-17", Statement: [...] },
-      targets: ["Engineering", "Production"],  // OU names or account names
-    },
-  ],
-  resourceControlPolicies: [
-    {
-      name: "RestrictS3Public",
-      description: "Block public S3 access",
-      content: { ... },
-      targets: ["Production"],
-    },
-  ],
-}
-```
-
-**Key considerations:**
-
-- SCPs have inheritance (child OUs inherit parent policies)
-- Every root/OU/account must keep at least one SCP attached (can't detach the last one)
-- The default `FullAWSAccess` SCP must be handled carefully
-- Policy content is JSON with a 5120-byte size limit for SCPs
-- Destructive gate needed for policy detach/delete (could lock out accounts)
-- RCPs are newer (2024) and follow the same API pattern but control resource-level access
-
-**Phases:**
-
-1. Scan existing SCPs/RCPs and their attachments into state
-2. Plan/apply for create, update content, attach/detach
-3. Destructive delete with safety checks (ensure FullAWSAccess remains)
-
-**Effort:** Medium-high. High value.
-
----
-
-## Tier 2 — Strong value-add
-
-### Tag policies
-
-Enforce tag standardization org-wide. Same API pattern as SCPs (`CreatePolicy` type `TAG_POLICY`). Universal governance need — often the first policy type orgs enable after SCPs.
-
-```ts
-policies: {
-  tagPolicies: [
-    {
-      name: "CostAllocationTags",
-      description: "Enforce cost allocation tags",
-      content: { tags: { CostCenter: { tag_key: { "@@assign": "CostCenter" } } } },
-      targets: ["Production", "Engineering"],
-    },
-  ],
-}
-```
-
-**Effort:** Low-medium (same API as SCPs — implement together).
-
----
-
-### Account alternate contacts
-
-Manage billing, operations, and security contacts per account. Satisfies CIS AWS Foundations Benchmark 1.1/1.2.
-
-```ts
-accounts: [
-  {
-    name: "Production",
-    email: "prod@example.com",
-    alternateContacts: {
-      billing: { name: "Finance Team", email: "billing@example.com", phone: "+1..." },
-      operations: { name: "Ops Team", email: "ops@example.com", phone: "+1..." },
-      security: { name: "Security Team", email: "security@example.com", phone: "+1..." },
-    },
-  },
-]
-```
-
-**Effort:** Low. Simple API (`PutAlternateContact` / `GetAlternateContact`).
-
----
-
-### AI services opt-out policies
-
-Opt out of AWS AI service data usage for training. Increasingly relevant, very simple structure.
-
-```ts
-policies: {
-  aiOptOutPolicies: [
-    {
-      name: "OptOutAll",
-      description: "Opt out of all AI service data usage",
-      content: { services: { default: { opt_out_policy: { "@@assign": "optOut" } } } },
-      targets: ["root"],
-    },
-  ],
-}
-```
-
-**Effort:** Low (same API pattern as other policies).
-
----
-
-### `validate` command — local config validation
-
-Check `aws.config.ts` for common mistakes without hitting AWS:
-
-- Duplicate account/OU/group/user names
-- Assignments referencing non-existent permission sets or groups
-- Invalid policy syntax or size violations (SCP 5120-byte limit)
-- Circular or conflicting references
-
-Fast local feedback loop before plan/apply.
-
-**Effort:** Low-medium. No AWS calls needed.
-
----
-
-## Tier 3 — Solid additions
-
-### ABAC — Attributes for Access Control
-
-Define attribute mappings on the Identity Center instance that enable `${aws:PrincipalTag/key}` conditions in permission set policies.
-
-```ts
-identityCenter: {
-  accessControlAttributes: [
-    { key: "department", source: ["${path:enterprise.department}"] },
-    { key: "costCenter", source: ["${path:enterprise.costCenter}"] },
-  ],
-}
-```
-
-**Effort:** Low-medium. Simple key/source[] array structure.
-
----
-
-### `graveyard close` — generate account closure commands
-
-Output AWS CLI commands for closing graveyarded accounts:
-
-```bash
-aws organizations close-account --account-id 123456789012
-```
-
-**Effort:** Trivial. Completes the account lifecycle story.
-
----
+## Tier 3 — Solid additions (remaining)
 
 ### Permission set boundaries
 

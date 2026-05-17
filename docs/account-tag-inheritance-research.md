@@ -1,6 +1,6 @@
 # Account Tag Inheritance Research
 
-**Status:** design research only; **not in v1** (see `docs/v1-backlog-priority.md`).
+**Status:** design research only; deferred — not yet scheduled (see `docs/roadmap.md`).
 
 ## Context
 
