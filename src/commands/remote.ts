@@ -38,11 +38,13 @@ import {
   UpdatePermissionSetCommand,
 } from "@aws-sdk/client-sso-admin";
 import {
+  type AwsConfigModel,
   type AwsContextFile,
   type Deployment,
   loadAwsConfigModelFromTsFile,
   mapAwsConfigToState,
   readAwsContextFromFile,
+  readPackageVersion,
   regenerateTypesFromState,
   writeAwsConfigFromState,
 } from "../awsConfig.js";
@@ -72,6 +74,7 @@ const remoteCommandSchema = v.object({
     refresh: v.boolean(),
     allowDestructive: v.boolean(),
     ignoreUnsupported: v.boolean(),
+    update: v.boolean(),
   }),
 });
 
@@ -159,12 +162,14 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
   } catch {
     // File doesn't exist yet on fresh bootstrap — that's expected
   }
+  const cliVersionForBootstrap = await readPackageVersion();
   const deployment: Deployment = {
     profile: input.profile ?? "",
     region: resolvedRegion,
     lambdaArn,
     stateBucketName: bucketName,
     stateCacheTtlSeconds: 300,
+    cliVersion: cliVersionForBootstrap,
   };
 
   const updatedContext = context != null
@@ -504,7 +509,25 @@ export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
 }
 
 export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
-  const deployment = await readDeploymentFromContext();
+  const isUpdate = input.flags.update;
+
+  // In --update mode, load existing config before scan so we can merge additively
+  let existingConfig: Awaited<ReturnType<typeof loadAwsConfigModelFromTsFile>> | undefined;
+  if (isUpdate) {
+    try {
+      existingConfig = await loadAwsConfigModelFromTsFile({
+        configPath: configFilePath,
+        typesPath: typesFilePath,
+      });
+    } catch {
+      // Config doesn't exist yet — fall through to full init behaviour
+    }
+  }
+
+  const [deployment, cliVersion] = await Promise.all([
+    readDeploymentFromContext(),
+    readPackageVersion(),
+  ]);
 
   input.logger.log("Invoking remote scan...");
   const result = await invokeLambda({
@@ -540,8 +563,9 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   const graveyardOu = response.state.organization.organizationalUnits.find(
     (ou: { name: string }) => ou.name === "Graveyard",
   );
-  const updatedContext = {
-    ...context,
+  const ordered: Record<string, unknown> = {
+    version: context.version,
+    generatedAt: new Date().toISOString(),
     organization: {
       managementAccountId: context.organization.managementAccountId,
       rootId: response.state.organization.rootId,
@@ -551,13 +575,7 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
       instanceArn: response.state.identityCenter.instanceArn,
       identityStoreId: response.state.identityCenter.identityStoreId,
     },
-  };
-  const ordered: Record<string, unknown> = {
-    version: updatedContext.version,
-    generatedAt: new Date().toISOString(),
-    organization: updatedContext.organization,
-    identityCenter: updatedContext.identityCenter,
-    deployment: updatedContext.deployment,
+    deployment: { ...deployment, cliVersion },
   };
   await writeFile(contextFilePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf8");
 
@@ -568,12 +586,13 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
     typesPath: typesFilePath,
     logger: input.logger,
     overwriteConfirmation: input.overwriteConfirmation,
+    existingConfig,
   });
 
   const writtenFiles = configWriteResult.files.filter((f) => f.status === "written");
   if (writtenFiles.length > 0) {
     input.logger.log("");
-    input.logger.log("Init complete.");
+    input.logger.log(isUpdate ? "Init --update complete." : "Init complete.");
     for (const file of writtenFiles) {
       input.logger.log(`  ${file.path}: ${file.status}`);
     }
@@ -594,6 +613,8 @@ export async function runRemotePlan(input: RemoteCommandInput): Promise<void> {
       typesPath: typesFilePath,
     }),
   ]);
+
+  warnIfRemotePoliciesNotInConfig({ currentState, config, logger: input.logger });
 
   const desiredState = mapAwsConfigToState({
     config,
@@ -626,6 +647,8 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
       typesPath: typesFilePath,
     }),
   ]);
+
+  warnIfRemotePoliciesNotInConfig({ currentState, config, logger: input.logger });
 
   const desiredState = mapAwsConfigToState({
     config,
@@ -725,9 +748,11 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
 }
 
 export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void> {
-  const deployment = await readDeploymentFromContext();
-
-  const lambdaZip = await readLambdaZip();
+  const [deployment, cliVersion, lambdaZip] = await Promise.all([
+    readDeploymentFromContext(),
+    readPackageVersion(),
+    readLambdaZip(),
+  ]);
 
   input.logger.log(`Updating Lambda function code: ${deployment.lambdaArn}`);
   await waitForLambdaReady(input.lambdaClient, deployment.lambdaArn);
@@ -740,6 +765,37 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
 
   const lastModified = updateResult.LastModified ?? "unknown";
   input.logger.log(`Upgrade complete. Last modified: ${lastModified}`);
+
+  const context = await readAwsContextFromFile(contextFilePath);
+  const ordered: Record<string, unknown> = {
+    version: context.version,
+    generatedAt: context.generatedAt,
+    organization: context.organization,
+    identityCenter: context.identityCenter,
+    deployment: { ...deployment, cliVersion },
+  };
+  await writeFile(contextFilePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf8");
+
+  input.logger.log("");
+  input.logger.log("Run init --update to sync your config with new remote features before using plan/apply.");
+}
+
+function warnIfRemotePoliciesNotInConfig(props: {
+  currentState: StateFile;
+  config: AwsConfigModel;
+  logger: Logger;
+}): void {
+  const remotePolicies = props.currentState.organization.policies ?? [];
+  const hasRemotePolicies = remotePolicies.length > 0;
+  const hasLocalPolicies =
+    (props.config.policies?.serviceControlPolicies?.length ?? 0) > 0 ||
+    (props.config.policies?.resourceControlPolicies?.length ?? 0) > 0;
+  if (hasRemotePolicies && !hasLocalPolicies) {
+    props.logger.log("");
+    props.logger.log("Warning: remote state contains SCPs/RCPs not present in your config. Proceeding could delete them.");
+    props.logger.log("Run init --update to sync first.");
+    props.logger.log("");
+  }
 }
 
 async function readDeploymentFromContext(): Promise<Deployment> {

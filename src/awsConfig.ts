@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile, unlink, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build as esbuildBuild } from "esbuild";
 import * as v from "valibot";
@@ -47,6 +47,7 @@ const deploymentSchema = v.strictObject({
   lambdaArn: v.string(),
   stateBucketName: v.string(),
   stateCacheTtlSeconds: v.number(),
+  cliVersion: v.string(),
 });
 
 export type Deployment = v.InferOutput<typeof deploymentSchema>;
@@ -161,6 +162,8 @@ type WriteAwsConfigFromStateInput = {
   overwriteConfirmation: (props: {
     fileSummaries: string[];
   }) => Promise<boolean>;
+  /** When set, preserve all existing config sections and only add absent optional sections from state. */
+  existingConfig?: AwsConfigModel;
 };
 
 type WriteAwsConfigFromStateResult = {
@@ -227,11 +230,16 @@ export async function writeAwsConfigFromState(
     context,
   });
 
-  const mappedConfig = mapStateToAwsConfig({
-    state,
-  });
+  const mappedConfig = mapStateToAwsConfig({ state });
+  const mergedConfig: AwsConfigModel =
+    props.existingConfig != null
+      ? {
+          ...props.existingConfig,
+          policies: props.existingConfig.policies ?? mappedConfig.policies,
+        }
+      : mappedConfig;
   const sortedConfig = sortAwsConfigModel({
-    config: mappedConfig,
+    config: mergedConfig,
   });
   const nextConfigContent = renderAwsConfigTs({
     config: sortedConfig,
@@ -441,9 +449,10 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     organizationalUnits,
     "name",
   );
-  const graveyardOrganizationalUnit = props.state.organization.organizationalUnits.find(
-    (organizationalUnit) => organizationalUnit.name === "Graveyard",
-  );
+  const graveyardOrganizationalUnit =
+    props.state.organization.organizationalUnits.find(
+      (organizationalUnit) => organizationalUnit.name === "Graveyard",
+    );
   const graveyardOrganizationalUnitId = graveyardOrganizationalUnit?.id;
   for (const account of props.state.organization.accounts) {
     const ownerOuName =
@@ -499,7 +508,8 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     AwsConfigModel["assignments"][number]
   >();
   for (const assignment of props.state.identityCenter.accountAssignments) {
-    const permissionSetName = permissionSetByArn[assignment.permissionSetArn]?.name;
+    const permissionSetName =
+      permissionSetByArn[assignment.permissionSetArn]?.name;
     if (permissionSetName == null) {
       throw new Error(
         `Could not resolve permission set name for assignment permissionSetArn "${assignment.permissionSetArn}".`,
@@ -574,7 +584,10 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     "id",
   );
 
-  function resolveTargetName(targetId: string, targetType: string): string | null {
+  function resolveTargetName(
+    targetId: string,
+    targetType: string,
+  ): string | null {
     if (targetType === "ROOT") {
       return "root";
     }
@@ -589,7 +602,10 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
 
   const attachmentsByPolicyId = new Map<string, string[]>();
   for (const attachment of orgPolicyAttachments) {
-    const targetName = resolveTargetName(attachment.targetId, attachment.targetType);
+    const targetName = resolveTargetName(
+      attachment.targetId,
+      attachment.targetType,
+    );
     if (targetName == null) {
       continue;
     }
@@ -761,7 +777,8 @@ export function mapAwsConfigToState(
     }
     const mappedId = resolveOrganizationalUnitId({
       organizationalUnitName: organizationalUnit.name,
-      matchedOrganizationalUnit: organizationalUnitByName[organizationalUnit.name],
+      matchedOrganizationalUnit:
+        organizationalUnitByName[organizationalUnit.name],
       context: props.context,
     });
     mappedOrganizationalUnitIdByName.set(organizationalUnit.name, mappedId);
@@ -799,7 +816,8 @@ export function mapAwsConfigToState(
   for (const managedOrganizationalUnitName of ["Graveyard"] as const) {
     const managedOuId = resolveOrganizationalUnitId({
       organizationalUnitName: managedOrganizationalUnitName,
-      matchedOrganizationalUnit: organizationalUnitByName[managedOrganizationalUnitName],
+      matchedOrganizationalUnit:
+        organizationalUnitByName[managedOrganizationalUnitName],
       context: props.context,
     });
     mappedOrganizationalUnitIdByName.set(
@@ -864,10 +882,7 @@ export function mapAwsConfigToState(
         email: user.email,
       };
     });
-  const mappedUserByUserName = toRecordByProperty(
-    mappedUsers,
-    "userName",
-  );
+  const mappedUserByUserName = toRecordByProperty(mappedUsers, "userName");
 
   const mappedGroups: StateFile["identityCenter"]["groups"] =
     props.config.groups.map((group) => {
@@ -974,7 +989,10 @@ export function mapAwsConfigToState(
     description: string;
     type: "SERVICE_CONTROL_POLICY" | "RESOURCE_CONTROL_POLICY";
     content: string;
-    targets: Array<{ targetId: string; targetType: "ROOT" | "ORGANIZATIONAL_UNIT" | "ACCOUNT" }>;
+    targets: Array<{
+      targetId: string;
+      targetType: "ROOT" | "ORGANIZATIONAL_UNIT" | "ACCOUNT";
+    }>;
   }> = [];
 
   const ouByName = toRecordByProperty(
@@ -986,9 +1004,15 @@ export function mapAwsConfigToState(
     "name",
   );
 
-  function resolveTargetId(targetName: string): { targetId: string; targetType: "ROOT" | "ORGANIZATIONAL_UNIT" | "ACCOUNT" } {
+  function resolveTargetId(targetName: string): {
+    targetId: string;
+    targetType: "ROOT" | "ORGANIZATIONAL_UNIT" | "ACCOUNT";
+  } {
     if (targetName === "root") {
-      return { targetId: props.context.organization.rootId, targetType: "ROOT" };
+      return {
+        targetId: props.context.organization.rootId,
+        targetType: "ROOT",
+      };
     }
     const ou = ouByName[targetName];
     if (ou != null) {
@@ -1041,8 +1065,9 @@ export function mapAwsConfigToState(
       };
     });
 
-  const mappedPolicyAttachments: NonNullable<StateFile["organization"]["policyAttachments"]> =
-    [];
+  const mappedPolicyAttachments: NonNullable<
+    StateFile["organization"]["policyAttachments"]
+  > = [];
   for (let i = 0; i < allConfigPolicies.length; i++) {
     const configPolicy = allConfigPolicies[i]!;
     const mappedPolicy = mappedPolicies[i]!;
@@ -1196,9 +1221,10 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
         awsManagedPolicies: [...permissionSet.awsManagedPolicies].sort(
           (left, right) => left.localeCompare(right),
         ),
-        customerManagedPolicies: [...permissionSet.customerManagedPolicies].sort(
-          (left, right) =>
-            compareStringKeys(left.path, right.path, left.name, right.name),
+        customerManagedPolicies: [
+          ...permissionSet.customerManagedPolicies,
+        ].sort((left, right) =>
+          compareStringKeys(left.path, right.path, left.name, right.name),
         ),
       }))
       .sort((left, right) => left.name.localeCompare(right.name)),
@@ -1222,24 +1248,30 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
       props.config.policies == null
         ? undefined
         : {
-            serviceControlPolicies: props.config.policies.serviceControlPolicies == null
-              ? undefined
-              : [...props.config.policies.serviceControlPolicies]
-                  .map((p) => ({
-                    ...p,
-                    content: sortJsonRecord(p.content),
-                    targets: [...p.targets].sort((a, b) => a.localeCompare(b)),
-                  }))
-                  .sort((a, b) => a.name.localeCompare(b.name)),
-            resourceControlPolicies: props.config.policies.resourceControlPolicies == null
-              ? undefined
-              : [...props.config.policies.resourceControlPolicies]
-                  .map((p) => ({
-                    ...p,
-                    content: sortJsonRecord(p.content),
-                    targets: [...p.targets].sort((a, b) => a.localeCompare(b)),
-                  }))
-                  .sort((a, b) => a.name.localeCompare(b.name)),
+            serviceControlPolicies:
+              props.config.policies.serviceControlPolicies == null
+                ? undefined
+                : [...props.config.policies.serviceControlPolicies]
+                    .map((p) => ({
+                      ...p,
+                      content: sortJsonRecord(p.content),
+                      targets: [...p.targets].sort((a, b) =>
+                        a.localeCompare(b),
+                      ),
+                    }))
+                    .sort((a, b) => a.name.localeCompare(b.name)),
+            resourceControlPolicies:
+              props.config.policies.resourceControlPolicies == null
+                ? undefined
+                : [...props.config.policies.resourceControlPolicies]
+                    .map((p) => ({
+                      ...p,
+                      content: sortJsonRecord(p.content),
+                      targets: [...p.targets].sort((a, b) =>
+                        a.localeCompare(b),
+                      ),
+                    }))
+                    .sort((a, b) => a.name.localeCompare(b.name)),
           },
   };
 }
@@ -1280,7 +1312,9 @@ function renderTsValue(
     return "null";
   }
   if (value === undefined) {
-    throw new Error("Undefined values must be handled before TypeScript rendering.");
+    throw new Error(
+      "Undefined values must be handled before TypeScript rendering.",
+    );
   }
   if (typeof value === "string") {
     return renderTsStringValue(value, props);
@@ -1350,7 +1384,9 @@ function renderTsObject(
     parentPropertyName?: string;
   },
 ): string {
-  const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined);
+  const entries = Object.entries(value).filter(
+    ([, entryValue]) => entryValue !== undefined,
+  );
   if (entries.length === 0) {
     return "{}";
   }
@@ -1707,7 +1743,9 @@ function sortJsonValue(value: unknown): unknown {
 }
 
 function isJsonRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === "object" && Array.isArray(value) === false;
+  return (
+    value != null && typeof value === "object" && Array.isArray(value) === false
+  );
 }
 
 function compareStringKeys(...values: string[]): number {
@@ -1770,6 +1808,18 @@ export async function readAwsContextFromFile(
   path: string,
 ): Promise<AwsContextFile> {
   return readAwsContextFile(path);
+}
+
+export async function readPackageVersion(): Promise<string> {
+  const thisFile = fileURLToPath(import.meta.url);
+  // thisFile = <root>/dist/awsConfig.js → go up 2 levels to package root
+  const packageDir = dirname(dirname(thisFile));
+  const raw = await readFile(join(packageDir, "package.json"), "utf8");
+  const pkg = JSON.parse(raw) as { version?: unknown };
+  if (typeof pkg.version !== "string") {
+    throw new Error("Could not read version from package.json.");
+  }
+  return pkg.version;
 }
 
 async function loadAwsConfigTypesModule(props: {

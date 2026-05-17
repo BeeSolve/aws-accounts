@@ -28,6 +28,7 @@ import {
   exitCodeForCliErrorKind,
   toUsageError,
 } from "./error.js";
+import { readAwsContextFromFile, readPackageVersion } from "./awsConfig.js";
 
 const commands = [
   "bootstrap",
@@ -59,6 +60,7 @@ async function main(): Promise<void> {
       "ignore-unsupported": { type: "boolean", default: false },
       "allow-destructive": { type: "boolean", default: false },
       refresh: { type: "boolean", default: false },
+      update: { type: "boolean", default: false },
       "sso-start-url": { type: "string" },
       "sso-session": { type: "string", default: "sso" },
       help: { type: "boolean", default: false },
@@ -120,10 +122,13 @@ async function main(): Promise<void> {
   }
 
   if (command === "profile") {
-    const ssoStartUrl = args.values["sso-start-url"] ?? process.env.AWS_SSO_START_URL;
+    const ssoStartUrl =
+      args.values["sso-start-url"] ?? process.env.AWS_SSO_START_URL;
     if (ssoStartUrl == null) {
       printHelp(logger);
-      throw toUsageError("--sso-start-url is required for the profile command (or set AWS_SSO_START_URL).");
+      throw toUsageError(
+        "--sso-start-url is required for the profile command (or set AWS_SSO_START_URL).",
+      );
     }
     await runProfileCommand({
       logger,
@@ -151,6 +156,7 @@ async function main(): Promise<void> {
       refresh: args.values.refresh ?? false,
       allowDestructive: args.values["allow-destructive"] ?? false,
       ignoreUnsupported: args.values["ignore-unsupported"] ?? false,
+      update: args.values.update ?? false,
     },
     logger,
     overwriteConfirmation,
@@ -161,27 +167,27 @@ async function main(): Promise<void> {
     ssoAdminClient: new SSOAdminClient(clientConfig),
   };
 
+  // @claude c'mon there is rules file which tells you you never use elseif but rather if and assert unreachable
+  // @claude see .kiro/steering/rules.md
   if (command === "bootstrap") {
-    return runRemoteBootstrap(remoteInput);
-  }
-  if (command === "scan") {
-    return runRemoteScan(remoteInput);
-  }
-  if (command === "init") {
-    return runRemoteInit(remoteInput);
-  }
-  if (command === "plan") {
-    return runRemotePlan(remoteInput);
-  }
-  if (command === "apply") {
-    return runRemoteApply(remoteInput);
-  }
-  if (command === "upgrade") {
-    return runRemoteUpgrade(remoteInput);
+    await runRemoteBootstrap(remoteInput);
+  } else if (command === "scan") {
+    await runRemoteScan(remoteInput);
+  } else if (command === "init") {
+    await runRemoteInit(remoteInput);
+  } else if (command === "plan") {
+    await runRemotePlan(remoteInput);
+  } else if (command === "apply") {
+    await runRemoteApply(remoteInput);
+  } else if (command === "upgrade") {
+    await runRemoteUpgrade(remoteInput);
+  } else {
+    printHelp(logger);
+    process.exitCode = 1;
+    return;
   }
 
-  printHelp(logger);
-  process.exitCode = 1;
+  await printVersionBannerIfNeeded(logger);
 }
 
 function printHelp(logger: Logger): void {
@@ -191,11 +197,12 @@ function printHelp(logger: Logger): void {
   logger.log(
     "  npm run cli -- bootstrap [--profile <name>] [--region <region>] [--yes]",
   );
-  logger.log(
-    "  npm run cli -- scan [--profile <name>] [--region <region>]",
-  );
+  logger.log("  npm run cli -- scan [--profile <name>] [--region <region>]");
   logger.log(
     "  npm run cli -- init [--profile <name>] [--region <region>] [--yes]",
+  );
+  logger.log(
+    "  npm run cli -- init --update [--profile <name>] [--region <region>] [--yes]",
   );
   logger.log("  npm run cli -- regenerate [--yes]");
   logger.log("  npm run cli -- validate");
@@ -209,9 +216,7 @@ function printHelp(logger: Logger): void {
   logger.log(
     "  npm run cli -- apply [--profile <name>] [--region <region>] [--yes] [--allow-destructive] [--ignore-unsupported]",
   );
-  logger.log(
-    "  npm run cli -- upgrade [--profile <name>] [--region <region>]",
-  );
+  logger.log("  npm run cli -- upgrade [--profile <name>] [--region <region>]");
   logger.log("");
   logger.log("Environment fallback:");
   logger.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
@@ -253,6 +258,24 @@ function buildOverwriteConfirmation(
       readlineInterface.close();
     }
   };
+}
+
+async function printVersionBannerIfNeeded(logger: Logger): Promise<void> {
+  try {
+    const [context, currentVersion] = await Promise.all([
+      readAwsContextFromFile(contextPath),
+      readPackageVersion(),
+    ]);
+    const remoteVersion = context.deployment?.cliVersion;
+    if (remoteVersion != null && remoteVersion !== currentVersion) {
+      logger.log("");
+      logger.log(
+        `New version installed (local: ${currentVersion}, remote: ${remoteVersion}). Run upgrade then init --update to sync.`,
+      );
+    }
+  } catch {
+    // context file missing or unreadable — skip banner silently
+  }
 }
 
 main().catch((error: unknown) => {

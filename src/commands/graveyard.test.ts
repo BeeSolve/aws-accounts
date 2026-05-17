@@ -92,6 +92,7 @@ test("runGraveyardCommand throws error when cache file does not exist", async ()
         lambdaArn: "",
         stateBucketName: "",
         stateCacheTtlSeconds: 300,
+        cliVersion: "0.0.0-test",
       },
     };
     await writeFile(contextPath, `${JSON.stringify(context, null, 2)}\n`, "utf8");
@@ -181,6 +182,7 @@ async function writeFixtureFiles(props: {
       lambdaArn: "",
       stateBucketName: "",
       stateCacheTtlSeconds: 300,
+      cliVersion: "0.0.0-test",
     },
   };
   await Promise.all([

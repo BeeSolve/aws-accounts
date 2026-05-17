@@ -76,6 +76,7 @@ function createValidContextFile(opts?: { withDeployment?: boolean }) {
       lambdaArn: "arn:aws:lambda:us-east-1:123456789012:function:beesolve-aws-accounts",
       stateBucketName: "beesolve-aws-accounts-state-123456789012-us-east-1",
       stateCacheTtlSeconds: 300,
+      cliVersion: "0.0.0-test",
     };
   }
   return base;

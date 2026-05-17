@@ -30,6 +30,8 @@ function createValidScanResponse() {
       groups: 1,
       permissionSets: 1,
       accountAssignments: 2,
+      policies: 0,
+      policyAttachments: 0,
     },
     state: {
       version: "1",
@@ -45,6 +47,8 @@ function createValidScanResponse() {
           { id: "222222222222", arn: "arn:acct:2", name: "Acct2", email: "b@x.com", status: "ACTIVE", parentId: "ou-a", tags: [] },
           { id: "333333333333", arn: "arn:acct:3", name: "Acct3", email: "c@x.com", status: "ACTIVE", parentId: "ou-b", tags: [] },
         ],
+        policies: [],
+        policyAttachments: [],
       },
       identityCenter: {
         instanceArn: "arn:aws:sso:::instance/ssoins-123",

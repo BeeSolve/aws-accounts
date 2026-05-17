@@ -289,7 +289,9 @@ function createSampleState() {
       accounts: [
         { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", status: "ACTIVE", tags: [], parentId: "ou-a" },
         { id: "222222222222", arn: "arn:2", name: "B", email: "b@example.com", status: "ACTIVE", tags: [], parentId: "ou-b" }
-      ]
+      ],
+      policies: [],
+      policyAttachments: []
     },
     identityCenter: {
       instanceArn: "arn:aws:sso:::instance/ssoins-123",

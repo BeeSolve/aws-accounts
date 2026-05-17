@@ -996,6 +996,7 @@ function getFixtureContext() {
       lambdaArn: "",
       stateBucketName: "",
       stateCacheTtlSeconds: 300,
+      cliVersion: "0.0.0-test",
     },
   };
 }
