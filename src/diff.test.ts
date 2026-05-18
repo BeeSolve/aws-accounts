@@ -1036,6 +1036,105 @@ test("diffStates emits no delegated admin operations when state is unchanged", (
   assert.deepEqual(plan.unsupported, []);
 });
 
+test("diffStates emits createOrgPolicy and attachOrgPolicy when a new backup policy is added", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  next.organization.policies = [
+    {
+      id: "p-backup1",
+      arn: "arn:aws:organizations::123456789012:policy/p-backup1",
+      name: "DailyBackup",
+      description: "Daily backup plan",
+      type: "BACKUP_POLICY",
+      content: JSON.stringify({ plans: {} }),
+    },
+  ];
+  next.organization.policyAttachments = [
+    { policyId: "p-backup1", targetId: "r-root", targetType: "ROOT" },
+  ];
+
+  const plan = diffStates({ current, next });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "createOrgPolicy",
+      policyName: "DailyBackup",
+      policyType: "BACKUP_POLICY",
+      description: "Daily backup plan",
+      content: JSON.stringify({ plans: {} }),
+    },
+    {
+      kind: "attachOrgPolicy",
+      policyId: "p-backup1",
+      policyName: "DailyBackup",
+      targetId: "r-root",
+      targetName: "root",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates emits detachOrgPolicy and deleteOrgPolicy when a backup policy is removed", () => {
+  const current = createBaseState();
+  current.organization.policies = [
+    {
+      id: "p-backup1",
+      arn: "arn:aws:organizations::123456789012:policy/p-backup1",
+      name: "DailyBackup",
+      description: "Daily backup plan",
+      type: "BACKUP_POLICY",
+      content: JSON.stringify({ plans: {} }),
+    },
+  ];
+  current.organization.policyAttachments = [
+    { policyId: "p-backup1", targetId: "r-root", targetType: "ROOT" },
+  ];
+  const next = cloneState(current);
+  next.organization.policies = [];
+  next.organization.policyAttachments = [];
+
+  const plan = diffStates({ current, next });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "detachOrgPolicy",
+      policyId: "p-backup1",
+      policyName: "DailyBackup",
+      targetId: "r-root",
+      targetName: "root",
+    },
+    {
+      kind: "deleteOrgPolicy",
+      policyId: "p-backup1",
+      policyName: "DailyBackup",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates emits no operations when backup policy state is unchanged", () => {
+  const current = createBaseState();
+  current.organization.policies = [
+    {
+      id: "p-backup1",
+      arn: "arn:aws:organizations::123456789012:policy/p-backup1",
+      name: "DailyBackup",
+      description: "Daily backup plan",
+      type: "BACKUP_POLICY",
+      content: JSON.stringify({ plans: {} }),
+    },
+  ];
+  current.organization.policyAttachments = [
+    { policyId: "p-backup1", targetId: "r-root", targetType: "ROOT" },
+  ];
+  const next = cloneState(current);
+
+  const plan = diffStates({ current, next });
+
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, []);
+});
+
 test("diffStates keeps deterministic mixed Organizations and IdC ordering", () => {
   const current = createBaseState();
   const next = cloneState(current);

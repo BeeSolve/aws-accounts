@@ -861,6 +861,7 @@ const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
     resourceControlPolicies: [],
     tagPolicies: [],
     aiServicesOptOutPolicies: [],
+    backupPolicies: [],
   },
 } satisfies AwsConfig);
 

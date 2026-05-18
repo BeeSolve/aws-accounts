@@ -274,6 +274,7 @@ const createOrgPolicyOperationSchema = v.strictObject({
     "RESOURCE_CONTROL_POLICY",
     "TAG_POLICY",
     "AISERVICES_OPT_OUT_POLICY",
+    "BACKUP_POLICY",
   ]),
   description: v.string(),
   content: v.string(),

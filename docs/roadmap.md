@@ -24,6 +24,7 @@ Post-v1 features organized by priority tier. See [feature-parity-research.md](./
 - **Permission set boundaries** — `PermissionsBoundary` on permission sets (AWS managed or customer-managed policy ARN).
 - **Delegated administrator** — register/deregister member accounts as delegated administrators for services (SSO, Organizations, etc.). Useful for security-conscious orgs that avoid running from the management account.
 - **`drift` command** — compares last-known state against a fresh live scan to show what changed in AWS since last scan. Helps audit manual console changes before deciding to `scan` (accept as new baseline) or `plan` (reconcile via config).
+- **Backup policies** — centralized AWS Backup plans across accounts via `BACKUP_POLICY` org policy type.
 
 ---
 
@@ -34,10 +35,6 @@ _(All Tier 3 items have been implemented.)_
 ---
 
 ## Tier 4 — Long-term
-
-### Backup policies
-
-Centralized backup plans across accounts. Same API pattern as other org policies.
 
 ---
 

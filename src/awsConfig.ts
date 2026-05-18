@@ -12,6 +12,7 @@ import {
 } from "@beesolve/iam-policy-ts";
 import {
   createAccessRoleName,
+  type OrgPolicyState,
   type StateFile,
   validateState,
 } from "./state.js";
@@ -183,6 +184,14 @@ export const awsConfigModelSchema = v.strictObject({
       }),
     ),
     aiServicesOptOutPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.string()),
+      }),
+    ),
+    backupPolicies: v.array(
       v.strictObject({
         name: v.string(),
         description: v.optional(v.string()),
@@ -654,49 +663,34 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     attachmentsByPolicyId.set(attachment.policyId, targets);
   }
 
-  const scps = orgPolicies
-    .filter((p) => p.type === "SERVICE_CONTROL_POLICY")
-    .map((p) => ({
-      name: p.name,
-      description: p.description.length > 0 ? p.description : undefined,
-      content: JSON.parse(p.content) as Record<string, unknown>,
-      targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((a, b) =>
-        a.localeCompare(b),
-      ),
-    }));
+  const mappedOrgPolicies = orgPolicies.map((p) => ({
+    type: p.type,
+    name: p.name,
+    description: p.description.length > 0 ? p.description : undefined,
+    content: JSON.parse(p.content) as Record<string, unknown>,
+    targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((left, right) =>
+      left.localeCompare(right),
+    ),
+  }));
 
-  const rcps = orgPolicies
-    .filter((p) => p.type === "RESOURCE_CONTROL_POLICY")
-    .map((p) => ({
-      name: p.name,
-      description: p.description.length > 0 ? p.description : undefined,
-      content: JSON.parse(p.content) as Record<string, unknown>,
-      targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((a, b) =>
-        a.localeCompare(b),
-      ),
-    }));
+  const policiesByType = new Map<OrgPolicyState["type"], ConfigPolicyEntry[]>();
+  for (const policy of mappedOrgPolicies) {
+    const bucket =
+      policiesByType.get(policy.type) ?? new Array<ConfigPolicyEntry>();
+    bucket.push({
+      name: policy.name,
+      description: policy.description,
+      content: policy.content,
+      targets: policy.targets,
+    });
+    policiesByType.set(policy.type, bucket);
+  }
 
-  const tagPolicies = orgPolicies
-    .filter((p) => p.type === "TAG_POLICY")
-    .map((p) => ({
-      name: p.name,
-      description: p.description.length > 0 ? p.description : undefined,
-      content: JSON.parse(p.content) as Record<string, unknown>,
-      targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((a, b) =>
-        a.localeCompare(b),
-      ),
-    }));
-
-  const aiServicesOptOutPolicies = orgPolicies
-    .filter((p) => p.type === "AISERVICES_OPT_OUT_POLICY")
-    .map((p) => ({
-      name: p.name,
-      description: p.description.length > 0 ? p.description : undefined,
-      content: JSON.parse(p.content) as Record<string, unknown>,
-      targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((a, b) =>
-        a.localeCompare(b),
-      ),
-    }));
+  const scps = policiesByType.get("SERVICE_CONTROL_POLICY") ?? [];
+  const rcps = policiesByType.get("RESOURCE_CONTROL_POLICY") ?? [];
+  const tagPolicies = policiesByType.get("TAG_POLICY") ?? [];
+  const aiServicesOptOutPolicies = policiesByType.get("AISERVICES_OPT_OUT_POLICY") ?? [];
+  const backupPolicies = policiesByType.get("BACKUP_POLICY") ?? [];
 
   const stateDelegatedAdmins =
     props.state.organization.delegatedAdministrators ?? [];
@@ -751,6 +745,7 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       resourceControlPolicies: rcps,
       tagPolicies,
       aiServicesOptOutPolicies,
+      backupPolicies,
     },
   };
 
@@ -1068,11 +1063,7 @@ export function mapAwsConfigToState(
   const allConfigPolicies: Array<{
     name: string;
     description: string;
-    type:
-      | "SERVICE_CONTROL_POLICY"
-      | "RESOURCE_CONTROL_POLICY"
-      | "TAG_POLICY"
-      | "AISERVICES_OPT_OUT_POLICY";
+    type: OrgPolicyState["type"];
     content: string;
     targets: Array<{
       targetId: string;
@@ -1145,6 +1136,16 @@ export function mapAwsConfigToState(
       name: policy.name,
       description: policy.description ?? "",
       type: "AISERVICES_OPT_OUT_POLICY",
+      content: JSON.stringify(policy.content),
+      targets: policy.targets.map((t) => resolveTargetId(t)),
+    });
+  }
+
+  for (const policy of configPolicies.backupPolicies) {
+    allConfigPolicies.push({
+      name: policy.name,
+      description: policy.description ?? "",
+      type: "BACKUP_POLICY",
       content: JSON.stringify(policy.content),
       targets: policy.targets.map((t) => resolveTargetId(t)),
     });
@@ -1268,8 +1269,31 @@ export function mapAwsConfigToState(
     values: props.config.policies.aiServicesOptOutPolicies.map((p) => p.name),
     entityName: "AI services opt-out policy",
   });
+  assertUniqueNames({
+    values: props.config.policies.backupPolicies.map((p) => p.name),
+    entityName: "backup policy",
+  });
 
   return validateState(mapped);
+}
+
+type ConfigPolicyEntry = {
+  name: string;
+  description?: string;
+  content: Record<string, unknown>;
+  targets: string[];
+};
+
+function sortConfigPolicies(
+  policies: ConfigPolicyEntry[],
+): ConfigPolicyEntry[] {
+  return [...policies]
+    .map((p) => ({
+      ...p,
+      content: sortJsonRecord(p.content),
+      targets: [...p.targets].sort((left, right) => left.localeCompare(right)),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
@@ -1392,46 +1416,17 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
       },
     ),
     policies: {
-      serviceControlPolicies: [...props.config.policies.serviceControlPolicies]
-        .map((p) => ({
-          ...p,
-          content: sortJsonRecord(p.content),
-          targets: [...p.targets].sort((left, right) =>
-            left.localeCompare(right),
-          ),
-        }))
-        .sort((left, right) => left.name.localeCompare(right.name)),
-      resourceControlPolicies: [
-        ...props.config.policies.resourceControlPolicies,
-      ]
-        .map((p) => ({
-          ...p,
-          content: sortJsonRecord(p.content),
-          targets: [...p.targets].sort((left, right) =>
-            left.localeCompare(right),
-          ),
-        }))
-        .sort((left, right) => left.name.localeCompare(right.name)),
-      tagPolicies: [...props.config.policies.tagPolicies]
-        .map((p) => ({
-          ...p,
-          content: sortJsonRecord(p.content),
-          targets: [...p.targets].sort((left, right) =>
-            left.localeCompare(right),
-          ),
-        }))
-        .sort((left, right) => left.name.localeCompare(right.name)),
-      aiServicesOptOutPolicies: [
-        ...props.config.policies.aiServicesOptOutPolicies,
-      ]
-        .map((p) => ({
-          ...p,
-          content: sortJsonRecord(p.content),
-          targets: [...p.targets].sort((left, right) =>
-            left.localeCompare(right),
-          ),
-        }))
-        .sort((left, right) => left.name.localeCompare(right.name)),
+      serviceControlPolicies: sortConfigPolicies(
+        props.config.policies.serviceControlPolicies,
+      ),
+      resourceControlPolicies: sortConfigPolicies(
+        props.config.policies.resourceControlPolicies,
+      ),
+      tagPolicies: sortConfigPolicies(props.config.policies.tagPolicies),
+      aiServicesOptOutPolicies: sortConfigPolicies(
+        props.config.policies.aiServicesOptOutPolicies,
+      ),
+      backupPolicies: sortConfigPolicies(props.config.policies.backupPolicies),
     },
   };
 }
@@ -1785,6 +1780,14 @@ export const awsConfigSchema = v.strictObject({
       }),
     ),
     aiServicesOptOutPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
+      }),
+    ),
+    backupPolicies: v.array(
       v.strictObject({
         name: v.string(),
         description: v.optional(v.string()),

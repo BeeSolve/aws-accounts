@@ -102,6 +102,14 @@ function checkOrgPolicySizes(config: AwsConfigModel, errors: string[]): void {
       );
     }
   }
+  for (const policy of config.policies.backupPolicies) {
+    const contentBytes = Buffer.byteLength(JSON.stringify(policy.content), "utf8");
+    if (contentBytes > ORG_POLICY_CONTENT_MAX_BYTES) {
+      errors.push(
+        `Backup policy "${policy.name}" content is ${contentBytes} bytes (limit: ${ORG_POLICY_CONTENT_MAX_BYTES}).`,
+      );
+    }
+  }
 }
 
 function checkOrgPolicyTargets(config: AwsConfigModel, errors: string[]): void {
@@ -124,6 +132,15 @@ function checkOrgPolicyTargets(config: AwsConfigModel, errors: string[]): void {
       if (target !== "root" && !ouNames.has(target) && !accountNames.has(target)) {
         errors.push(
           `Resource control policy "${policy.name}" references unknown target "${target}".`,
+        );
+      }
+    }
+  }
+  for (const policy of config.policies.backupPolicies) {
+    for (const target of policy.targets) {
+      if (target !== "root" && !ouNames.has(target) && !accountNames.has(target)) {
+        errors.push(
+          `Backup policy "${policy.name}" references unknown target "${target}".`,
         );
       }
     }

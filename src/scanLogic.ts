@@ -186,6 +186,7 @@ const ORG_POLICY_TYPES = [
   "RESOURCE_CONTROL_POLICY",
   "TAG_POLICY",
   "AISERVICES_OPT_OUT_POLICY",
+  "BACKUP_POLICY",
 ] as const;
 
 async function scanOrganizationPolicies(props: {
