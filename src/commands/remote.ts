@@ -67,7 +67,7 @@ import { toPreconditionError } from "../error.js";
 import { sts, organizations, sso, identitystore, s3, logs, account, iam, lambda } from "@beesolve/iam-policy-ts";
 
 const remoteCommandSchema = v.object({
-  subcommand: v.picklist(["bootstrap", "scan", "init", "plan", "apply", "upgrade"]),
+  subcommand: v.picklist(["bootstrap", "scan", "init", "plan", "apply", "upgrade", "drift"]),
   profile: v.optional(v.string()),
   region: v.optional(v.string()),
   flags: v.object({
@@ -801,6 +801,70 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
 
   input.logger.log("");
   input.logger.log("Run init --update to sync your config with new remote features before using plan/apply.");
+}
+
+export async function runRemoteDrift(input: RemoteCommandInput): Promise<void> {
+  const deployment = await readDeploymentFromContext();
+
+  const baseline = await fetchCurrentState({
+    input,
+    deployment,
+  });
+
+  const clientConfig = buildAwsClientConfig({
+    profile: input.profile ?? (deployment.profile || undefined),
+    region: input.region ?? (deployment.region || undefined),
+  });
+  const lambdaClient = new LambdaClient(clientConfig);
+
+  input.logger.log("Scanning live AWS state...");
+  const result = await invokeLambda({
+    lambdaClient,
+    lambdaArn: deployment.lambdaArn,
+    payload: { action: "scan" },
+  });
+
+  if (!result.ok) {
+    throw new Error(formatLambdaError(result.error));
+  }
+
+  const response = result.response;
+  if (!("action" in response) || response.action !== "scan") {
+    throw new Error("Unexpected response from Lambda scan action.");
+  }
+
+  const liveState = response.state;
+  await writeStateCache(cachePath, liveState);
+
+  const plan = diffStates({
+    current: baseline,
+    next: liveState,
+  });
+
+  displayDrift({ plan, logger: input.logger });
+}
+
+function displayDrift(props: { plan: Plan; logger: Logger }): void {
+  const driftOperations = props.plan.operations.filter(
+    (operation) => operation.kind !== "provisionIdcPermissionSet",
+  );
+
+  if (driftOperations.length === 0 && props.plan.unsupported.length === 0) {
+    props.logger.log("No drift.");
+    return;
+  }
+
+  props.logger.log(`Drift: ${driftOperations.length} change(s) detected since last scan`);
+  for (const operation of driftOperations) {
+    props.logger.log(formatOperationLine(operation));
+  }
+
+  if (props.plan.unsupported.length > 0) {
+    props.logger.log("Unsupported diffs:");
+    for (const diff of props.plan.unsupported) {
+      props.logger.log(`  - ${diff.description} [${diff.category}]`);
+    }
+  }
 }
 
 function warnIfRemotePoliciesNotInConfig(props: {

@@ -25,6 +25,7 @@ import {
   runRemotePlan,
   runRemoteApply,
   runRemoteUpgrade,
+  runRemoteDrift,
 } from "./commands/remote.js";
 import {
   classifyCliError,
@@ -45,6 +46,7 @@ const commands = [
   "plan",
   "apply",
   "upgrade",
+  "drift",
 ] as const;
 type CommandName = (typeof commands)[number];
 function isCommandName(value: any): value is CommandName {
@@ -160,7 +162,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Remote commands: bootstrap, scan, init, plan, apply, upgrade
+  // Remote commands: bootstrap, scan, init, plan, apply, upgrade, drift
   const overwriteConfirmation = buildOverwriteConfirmation({
     yes: args.values.yes ?? false,
     isTty: process.stdin.isTTY,
@@ -188,31 +190,40 @@ async function main(): Promise<void> {
 
   if (command === "bootstrap") {
     await runRemoteBootstrap(remoteInput);
+    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "scan") {
     await runRemoteScan(remoteInput);
+    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "init") {
     await runRemoteInit(remoteInput);
+    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "plan") {
     await runRemotePlan(remoteInput);
+    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "apply") {
     await runRemoteApply(remoteInput);
+    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "upgrade") {
     await runRemoteUpgrade(remoteInput);
+    await printVersionBannerIfNeeded(logger);
+    return;
+  }
+  if (command === "drift") {
+    await runRemoteDrift(remoteInput);
+    await printVersionBannerIfNeeded(logger);
     return;
   }
   assertUnreachable(command, `Unhandled remote command: "${command}"`);
-
-  await printVersionBannerIfNeeded(logger);
 }
 
 function printHelp(logger: Logger): void {
@@ -243,6 +254,9 @@ function printHelp(logger: Logger): void {
     "  npm run cli -- apply [--profile <name>] [--region <region>] [--yes] [--allow-destructive] [--ignore-unsupported]",
   );
   logger.log("  npm run cli -- upgrade [--profile <name>] [--region <region>]");
+  logger.log(
+    "  npm run cli -- drift [--profile <name>] [--region <region>] [--refresh]",
+  );
   logger.log("");
   logger.log("Environment fallback:");
   logger.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");

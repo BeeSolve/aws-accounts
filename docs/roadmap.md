@@ -23,6 +23,7 @@ Post-v1 features organized by priority tier. See [feature-parity-research.md](./
 - **ABAC — Attributes for Access Control** — define attribute mappings on the Identity Center instance that enable `${aws:PrincipalTag/key}` conditions in permission set policies.
 - **Permission set boundaries** — `PermissionsBoundary` on permission sets (AWS managed or customer-managed policy ARN).
 - **Delegated administrator** — register/deregister member accounts as delegated administrators for services (SSO, Organizations, etc.). Useful for security-conscious orgs that avoid running from the management account.
+- **`drift` command** — compares last-known state against a fresh live scan to show what changed in AWS since last scan. Helps audit manual console changes before deciding to `scan` (accept as new baseline) or `plan` (reconcile via config).
 
 ---
 
@@ -33,12 +34,6 @@ _(All Tier 3 items have been implemented.)_
 ---
 
 ## Tier 4 — Long-term
-
-### `drift` command — detect manual AWS changes
-
-Compare current remote state against last-known state to show what changed in AWS since last scan. Useful for auditing manual console changes before deciding whether to `init` (reset config) or `plan` (push config).
-
----
 
 ### Backup policies
 
