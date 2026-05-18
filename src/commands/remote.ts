@@ -811,8 +811,8 @@ function warnIfRemotePoliciesNotInConfig(props: {
   const remotePolicies = props.currentState.organization.policies ?? [];
   const hasRemotePolicies = remotePolicies.length > 0;
   const hasLocalPolicies =
-    (props.config.policies?.serviceControlPolicies?.length ?? 0) > 0 ||
-    (props.config.policies?.resourceControlPolicies?.length ?? 0) > 0;
+    props.config.policies.serviceControlPolicies.length > 0 ||
+    props.config.policies.resourceControlPolicies.length > 0;
   if (hasRemotePolicies && !hasLocalPolicies) {
     props.logger.log("");
     props.logger.log("Warning: remote state contains SCPs/RCPs not present in your config. Proceeding could delete them.");
@@ -926,7 +926,8 @@ function isDestructiveOperation(operation: Operation): boolean {
     operation.kind === "deleteIdcPermissionSet" ||
     operation.kind === "deleteIdcPermissionSetPermissionsBoundary" ||
     operation.kind === "detachOrgPolicy" ||
-    operation.kind === "deleteOrgPolicy"
+    operation.kind === "deleteOrgPolicy" ||
+    operation.kind === "deregisterDelegatedAdministrator"
   );
 }
 
@@ -1056,6 +1057,12 @@ function formatOperationLine(operation: Operation): string {
   }
   if (operation.kind === "setIdcAccessControlAttributes") {
     return `  set IdC access control attributes (${operation.attributes.length} attribute(s))`;
+  }
+  if (operation.kind === "registerDelegatedAdministrator") {
+    return `  register delegated administrator "${operation.accountName}" (${operation.accountId}) for ${operation.servicePrincipal}`;
+  }
+  if (operation.kind === "deregisterDelegatedAdministrator") {
+    return `  [destructive] deregister delegated administrator "${operation.accountName}" (${operation.accountId}) for ${operation.servicePrincipal}`;
   }
   assertUnreachable(operation, "Unsupported operation kind in formatOperationLine.");
 }

@@ -121,6 +121,11 @@ const accessControlAttributeSchema = v.strictObject({
   source: v.array(nonEmptyString),
 });
 
+const delegatedAdministratorSchema = v.strictObject({
+  accountId: nonEmptyString,
+  servicePrincipal: nonEmptyString,
+});
+
 export const stateSchema = v.strictObject({
   version: nonEmptyString,
   generatedAt: nonEmptyString,
@@ -130,6 +135,7 @@ export const stateSchema = v.strictObject({
     accounts: v.array(accountSchema),
     policies: v.optional(v.array(orgPolicySchema)),
     policyAttachments: v.optional(v.array(orgPolicyAttachmentSchema)),
+    delegatedAdministrators: v.optional(v.array(delegatedAdministratorSchema)),
   }),
   identityCenter: v.strictObject({
     instanceArn: nonEmptyString,
@@ -169,6 +175,9 @@ export type AccessRoleState = v.InferOutput<typeof accessRoleSchema>;
 export type AccessControlAttributeState = v.InferOutput<
   typeof accessControlAttributeSchema
 >;
+export type DelegatedAdministratorState = v.InferOutput<
+  typeof delegatedAdministratorSchema
+>;
 export type StateFile = v.InferOutput<typeof stateSchema>;
 
 type WorkingIdentityCenterState = {
@@ -200,6 +209,8 @@ export type WorkingState = {
     policiesByName: Record<string, OrgPolicyState>;
     policyAttachments: OrgPolicyAttachmentState[];
     policyAttachmentsByKey: Record<string, OrgPolicyAttachmentState>;
+    delegatedAdministrators: DelegatedAdministratorState[];
+    delegatedAdministratorsByKey: Record<string, DelegatedAdministratorState>;
   };
   identityCenter: WorkingIdentityCenterState;
 };
@@ -211,6 +222,8 @@ export function validateState(value: unknown): StateFile {
 export function createWorkingState(props: { state: StateFile }): WorkingState {
   const policies = props.state.organization.policies ?? [];
   const policyAttachments = props.state.organization.policyAttachments ?? [];
+  const delegatedAdministrators =
+    props.state.organization.delegatedAdministrators ?? [];
   return {
     version: props.state.version,
     generatedAt: props.state.generatedAt,
@@ -231,6 +244,11 @@ export function createWorkingState(props: { state: StateFile }): WorkingState {
       policyAttachmentsByKey: toRecordByProperty(
         policyAttachments,
         createOrgPolicyAttachmentKey,
+      ),
+      delegatedAdministrators: structuredClone(delegatedAdministrators),
+      delegatedAdministratorsByKey: toRecordByProperty(
+        delegatedAdministrators,
+        createDelegatedAdministratorKey,
       ),
     },
     identityCenter: createWorkingIdentityCenterState({
@@ -255,6 +273,13 @@ export function materializeWorkingState(props: {
       policyAttachments: structuredClone(
         props.workingState.organization.policyAttachments,
       ),
+      ...(props.workingState.organization.delegatedAdministrators.length > 0
+        ? {
+            delegatedAdministrators: structuredClone(
+              props.workingState.organization.delegatedAdministrators,
+            ),
+          }
+        : {}),
     },
     identityCenter: {
       instanceArn: props.workingState.identityCenter.instanceArn,
@@ -925,6 +950,78 @@ export function removeOrgPolicyAttachmentFromWorkingState(props: {
       policyAttachmentsByKey: toRecordByProperty(
         nextAttachments,
         createOrgPolicyAttachmentKey,
+      ),
+    },
+  };
+}
+
+function createDelegatedAdministratorKey(props: {
+  accountId: string;
+  servicePrincipal: string;
+}): string {
+  return [props.accountId, props.servicePrincipal].join("|");
+}
+
+export function upsertDelegatedAdministratorInWorkingState(props: {
+  workingState: WorkingState;
+  delegatedAdministrator: DelegatedAdministratorState;
+}): WorkingState {
+  const key = createDelegatedAdministratorKey({
+    accountId: props.delegatedAdministrator.accountId,
+    servicePrincipal: props.delegatedAdministrator.servicePrincipal,
+  });
+  if (
+    props.workingState.organization.delegatedAdministratorsByKey[key] != null
+  ) {
+    return props.workingState;
+  }
+  const nextDelegatedAdministrators = [
+    ...props.workingState.organization.delegatedAdministrators,
+    props.delegatedAdministrator,
+  ];
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      delegatedAdministrators: nextDelegatedAdministrators,
+      delegatedAdministratorsByKey: toRecordByProperty(
+        nextDelegatedAdministrators,
+        createDelegatedAdministratorKey,
+      ),
+    },
+  };
+}
+
+export function removeDelegatedAdministratorFromWorkingState(props: {
+  workingState: WorkingState;
+  accountId: string;
+  servicePrincipal: string;
+}): WorkingState {
+  const key = createDelegatedAdministratorKey({
+    accountId: props.accountId,
+    servicePrincipal: props.servicePrincipal,
+  });
+  if (
+    props.workingState.organization.delegatedAdministratorsByKey[key] == null
+  ) {
+    return props.workingState;
+  }
+  const nextDelegatedAdministrators =
+    props.workingState.organization.delegatedAdministrators.filter(
+      (da) =>
+        createDelegatedAdministratorKey({
+          accountId: da.accountId,
+          servicePrincipal: da.servicePrincipal,
+        }) !== key,
+    );
+  return {
+    ...props.workingState,
+    organization: {
+      ...props.workingState.organization,
+      delegatedAdministrators: nextDelegatedAdministrators,
+      delegatedAdministratorsByKey: toRecordByProperty(
+        nextDelegatedAdministrators,
+        createDelegatedAdministratorKey,
       ),
     },
   };

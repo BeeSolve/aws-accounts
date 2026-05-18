@@ -49,6 +49,8 @@ const operationExecutionPriority: Record<Operation["kind"], number> = {
   putAlternateContact: 38,
   deleteAlternateContact: 39,
   setIdcAccessControlAttributes: 40,
+  registerDelegatedAdministrator: 41,
+  deregisterDelegatedAdministrator: 42,
 };
 
 type DiffStatesProps = {
@@ -842,6 +844,62 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
+  const nextAccountNameById = new Map(
+    props.next.organization.accounts.map((account) => [
+      account.id,
+      account.name,
+    ]),
+  );
+  const currentAccountNameById = new Map(
+    props.current.organization.accounts.map((account) => [
+      account.id,
+      account.name,
+    ]),
+  );
+
+  const currentDelegatedAdmins =
+    props.current.organization.delegatedAdministrators ?? [];
+  const nextDelegatedAdmins =
+    props.next.organization.delegatedAdministrators ?? [];
+  const nextDelegatedAdminKeys = new Set(
+    nextDelegatedAdmins.map((da) => `${da.accountId}|${da.servicePrincipal}`),
+  );
+  const currentDelegatedAdminKeys = new Set(
+    currentDelegatedAdmins.map(
+      (da) => `${da.accountId}|${da.servicePrincipal}`,
+    ),
+  );
+  for (const nextDa of nextDelegatedAdmins) {
+    if (
+      currentDelegatedAdminKeys.has(
+        `${nextDa.accountId}|${nextDa.servicePrincipal}`,
+      )
+    ) {
+      continue;
+    }
+    operations.push({
+      kind: "registerDelegatedAdministrator",
+      accountId: nextDa.accountId,
+      accountName: nextAccountNameById.get(nextDa.accountId) ?? nextDa.accountId,
+      servicePrincipal: nextDa.servicePrincipal,
+    });
+  }
+  for (const currentDa of currentDelegatedAdmins) {
+    if (
+      nextDelegatedAdminKeys.has(
+        `${currentDa.accountId}|${currentDa.servicePrincipal}`,
+      )
+    ) {
+      continue;
+    }
+    operations.push({
+      kind: "deregisterDelegatedAdministrator",
+      accountId: currentDa.accountId,
+      accountName: currentAccountNameById.get(currentDa.accountId) ?? currentDa.accountId,
+      servicePrincipal: currentDa.servicePrincipal,
+    });
+  }
+
   const currentPolicies = props.current.organization.policies ?? [];
   const nextPolicies = props.next.organization.policies ?? [];
   const currentPolicyAttachments =
@@ -907,25 +965,27 @@ export function diffStates(props: DiffStatesProps): Plan {
   const nextOuNameById = new Map(
     props.next.organization.organizationalUnits.map((ou) => [ou.id, ou.name]),
   );
-  const nextAccountNameById = new Map(
-    props.next.organization.accounts.map((account) => [account.id, account.name]),
-  );
   const currentOuNameById = new Map(
-    props.current.organization.organizationalUnits.map((ou) => [ou.id, ou.name]),
-  );
-  const currentAccountNameById = new Map(
-    props.current.organization.accounts.map((account) => [account.id, account.name]),
+    props.current.organization.organizationalUnits.map((ou) => [
+      ou.id,
+      ou.name,
+    ]),
   );
 
   function resolveNextTargetName(targetId: string, targetType: string): string {
     if (targetType === "ROOT") return "root";
-    if (targetType === "ORGANIZATIONAL_UNIT") return nextOuNameById.get(targetId) ?? "unknown";
+    if (targetType === "ORGANIZATIONAL_UNIT")
+      return nextOuNameById.get(targetId) ?? "unknown";
     return nextAccountNameById.get(targetId) ?? "unknown";
   }
 
-  function resolveCurrentTargetName(targetId: string, targetType: string): string {
+  function resolveCurrentTargetName(
+    targetId: string,
+    targetType: string,
+  ): string {
     if (targetType === "ROOT") return "root";
-    if (targetType === "ORGANIZATIONAL_UNIT") return currentOuNameById.get(targetId) ?? "unknown";
+    if (targetType === "ORGANIZATIONAL_UNIT")
+      return currentOuNameById.get(targetId) ?? "unknown";
     return currentAccountNameById.get(targetId) ?? "unknown";
   }
 
@@ -1351,6 +1411,16 @@ function getOperationSortKey(operation: Operation): string {
   }
   if (operation.kind === "setIdcAccessControlAttributes") {
     return operation.kind;
+  }
+  if (
+    operation.kind === "registerDelegatedAdministrator" ||
+    operation.kind === "deregisterDelegatedAdministrator"
+  ) {
+    return [
+      operation.kind,
+      operation.accountName,
+      operation.servicePrincipal,
+    ].join("|");
   }
   return "zzzz";
 }

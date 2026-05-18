@@ -8,6 +8,8 @@ import {
   DescribeOrganizationCommand,
   DescribePolicyCommand,
   ListAccountsCommand,
+  ListDelegatedAdministratorsCommand,
+  ListDelegatedServicesForAccountCommand,
   ListOrganizationalUnitsForParentCommand,
   ListParentsCommand,
   ListPoliciesCommand,
@@ -38,6 +40,7 @@ import {
   type AccessControlAttributeState,
   type AccountAssignmentState,
   type AlternateContactState,
+  type DelegatedAdministratorState,
   type OrgPolicyAttachmentState,
   type OrgPolicyState,
   type StateFile,
@@ -110,15 +113,22 @@ export async function scanOrganization(props: {
             },
           ];
         }),
-        alternateContacts: alternateContacts.length > 0 ? alternateContacts : undefined,
+        alternateContacts:
+          alternateContacts.length > 0 ? alternateContacts : undefined,
       });
     }
     nextToken = response.NextToken;
   } while (nextToken != null);
 
-  const { policies, policyAttachments } = await scanOrganizationPolicies({
-    organizationsClient: props.organizationsClient,
-  });
+  const [{ policies, policyAttachments }, delegatedAdministrators] =
+    await Promise.all([
+      scanOrganizationPolicies({
+        organizationsClient: props.organizationsClient,
+      }),
+      scanDelegatedAdministrators({
+        organizationsClient: props.organizationsClient,
+      }),
+    ]);
 
   return {
     rootId: root.Id,
@@ -126,7 +136,49 @@ export async function scanOrganization(props: {
     accounts,
     policies,
     policyAttachments,
+    delegatedAdministrators:
+      delegatedAdministrators.length > 0 ? delegatedAdministrators : undefined,
   };
+}
+
+async function scanDelegatedAdministrators(props: {
+  organizationsClient: OrganizationsClient;
+}): Promise<DelegatedAdministratorState[]> {
+  const accountIds = new Array<string>();
+  let nextToken: string | undefined;
+  do {
+    const response = await props.organizationsClient.send(
+      new ListDelegatedAdministratorsCommand({ NextToken: nextToken }),
+    );
+    for (const admin of response.DelegatedAdministrators ?? []) {
+      if (admin.Id == null) {
+        continue;
+      }
+      accountIds.push(admin.Id);
+    }
+    nextToken = response.NextToken;
+  } while (nextToken != null);
+
+  const results: DelegatedAdministratorState[] = [];
+  for (const accountId of accountIds) {
+    let servicesNextToken: string | undefined;
+    do {
+      const response = await props.organizationsClient.send(
+        new ListDelegatedServicesForAccountCommand({
+          AccountId: accountId,
+          NextToken: servicesNextToken,
+        }),
+      );
+      for (const service of response.DelegatedServices ?? []) {
+        if (service.ServicePrincipal == null) {
+          continue;
+        }
+        results.push({ accountId, servicePrincipal: service.ServicePrincipal });
+      }
+      servicesNextToken = response.NextToken;
+    } while (servicesNextToken != null);
+  }
+  return results;
 }
 
 const ORG_POLICY_TYPES = [
@@ -198,7 +250,8 @@ async function scanOrganizationPolicies(props: {
           if (target.TargetId == null || target.Type == null) {
             continue;
           }
-          const targetType = target.Type as OrgPolicyAttachmentState["targetType"];
+          const targetType =
+            target.Type as OrgPolicyAttachmentState["targetType"];
           if (
             targetType !== "ROOT" &&
             targetType !== "ORGANIZATIONAL_UNIT" &&
@@ -493,7 +546,8 @@ function resolveIdentityStoreUserEmail(props: {
   emails: Array<{ Value?: string; Primary?: boolean }>;
 }): string {
   const primaryEmail = props.emails.find(
-    (email) => email.Primary === true && email.Value != null && email.Value.length > 0,
+    (email) =>
+      email.Primary === true && email.Value != null && email.Value.length > 0,
   );
   if (primaryEmail?.Value != null) {
     return primaryEmail.Value;
@@ -534,7 +588,10 @@ async function listPermissionSets(props: {
   const permissionSets = await Promise.all(
     describeResponses.map(async (response) => {
       const permissionSet = response.PermissionSet;
-      if (permissionSet?.PermissionSetArn == null || permissionSet.Name == null) {
+      if (
+        permissionSet?.PermissionSetArn == null ||
+        permissionSet.Name == null
+      ) {
         return undefined;
       }
       const [
@@ -577,7 +634,9 @@ async function listPermissionSets(props: {
     }),
   );
   return permissionSets.filter(
-    (permissionSet): permissionSet is StateFile["identityCenter"]["permissionSets"][number] =>
+    (
+      permissionSet,
+    ): permissionSet is StateFile["identityCenter"]["permissionSets"][number] =>
       permissionSet != null,
   );
 }
@@ -601,7 +660,9 @@ async function getPermissionsBoundaryForPermissionSet(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
   permissionSetArn: string;
-}): Promise<StateFile["identityCenter"]["permissionSets"][number]["permissionsBoundary"]> {
+}): Promise<
+  StateFile["identityCenter"]["permissionSets"][number]["permissionsBoundary"]
+> {
   const response = await props.ssoAdminClient.send(
     new GetPermissionsBoundaryForPermissionSetCommand({
       InstanceArn: props.instanceArn,
@@ -640,7 +701,8 @@ async function listManagedPoliciesInPermissionSet(props: {
         NextToken: nextToken,
       }),
     );
-    for (const attachedManagedPolicy of response.AttachedManagedPolicies ?? []) {
+    for (const attachedManagedPolicy of response.AttachedManagedPolicies ??
+      []) {
       if (attachedManagedPolicy.Arn == null) {
         continue;
       }
@@ -754,11 +816,7 @@ async function listAccountsForPermissionSet(props: {
   return accountIds;
 }
 
-const ALTERNATE_CONTACT_TYPES = [
-  "BILLING",
-  "OPERATIONS",
-  "SECURITY",
-] as const;
+const ALTERNATE_CONTACT_TYPES = ["BILLING", "OPERATIONS", "SECURITY"] as const;
 
 async function scanAlternateContacts(props: {
   accountClient: AccountClient;

@@ -31,6 +31,7 @@ import {
   exitCodeForCliErrorKind,
   toUsageError,
 } from "./error.js";
+import { assertUnreachable } from "./helpers.js";
 import { readAwsContextFromFile, readPackageVersion } from "./awsConfig.js";
 
 const commands = [
@@ -185,25 +186,31 @@ async function main(): Promise<void> {
     ssoAdminClient: new SSOAdminClient(clientConfig),
   };
 
-  // @claude c'mon there is rules file which tells you you never use elseif but rather if and assert unreachable
-  // @claude see .kiro/steering/rules.md
   if (command === "bootstrap") {
     await runRemoteBootstrap(remoteInput);
-  } else if (command === "scan") {
-    await runRemoteScan(remoteInput);
-  } else if (command === "init") {
-    await runRemoteInit(remoteInput);
-  } else if (command === "plan") {
-    await runRemotePlan(remoteInput);
-  } else if (command === "apply") {
-    await runRemoteApply(remoteInput);
-  } else if (command === "upgrade") {
-    await runRemoteUpgrade(remoteInput);
-  } else {
-    printHelp(logger);
-    process.exitCode = 1;
     return;
   }
+  if (command === "scan") {
+    await runRemoteScan(remoteInput);
+    return;
+  }
+  if (command === "init") {
+    await runRemoteInit(remoteInput);
+    return;
+  }
+  if (command === "plan") {
+    await runRemotePlan(remoteInput);
+    return;
+  }
+  if (command === "apply") {
+    await runRemoteApply(remoteInput);
+    return;
+  }
+  if (command === "upgrade") {
+    await runRemoteUpgrade(remoteInput);
+    return;
+  }
+  assertUnreachable(command, `Unhandled remote command: "${command}"`);
 
   await printVersionBannerIfNeeded(logger);
 }

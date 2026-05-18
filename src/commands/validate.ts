@@ -85,7 +85,7 @@ function checkAssignmentPrincipals(config: AwsConfigModel, errors: string[]): vo
 }
 
 function checkOrgPolicySizes(config: AwsConfigModel, errors: string[]): void {
-  for (const policy of config.policies?.serviceControlPolicies ?? []) {
+  for (const policy of config.policies.serviceControlPolicies) {
     const contentBytes = Buffer.byteLength(JSON.stringify(policy.content), "utf8");
     if (contentBytes > ORG_POLICY_CONTENT_MAX_BYTES) {
       errors.push(
@@ -93,7 +93,7 @@ function checkOrgPolicySizes(config: AwsConfigModel, errors: string[]): void {
       );
     }
   }
-  for (const policy of config.policies?.resourceControlPolicies ?? []) {
+  for (const policy of config.policies.resourceControlPolicies) {
     const contentBytes = Buffer.byteLength(JSON.stringify(policy.content), "utf8");
     if (contentBytes > ORG_POLICY_CONTENT_MAX_BYTES) {
       errors.push(
@@ -109,7 +109,7 @@ function checkOrgPolicyTargets(config: AwsConfigModel, errors: string[]): void {
     config.organizationalUnits.flatMap((ou) => ou.accounts.map((a) => a.name)),
   );
 
-  for (const policy of config.policies?.serviceControlPolicies ?? []) {
+  for (const policy of config.policies.serviceControlPolicies) {
     for (const target of policy.targets) {
       if (target !== "root" && !ouNames.has(target) && !accountNames.has(target)) {
         errors.push(
@@ -118,7 +118,7 @@ function checkOrgPolicyTargets(config: AwsConfigModel, errors: string[]): void {
       }
     }
   }
-  for (const policy of config.policies?.resourceControlPolicies ?? []) {
+  for (const policy of config.policies.resourceControlPolicies) {
     for (const target of policy.targets) {
       if (target !== "root" && !ouNames.has(target) && !accountNames.has(target)) {
         errors.push(

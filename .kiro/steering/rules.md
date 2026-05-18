@@ -27,3 +27,6 @@ inclusion: auto
 - For fixed command-name sets, define a `const` tuple and derive the union type from it (`type CommandName = (typeof commands)[number]`), then guard unknown input with a type guard.
 - Never commit or amend git commits unless the user explicitly asks.
 - Do not introduce new dependencies (like tsx, ts-node) for running TypeScript. Node's built-in type stripping is used in this codebase.
+- Prefer `new Array<T>()` over `T[]` annotation for empty array initialization (e.g. `const ids = new Array<string>()` not `const ids: string[] = []`).
+- In sort comparators, use `left` and `right` as parameter names instead of `a` and `b`.
+- Prefer non-optional array fields over optional ones in schemas; use an explicit empty array `[]` as the default. This applies both to Valibot schemas and TypeScript types. The config generator always writes these fields so users are not burdened by adding them manually.

@@ -854,6 +854,14 @@ const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
       accounts: ["AppAccount"],
     },
   ],
+  accessControlAttributes: [],
+  delegatedAdministrators: [],
+  policies: {
+    serviceControlPolicies: [],
+    resourceControlPolicies: [],
+    tagPolicies: [],
+    aiServicesOptOutPolicies: [],
+  },
 } satisfies AwsConfig);
 
 export default awsConfig;

@@ -8,6 +8,7 @@ import {
   AttachPolicyCommand,
   CreateOrganizationalUnitCommand,
   CreatePolicyCommand,
+  DeregisterDelegatedAdministratorCommand,
   DeleteOrganizationalUnitCommand,
   DeletePolicyCommand,
   DetachPolicyCommand,
@@ -15,6 +16,7 @@ import {
   ListOrganizationalUnitsForParentCommand,
   MoveAccountCommand,
   OrganizationsClient,
+  RegisterDelegatedAdministratorCommand,
   TagResourceCommand,
   UntagResourceCommand,
   UpdateOrganizationalUnitCommand,
@@ -64,6 +66,7 @@ import {
   createGroupMembershipKey,
   moveAccountInWorkingState,
   removeAccountAssignmentFromWorkingState,
+  removeDelegatedAdministratorFromWorkingState,
   removeGroupMembershipFromWorkingState,
   removeIdcGroupFromWorkingState,
   removeIdcPermissionSetFromWorkingState,
@@ -73,6 +76,7 @@ import {
   removeOrgPolicyFromWorkingState,
   renameOrganizationalUnitInWorkingState,
   type WorkingState,
+  upsertDelegatedAdministratorInWorkingState,
   upsertIdcGroupInWorkingState,
   upsertIdcPermissionSetInWorkingState,
   upsertIdcUserInWorkingState,
@@ -114,33 +118,32 @@ export type ExecuteOperationInput = {
 export async function executeOperation(
   props: ExecuteOperationInput,
 ): Promise<WorkingState> {
-  const operation = props.operation;
-  if (operation.kind === "moveAccount") {
+  if (props.operation.kind === "moveAccount") {
     props.logger.log(
-      `Moving "${operation.accountName}" (${operation.accountId}): ${operation.fromOuName} -> ${operation.toOuName}`,
+      `Moving "${props.operation.accountName}" (${props.operation.accountId}): ${props.operation.fromOuName} -> ${props.operation.toOuName}`,
     );
     await props.organizationsClient.send(
       new MoveAccountCommand({
-        AccountId: operation.accountId,
-        SourceParentId: operation.fromOuId,
-        DestinationParentId: operation.toOuId,
+        AccountId: props.operation.accountId,
+        SourceParentId: props.operation.fromOuId,
+        DestinationParentId: props.operation.toOuId,
       }),
     );
-    props.logger.log(`Done: "${operation.accountName}"`);
+    props.logger.log(`Done: "${props.operation.accountName}"`);
     return moveAccountInWorkingState({
       workingState: props.state,
-      accountId: operation.accountId,
-      parentId: operation.toOuId,
+      accountId: props.operation.accountId,
+      parentId: props.operation.toOuId,
     });
   }
-  if (operation.kind === "createOu") {
+  if (props.operation.kind === "createOu") {
     props.logger.log(
-      `Creating OU "${operation.ouName}" under ${operation.parentOuName}...`,
+      `Creating OU "${props.operation.ouName}" under ${props.operation.parentOuName}...`,
     );
     const response = await props.organizationsClient.send(
       new CreateOrganizationalUnitCommand({
-        ParentId: operation.parentOuId,
-        Name: operation.ouName,
+        ParentId: props.operation.parentOuId,
+        Name: props.operation.ouName,
       }),
     );
     const createdOu = response.OrganizationalUnit;
@@ -150,7 +153,7 @@ export async function executeOperation(
       createdOu.Name == null
     ) {
       throw new Error(
-        `CreateOrganizationalUnit for "${operation.ouName}" returned incomplete OU data.`,
+        `CreateOrganizationalUnit for "${props.operation.ouName}" returned incomplete OU data.`,
       );
     }
     props.logger.log(`Done: "${createdOu.Name}"`);
@@ -158,55 +161,55 @@ export async function executeOperation(
       workingState: props.state,
       organizationalUnit: {
         id: createdOu.Id,
-        parentId: operation.parentOuId,
+        parentId: props.operation.parentOuId,
         arn: createdOu.Arn,
         name: createdOu.Name,
       },
     });
   }
-  if (operation.kind === "renameOu") {
+  if (props.operation.kind === "renameOu") {
     props.logger.log(
-      `Renaming OU "${operation.fromOuName}" -> "${operation.toOuName}"...`,
+      `Renaming OU "${props.operation.fromOuName}" -> "${props.operation.toOuName}"...`,
     );
     await props.organizationsClient.send(
       new UpdateOrganizationalUnitCommand({
-        OrganizationalUnitId: operation.ouId,
-        Name: operation.toOuName,
+        OrganizationalUnitId: props.operation.ouId,
+        Name: props.operation.toOuName,
       }),
     );
-    props.logger.log(`Done: "${operation.toOuName}"`);
+    props.logger.log(`Done: "${props.operation.toOuName}"`);
     return renameOrganizationalUnitInWorkingState({
       workingState: props.state,
-      organizationalUnitId: operation.ouId,
-      name: operation.toOuName,
+      organizationalUnitId: props.operation.ouId,
+      name: props.operation.toOuName,
     });
   }
-  if (operation.kind === "deleteOu") {
-    props.logger.log(`Deleting OU "${operation.ouName}"...`);
+  if (props.operation.kind === "deleteOu") {
+    props.logger.log(`Deleting OU "${props.operation.ouName}"...`);
     await assertOrganizationalUnitIsEmpty({
       organizationsClient: props.organizationsClient,
-      organizationalUnitId: operation.ouId,
-      organizationalUnitName: operation.ouName,
+      organizationalUnitId: props.operation.ouId,
+      organizationalUnitName: props.operation.ouName,
     });
     await props.organizationsClient.send(
       new DeleteOrganizationalUnitCommand({
-        OrganizationalUnitId: operation.ouId,
+        OrganizationalUnitId: props.operation.ouId,
       }),
     );
-    props.logger.log(`Done: "${operation.ouName}"`);
+    props.logger.log(`Done: "${props.operation.ouName}"`);
     return removeOrganizationalUnitFromWorkingState({
       workingState: props.state,
-      organizationalUnitId: operation.ouId,
+      organizationalUnitId: props.operation.ouId,
     });
   }
-  if (operation.kind === "createAccount") {
+  if (props.operation.kind === "createAccount") {
     const result = await createAccountAndMoveToOu({
       organizationsClient: props.organizationsClient,
       logger: props.logger,
-      accountName: operation.accountName,
-      accountEmail: operation.accountEmail,
+      accountName: props.operation.accountName,
+      accountEmail: props.operation.accountEmail,
       sourceParentId: props.context.organization.rootId,
-      destinationParentId: operation.targetOuId,
+      destinationParentId: props.operation.targetOuId,
       timeoutInMs: props.runtime.createAccount.timeoutInMs,
       pollIntervalInMs: props.runtime.createAccount.pollIntervalInMs,
     });
@@ -218,22 +221,22 @@ export async function executeOperation(
         name: result.account.name,
         email: result.account.email,
         status: result.account.status,
-        parentId: operation.targetOuId,
+        parentId: props.operation.targetOuId,
         tags: [],
       },
     });
   }
-  if (operation.kind === "updateAccountTags") {
-    const account = props.state.organization.accountsById[operation.accountId];
+  if (props.operation.kind === "updateAccountTags") {
+    const account = props.state.organization.accountsById[props.operation.accountId];
     if (account == null) {
       throw new Error(
-        `Could not resolve account "${operation.accountName}" (${operation.accountId}) in working state.`,
+        `Could not resolve account "${props.operation.accountName}" (${props.operation.accountId}) in working state.`,
       );
     }
     const currentTags = new Map(
       (account.tags ?? []).map((tag) => [tag.key, tag.value] as const),
     );
-    const desiredTags = new Map(Object.entries(operation.tags));
+    const desiredTags = new Map(Object.entries(props.operation.tags));
     const tagsToApply = [...desiredTags.entries()]
       .filter(([key, value]) => currentTags.get(key) !== value)
       .map(([Key, Value]) => ({ Key, Value }));
@@ -242,12 +245,12 @@ export async function executeOperation(
     );
 
     props.logger.log(
-      `Updating account tags "${operation.accountName}" (${operation.accountId})...`,
+      `Updating account tags "${props.operation.accountName}" (${props.operation.accountId})...`,
     );
     if (tagsToApply.length > 0) {
       await props.organizationsClient.send(
         new TagResourceCommand({
-          ResourceId: operation.accountId,
+          ResourceId: props.operation.accountId,
           Tags: tagsToApply,
         }),
       );
@@ -255,86 +258,86 @@ export async function executeOperation(
     if (tagKeysToRemove.length > 0) {
       await props.organizationsClient.send(
         new UntagResourceCommand({
-          ResourceId: operation.accountId,
+          ResourceId: props.operation.accountId,
           TagKeys: tagKeysToRemove,
         }),
       );
     }
-    props.logger.log(`Done: tags updated for "${operation.accountName}"`);
+    props.logger.log(`Done: tags updated for "${props.operation.accountName}"`);
     return upsertAccountInWorkingState({
       workingState: props.state,
       account: {
         ...account,
-        tags: Object.entries(operation.tags).map(([key, value]) => ({
+        tags: Object.entries(props.operation.tags).map(([key, value]) => ({
           key,
           value,
         })),
       },
     });
   }
-  if (operation.kind === "updateAccountName") {
+  if (props.operation.kind === "updateAccountName") {
     props.logger.log(
-      `Renaming account (${operation.accountId}): "${operation.fromAccountName}" -> "${operation.toAccountName}"...`,
+      `Renaming account (${props.operation.accountId}): "${props.operation.fromAccountName}" -> "${props.operation.toAccountName}"...`,
     );
     await props.accountClient.send(
       new PutAccountNameCommand({
-        AccountId: operation.accountId,
-        AccountName: operation.toAccountName,
+        AccountId: props.operation.accountId,
+        AccountName: props.operation.toAccountName,
       }),
     );
     props.logger.log(
-      `Done: account "${operation.toAccountName}" (${operation.accountId})`,
+      `Done: account "${props.operation.toAccountName}" (${props.operation.accountId})`,
     );
-    const account = props.state.organization.accountsById[operation.accountId];
+    const account = props.state.organization.accountsById[props.operation.accountId];
     if (account == null) {
       throw new Error(
-        `Could not resolve account (${operation.accountId}) in working state after rename.`,
+        `Could not resolve account (${props.operation.accountId}) in working state after rename.`,
       );
     }
     return upsertAccountInWorkingState({
       workingState: props.state,
       account: {
         ...account,
-        name: operation.toAccountName,
+        name: props.operation.toAccountName,
       },
     });
   }
-  if (operation.kind === "removeAccount") {
+  if (props.operation.kind === "removeAccount") {
     props.logger.log(
-      `Moving removed account "${operation.accountName}" (${operation.accountId}) to ${operation.toOuName}...`,
+      `Moving removed account "${props.operation.accountName}" (${props.operation.accountId}) to ${props.operation.toOuName}...`,
     );
     await props.organizationsClient.send(
       new MoveAccountCommand({
-        AccountId: operation.accountId,
-        SourceParentId: operation.fromOuId,
-        DestinationParentId: operation.toOuId,
+        AccountId: props.operation.accountId,
+        SourceParentId: props.operation.fromOuId,
+        DestinationParentId: props.operation.toOuId,
       }),
     );
     props.logger.log(
-      `Done: "${operation.accountName}" -> ${operation.toOuName}`,
+      `Done: "${props.operation.accountName}" -> ${props.operation.toOuName}`,
     );
     return moveAccountInWorkingState({
       workingState: props.state,
-      accountId: operation.accountId,
-      parentId: operation.toOuId,
+      accountId: props.operation.accountId,
+      parentId: props.operation.toOuId,
     });
   }
-  if (operation.kind === "createIdcUser") {
-    props.logger.log(`Creating IdC user "${operation.userName}"...`);
+  if (props.operation.kind === "createIdcUser") {
+    props.logger.log(`Creating IdC user "${props.operation.userName}"...`);
     const response = await props.identityStoreClient.send(
       new CreateUserCommand({
         IdentityStoreId: props.state.identityCenter.identityStoreId,
-        UserName: operation.userName,
-        DisplayName: operation.displayName,
+        UserName: props.operation.userName,
+        DisplayName: props.operation.displayName,
         Name: buildIdentityStoreUserName({
-          userName: operation.userName,
-          displayName: operation.displayName,
+          userName: props.operation.userName,
+          displayName: props.operation.displayName,
         }),
         Emails:
-          operation.email.length > 0
+          props.operation.email.length > 0
             ? [
                 {
-                  Value: operation.email,
+                  Value: props.operation.email,
                   Type: "Work",
                   Primary: true,
                 },
@@ -344,45 +347,45 @@ export async function executeOperation(
     );
     if (response.UserId == null) {
       throw new Error(
-        `CreateUser for "${operation.userName}" returned no user id.`,
+        `CreateUser for "${props.operation.userName}" returned no user id.`,
       );
     }
-    props.logger.log(`Done: "${operation.userName}"`);
+    props.logger.log(`Done: "${props.operation.userName}"`);
     return upsertIdcUserInWorkingState({
       workingState: props.state,
       user: {
         userId: response.UserId,
-        userName: operation.userName,
-        displayName: operation.displayName,
-        email: operation.email,
+        userName: props.operation.userName,
+        displayName: props.operation.displayName,
+        email: props.operation.email,
       },
     });
   }
-  if (operation.kind === "updateIdcUser") {
+  if (props.operation.kind === "updateIdcUser") {
     const user = resolveUserByName({
       state: props.state,
-      userName: operation.userName,
+      userName: props.operation.userName,
     });
     const operations: AttributeOperation[] = [];
-    if (user.displayName !== operation.displayName) {
+    if (user.displayName !== props.operation.displayName) {
       operations.push({
         AttributePath: "displayName",
-        AttributeValue: operation.displayName,
+        AttributeValue: props.operation.displayName,
       });
       operations.push({
         AttributePath: "name",
         AttributeValue: buildIdentityStoreUserName({
-          userName: operation.userName,
-          displayName: operation.displayName,
+          userName: props.operation.userName,
+          displayName: props.operation.displayName,
         }),
       });
     }
-    if (user.email !== operation.email && operation.email.length > 0) {
+    if (user.email !== props.operation.email && props.operation.email.length > 0) {
       operations.push({
         AttributePath: "emails",
         AttributeValue: [
           {
-            Value: operation.email,
+            Value: props.operation.email,
             Type: "Work",
             Primary: true,
           },
@@ -392,7 +395,7 @@ export async function executeOperation(
     if (operations.length === 0) {
       return props.state;
     }
-    props.logger.log(`Updating IdC user "${operation.userName}"...`);
+    props.logger.log(`Updating IdC user "${props.operation.userName}"...`);
     await props.identityStoreClient.send(
       new UpdateUserCommand({
         IdentityStoreId: props.state.identityCenter.identityStoreId,
@@ -400,68 +403,68 @@ export async function executeOperation(
         Operations: operations,
       }),
     );
-    props.logger.log(`Done: "${operation.userName}"`);
+    props.logger.log(`Done: "${props.operation.userName}"`);
     return upsertIdcUserInWorkingState({
       workingState: props.state,
       user: {
         ...user,
-        displayName: operation.displayName,
-        email: operation.email.length > 0 ? operation.email : user.email,
+        displayName: props.operation.displayName,
+        email: props.operation.email.length > 0 ? props.operation.email : user.email,
       },
     });
   }
-  if (operation.kind === "deleteIdcUser") {
+  if (props.operation.kind === "deleteIdcUser") {
     const user = resolveUserByName({
       state: props.state,
-      userName: operation.userName,
+      userName: props.operation.userName,
     });
-    props.logger.log(`Deleting IdC user "${operation.userName}"...`);
+    props.logger.log(`Deleting IdC user "${props.operation.userName}"...`);
     await props.identityStoreClient.send(
       new DeleteUserCommand({
         IdentityStoreId: props.state.identityCenter.identityStoreId,
         UserId: user.userId,
       }),
     );
-    props.logger.log(`Done: "${operation.userName}"`);
+    props.logger.log(`Done: "${props.operation.userName}"`);
     return removeIdcUserFromWorkingState({
       workingState: props.state,
-      userName: operation.userName,
+      userName: props.operation.userName,
     });
   }
-  if (operation.kind === "createIdcGroup") {
-    props.logger.log(`Creating IdC group "${operation.groupDisplayName}"...`);
+  if (props.operation.kind === "createIdcGroup") {
+    props.logger.log(`Creating IdC group "${props.operation.groupDisplayName}"...`);
     const response = await props.identityStoreClient.send(
       new CreateGroupCommand({
         IdentityStoreId: props.state.identityCenter.identityStoreId,
-        DisplayName: operation.groupDisplayName,
+        DisplayName: props.operation.groupDisplayName,
         Description:
-          operation.description.trim().length > 0
-            ? operation.description
+          props.operation.description.trim().length > 0
+            ? props.operation.description
             : undefined,
       }),
     );
     if (response.GroupId == null) {
       throw new Error(
-        `CreateGroup for "${operation.groupDisplayName}" returned no group id.`,
+        `CreateGroup for "${props.operation.groupDisplayName}" returned no group id.`,
       );
     }
-    props.logger.log(`Done: "${operation.groupDisplayName}"`);
+    props.logger.log(`Done: "${props.operation.groupDisplayName}"`);
     return upsertIdcGroupInWorkingState({
       workingState: props.state,
       group: {
         groupId: response.GroupId,
-        displayName: operation.groupDisplayName,
-        description: operation.description,
+        displayName: props.operation.groupDisplayName,
+        description: props.operation.description,
       },
     });
   }
-  if (operation.kind === "updateIdcGroupDescription") {
+  if (props.operation.kind === "updateIdcGroupDescription") {
     const group = resolveGroupByDisplayName({
       state: props.state,
-      groupDisplayName: operation.groupDisplayName,
+      groupDisplayName: props.operation.groupDisplayName,
     });
     props.logger.log(
-      `Updating IdC group description for "${operation.groupDisplayName}"...`,
+      `Updating IdC group description for "${props.operation.groupDisplayName}"...`,
     );
     await props.identityStoreClient.send(
       new UpdateGroupCommand({
@@ -470,46 +473,46 @@ export async function executeOperation(
         Operations: [
           {
             AttributePath: "description",
-            AttributeValue: operation.description,
+            AttributeValue: props.operation.description,
           },
         ],
       }),
     );
-    props.logger.log(`Done: group "${operation.groupDisplayName}"`);
+    props.logger.log(`Done: group "${props.operation.groupDisplayName}"`);
     return upsertIdcGroupInWorkingState({
       workingState: props.state,
       group: {
         ...group,
-        description: operation.description,
+        description: props.operation.description,
       },
     });
   }
-  if (operation.kind === "deleteIdcGroup") {
+  if (props.operation.kind === "deleteIdcGroup") {
     const group = resolveGroupByDisplayName({
       state: props.state,
-      groupDisplayName: operation.groupDisplayName,
+      groupDisplayName: props.operation.groupDisplayName,
     });
-    props.logger.log(`Deleting IdC group "${operation.groupDisplayName}"...`);
+    props.logger.log(`Deleting IdC group "${props.operation.groupDisplayName}"...`);
     await props.identityStoreClient.send(
       new DeleteGroupCommand({
         IdentityStoreId: props.state.identityCenter.identityStoreId,
         GroupId: group.groupId,
       }),
     );
-    props.logger.log(`Done: "${operation.groupDisplayName}"`);
+    props.logger.log(`Done: "${props.operation.groupDisplayName}"`);
     return removeIdcGroupFromWorkingState({
       workingState: props.state,
-      groupDisplayName: operation.groupDisplayName,
+      groupDisplayName: props.operation.groupDisplayName,
     });
   }
-  if (operation.kind === "addIdcGroupMembership") {
+  if (props.operation.kind === "addIdcGroupMembership") {
     const resolvedMembership = resolveGroupMembershipDependencies({
       state: props.state,
-      groupDisplayName: operation.groupDisplayName,
-      userName: operation.userName,
+      groupDisplayName: props.operation.groupDisplayName,
+      userName: props.operation.userName,
     });
     props.logger.log(
-      `Adding user "${operation.userName}" to IdC group "${operation.groupDisplayName}"...`,
+      `Adding user "${props.operation.userName}" to IdC group "${props.operation.groupDisplayName}"...`,
     );
     const response = await props.identityStoreClient.send(
       new CreateGroupMembershipCommand({
@@ -522,11 +525,11 @@ export async function executeOperation(
     );
     if (response.MembershipId == null) {
       throw new Error(
-        `CreateGroupMembership for group "${operation.groupDisplayName}" and user "${operation.userName}" returned no membership id.`,
+        `CreateGroupMembership for group "${props.operation.groupDisplayName}" and user "${props.operation.userName}" returned no membership id.`,
       );
     }
     props.logger.log(
-      `Done: user "${operation.userName}" -> group "${operation.groupDisplayName}"`,
+      `Done: user "${props.operation.userName}" -> group "${props.operation.groupDisplayName}"`,
     );
     return addGroupMembershipToWorkingState({
       workingState: props.state,
@@ -537,33 +540,33 @@ export async function executeOperation(
       },
     });
   }
-  if (operation.kind === "createIdcPermissionSet") {
+  if (props.operation.kind === "createIdcPermissionSet") {
     props.logger.log(
-      `Creating IdC permission set "${operation.permissionSetName}"...`,
+      `Creating IdC permission set "${props.operation.permissionSetName}"...`,
     );
     const response = await props.ssoAdminClient.send(
       new CreatePermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
-        Name: operation.permissionSetName,
+        Name: props.operation.permissionSetName,
         Description:
-          operation.description.length > 0 ? operation.description : undefined,
-        SessionDuration: operation.sessionDuration ?? undefined,
+          props.operation.description.length > 0 ? props.operation.description : undefined,
+        SessionDuration: props.operation.sessionDuration ?? undefined,
       }),
     );
     const permissionSetArn = response.PermissionSet?.PermissionSetArn;
     if (permissionSetArn == null) {
       throw new Error(
-        `CreatePermissionSet for "${operation.permissionSetName}" returned no permission set arn.`,
+        `CreatePermissionSet for "${props.operation.permissionSetName}" returned no permission set arn.`,
       );
     }
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertIdcPermissionSetInWorkingState({
       workingState: props.state,
       permissionSet: {
         permissionSetArn,
-        name: operation.permissionSetName,
-        description: operation.description,
-        sessionDuration: operation.sessionDuration,
+        name: props.operation.permissionSetName,
+        description: props.operation.description,
+        sessionDuration: props.operation.sessionDuration,
         inlinePolicy: null,
         awsManagedPolicies: [],
         customerManagedPolicies: [],
@@ -571,64 +574,64 @@ export async function executeOperation(
       },
     });
   }
-  if (operation.kind === "updateIdcPermissionSetDescription") {
+  if (props.operation.kind === "updateIdcPermissionSetDescription") {
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Updating IdC permission set description for "${operation.permissionSetName}"...`,
+      `Updating IdC permission set description for "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new UpdatePermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         PermissionSetArn: permissionSet.permissionSetArn,
         Description:
-          operation.description.trim().length > 0
-            ? operation.description
+          props.operation.description.trim().length > 0
+            ? props.operation.description
             : undefined,
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertIdcPermissionSetInWorkingState({
       workingState: props.state,
       permissionSet: {
         ...permissionSet,
-        description: operation.description,
+        description: props.operation.description,
       },
     });
   }
-  if (operation.kind === "updateIdcPermissionSetSessionDuration") {
+  if (props.operation.kind === "updateIdcPermissionSetSessionDuration") {
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Updating IdC permission set session duration for "${operation.permissionSetName}"...`,
+      `Updating IdC permission set session duration for "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new UpdatePermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         PermissionSetArn: permissionSet.permissionSetArn,
-        SessionDuration: operation.sessionDuration ?? undefined,
+        SessionDuration: props.operation.sessionDuration ?? undefined,
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertIdcPermissionSetInWorkingState({
       workingState: props.state,
       permissionSet: {
         ...permissionSet,
-        sessionDuration: operation.sessionDuration,
+        sessionDuration: props.operation.sessionDuration,
       },
     });
   }
-  if (operation.kind === "deleteIdcPermissionSet") {
+  if (props.operation.kind === "deleteIdcPermissionSet") {
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Deleting IdC permission set "${operation.permissionSetName}"...`,
+      `Deleting IdC permission set "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new DeletePermissionSetCommand({
@@ -636,44 +639,45 @@ export async function executeOperation(
         PermissionSetArn: permissionSet.permissionSetArn,
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return removeIdcPermissionSetFromWorkingState({
       workingState: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
   }
-  if (operation.kind === "putIdcPermissionSetInlinePolicy") {
+  if (props.operation.kind === "putIdcPermissionSetInlinePolicy") {
+    const { inlinePolicy } = props.operation;
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Putting inline policy on IdC permission set "${operation.permissionSetName}"...`,
+      `Putting inline policy on IdC permission set "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new PutInlinePolicyToPermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         PermissionSetArn: permissionSet.permissionSetArn,
-        InlinePolicy: operation.inlinePolicy,
+        InlinePolicy: inlinePolicy,
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertPermissionSetPolicyState({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
       update: (currentPermissionSet) => ({
         ...currentPermissionSet,
-        inlinePolicy: operation.inlinePolicy,
+        inlinePolicy,
       }),
     });
   }
-  if (operation.kind === "deleteIdcPermissionSetInlinePolicy") {
+  if (props.operation.kind === "deleteIdcPermissionSetInlinePolicy") {
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Deleting inline policy from IdC permission set "${operation.permissionSetName}"...`,
+      `Deleting inline policy from IdC permission set "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new DeleteInlinePolicyFromPermissionSetCommand({
@@ -681,165 +685,169 @@ export async function executeOperation(
         PermissionSetArn: permissionSet.permissionSetArn,
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertPermissionSetPolicyState({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
       update: (currentPermissionSet) => ({
         ...currentPermissionSet,
         inlinePolicy: null,
       }),
     });
   }
-  if (operation.kind === "attachIdcManagedPolicyToPermissionSet") {
+  if (props.operation.kind === "attachIdcManagedPolicyToPermissionSet") {
+    const { managedPolicyArn } = props.operation;
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Attaching managed policy "${operation.managedPolicyArn}" to IdC permission set "${operation.permissionSetName}"...`,
+      `Attaching managed policy "${managedPolicyArn}" to IdC permission set "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new AttachManagedPolicyToPermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         PermissionSetArn: permissionSet.permissionSetArn,
-        ManagedPolicyArn: operation.managedPolicyArn,
+        ManagedPolicyArn: managedPolicyArn,
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertPermissionSetPolicyState({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
       update: (currentPermissionSet) => ({
         ...currentPermissionSet,
         awsManagedPolicies: [
           ...currentPermissionSet.awsManagedPolicies,
-          operation.managedPolicyArn,
+          managedPolicyArn,
         ],
       }),
     });
   }
-  if (operation.kind === "detachIdcManagedPolicyFromPermissionSet") {
+  if (props.operation.kind === "detachIdcManagedPolicyFromPermissionSet") {
+    const { managedPolicyArn } = props.operation;
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Detaching managed policy "${operation.managedPolicyArn}" from IdC permission set "${operation.permissionSetName}"...`,
+      `Detaching managed policy "${managedPolicyArn}" from IdC permission set "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new DetachManagedPolicyFromPermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         PermissionSetArn: permissionSet.permissionSetArn,
-        ManagedPolicyArn: operation.managedPolicyArn,
+        ManagedPolicyArn: managedPolicyArn,
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertPermissionSetPolicyState({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
       update: (currentPermissionSet) => ({
         ...currentPermissionSet,
         awsManagedPolicies: currentPermissionSet.awsManagedPolicies.filter(
-          (managedPolicyArn) => managedPolicyArn !== operation.managedPolicyArn,
+          (arn) => arn !== managedPolicyArn,
         ),
       }),
     });
   }
   if (
-    operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet"
+    props.operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet"
   ) {
+    const { customerManagedPolicyName, customerManagedPolicyPath } =
+      props.operation;
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Attaching customer-managed policy "${operation.customerManagedPolicyPath}${operation.customerManagedPolicyName}" to IdC permission set "${operation.permissionSetName}"...`,
+      `Attaching customer-managed policy "${customerManagedPolicyPath}${customerManagedPolicyName}" to IdC permission set "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new AttachCustomerManagedPolicyReferenceToPermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         PermissionSetArn: permissionSet.permissionSetArn,
         CustomerManagedPolicyReference: {
-          Name: operation.customerManagedPolicyName,
-          Path: operation.customerManagedPolicyPath,
+          Name: customerManagedPolicyName,
+          Path: customerManagedPolicyPath,
         },
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertPermissionSetPolicyState({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
       update: (currentPermissionSet) => ({
         ...currentPermissionSet,
         customerManagedPolicies: [
           ...currentPermissionSet.customerManagedPolicies,
           {
-            name: operation.customerManagedPolicyName,
-            path: operation.customerManagedPolicyPath,
+            name: customerManagedPolicyName,
+            path: customerManagedPolicyPath,
           },
         ],
       }),
     });
   }
   if (
-    operation.kind ===
+    props.operation.kind ===
     "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
   ) {
+    const { customerManagedPolicyName, customerManagedPolicyPath } =
+      props.operation;
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Detaching customer-managed policy "${operation.customerManagedPolicyPath}${operation.customerManagedPolicyName}" from IdC permission set "${operation.permissionSetName}"...`,
+      `Detaching customer-managed policy "${customerManagedPolicyPath}${customerManagedPolicyName}" from IdC permission set "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new DetachCustomerManagedPolicyReferenceFromPermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         PermissionSetArn: permissionSet.permissionSetArn,
         CustomerManagedPolicyReference: {
-          Name: operation.customerManagedPolicyName,
-          Path: operation.customerManagedPolicyPath,
+          Name: customerManagedPolicyName,
+          Path: customerManagedPolicyPath,
         },
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertPermissionSetPolicyState({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
       update: (currentPermissionSet) => ({
         ...currentPermissionSet,
         customerManagedPolicies:
           currentPermissionSet.customerManagedPolicies.filter(
-            (customerManagedPolicy) =>
-              customerManagedPolicy.name !==
-                operation.customerManagedPolicyName ||
-              customerManagedPolicy.path !==
-                operation.customerManagedPolicyPath,
+            (policy) =>
+              policy.name !== customerManagedPolicyName ||
+              policy.path !== customerManagedPolicyPath,
           ),
       }),
     });
   }
-  if (operation.kind === "provisionIdcPermissionSet") {
+  if (props.operation.kind === "provisionIdcPermissionSet") {
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Provisioning IdC permission set "${operation.permissionSetName}" to all provisioned accounts...`,
+      `Provisioning IdC permission set "${props.operation.permissionSetName}" to all provisioned accounts...`,
     );
     const response = await props.ssoAdminClient.send(
       new ProvisionPermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         PermissionSetArn: permissionSet.permissionSetArn,
-        TargetType: operation.targetScope,
+        TargetType: props.operation.targetScope,
       }),
     );
     const requestId =
       response.PermissionSetProvisioningStatus?.RequestId ?? undefined;
     if (requestId == null) {
       throw new Error(
-        `ProvisionPermissionSet for "${operation.permissionSetName}" returned no request id.`,
+        `ProvisionPermissionSet for "${props.operation.permissionSetName}" returned no request id.`,
       );
     }
     await waitForPermissionSetProvisioningSuccess({
@@ -850,20 +858,20 @@ export async function executeOperation(
       timeoutInMs: props.runtime.permissionSetProvisioning.timeoutInMs,
       pollIntervalInMs:
         props.runtime.permissionSetProvisioning.pollIntervalInMs,
-      operationLabel: `"${operation.permissionSetName}"`,
+      operationLabel: `"${props.operation.permissionSetName}"`,
     });
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return props.state;
   }
-  if (operation.kind === "putIdcPermissionSetPermissionsBoundary") {
+  if (props.operation.kind === "putIdcPermissionSetPermissionsBoundary") {
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Putting permissions boundary on IdC permission set "${operation.permissionSetName}"...`,
+      `Putting permissions boundary on IdC permission set "${props.operation.permissionSetName}"...`,
     );
-    const boundary = operation.permissionsBoundary;
+    const boundary = props.operation.permissionsBoundary;
     await props.ssoAdminClient.send(
       new PutPermissionsBoundaryToPermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
@@ -879,19 +887,19 @@ export async function executeOperation(
               },
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertIdcPermissionSetInWorkingState({
       workingState: props.state,
       permissionSet: { ...permissionSet, permissionsBoundary: boundary },
     });
   }
-  if (operation.kind === "deleteIdcPermissionSetPermissionsBoundary") {
+  if (props.operation.kind === "deleteIdcPermissionSetPermissionsBoundary") {
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
-      permissionSetName: operation.permissionSetName,
+      permissionSetName: props.operation.permissionSetName,
     });
     props.logger.log(
-      `Deleting permissions boundary from IdC permission set "${operation.permissionSetName}"...`,
+      `Deleting permissions boundary from IdC permission set "${props.operation.permissionSetName}"...`,
     );
     await props.ssoAdminClient.send(
       new DeletePermissionsBoundaryFromPermissionSetCommand({
@@ -899,17 +907,17 @@ export async function executeOperation(
         PermissionSetArn: permissionSet.permissionSetArn,
       }),
     );
-    props.logger.log(`Done: "${operation.permissionSetName}"`);
+    props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return upsertIdcPermissionSetInWorkingState({
       workingState: props.state,
       permissionSet: { ...permissionSet, permissionsBoundary: null },
     });
   }
-  if (operation.kind === "removeIdcGroupMembership") {
+  if (props.operation.kind === "removeIdcGroupMembership") {
     const resolvedMembership = resolveGroupMembershipDependencies({
       state: props.state,
-      groupDisplayName: operation.groupDisplayName,
-      userName: operation.userName,
+      groupDisplayName: props.operation.groupDisplayName,
+      userName: props.operation.userName,
     });
     const membershipId = await resolveGroupMembershipId({
       state: props.state,
@@ -918,7 +926,7 @@ export async function executeOperation(
       userId: resolvedMembership.userId,
     });
     props.logger.log(
-      `Removing user "${operation.userName}" from IdC group "${operation.groupDisplayName}"...`,
+      `Removing user "${props.operation.userName}" from IdC group "${props.operation.groupDisplayName}"...`,
     );
     await props.identityStoreClient.send(
       new DeleteGroupMembershipCommand({
@@ -927,7 +935,7 @@ export async function executeOperation(
       }),
     );
     props.logger.log(
-      `Done: user "${operation.userName}" x group "${operation.groupDisplayName}"`,
+      `Done: user "${props.operation.userName}" x group "${props.operation.groupDisplayName}"`,
     );
     return removeGroupMembershipFromWorkingState({
       workingState: props.state,
@@ -937,21 +945,21 @@ export async function executeOperation(
       },
     });
   }
-  if (operation.kind === "grantIdcAccountAssignment") {
+  if (props.operation.kind === "grantIdcAccountAssignment") {
     const resolvedAssignment = resolveAssignmentDependencies({
       state: props.state,
-      accountName: operation.accountName,
-      permissionSetName: operation.permissionSetName,
-      principalType: operation.principalType,
-      principalName: operation.principalName,
+      accountName: props.operation.accountName,
+      permissionSetName: props.operation.permissionSetName,
+      principalType: props.operation.principalType,
+      principalName: props.operation.principalName,
     });
     props.logger.log(
-      `Granting IdC assignment "${operation.permissionSetName}" to ${formatPrincipalLabel(
+      `Granting IdC assignment "${props.operation.permissionSetName}" to ${formatPrincipalLabel(
         {
-          principalType: operation.principalType,
-          principalName: operation.principalName,
+          principalType: props.operation.principalType,
+          principalName: props.operation.principalName,
         },
-      )} on "${operation.accountName}"...`,
+      )} on "${props.operation.accountName}"...`,
     );
     const response = await props.ssoAdminClient.send(
       new CreateAccountAssignmentCommand({
@@ -966,7 +974,7 @@ export async function executeOperation(
     const requestId = response.AccountAssignmentCreationStatus?.RequestId;
     if (requestId == null) {
       throw new Error(
-        `CreateAccountAssignment for "${operation.permissionSetName}" on "${operation.accountName}" returned no request id.`,
+        `CreateAccountAssignment for "${props.operation.permissionSetName}" on "${props.operation.accountName}" returned no request id.`,
       );
     }
     await waitForAccountAssignmentCreationSuccess({
@@ -976,10 +984,10 @@ export async function executeOperation(
       requestId,
       timeoutInMs: props.runtime.accountAssignment.timeoutInMs,
       pollIntervalInMs: props.runtime.accountAssignment.pollIntervalInMs,
-      operationLabel: `"${operation.permissionSetName}" on "${operation.accountName}"`,
+      operationLabel: `"${props.operation.permissionSetName}" on "${props.operation.accountName}"`,
     });
     props.logger.log(
-      `Done: "${operation.permissionSetName}" -> "${operation.accountName}"`,
+      `Done: "${props.operation.permissionSetName}" -> "${props.operation.accountName}"`,
     );
     return addAccountAssignmentToWorkingState({
       workingState: props.state,
@@ -991,21 +999,21 @@ export async function executeOperation(
       },
     });
   }
-  if (operation.kind === "revokeIdcAccountAssignment") {
+  if (props.operation.kind === "revokeIdcAccountAssignment") {
     const resolvedAssignment = resolveAssignmentDependencies({
       state: props.state,
-      accountName: operation.accountName,
-      permissionSetName: operation.permissionSetName,
-      principalType: operation.principalType,
-      principalName: operation.principalName,
+      accountName: props.operation.accountName,
+      permissionSetName: props.operation.permissionSetName,
+      principalType: props.operation.principalType,
+      principalName: props.operation.principalName,
     });
     props.logger.log(
-      `Revoking IdC assignment "${operation.permissionSetName}" from ${formatPrincipalLabel(
+      `Revoking IdC assignment "${props.operation.permissionSetName}" from ${formatPrincipalLabel(
         {
-          principalType: operation.principalType,
-          principalName: operation.principalName,
+          principalType: props.operation.principalType,
+          principalName: props.operation.principalName,
         },
-      )} on "${operation.accountName}"...`,
+      )} on "${props.operation.accountName}"...`,
     );
     const response = await props.ssoAdminClient.send(
       new DeleteAccountAssignmentCommand({
@@ -1020,7 +1028,7 @@ export async function executeOperation(
     const requestId = response.AccountAssignmentDeletionStatus?.RequestId;
     if (requestId == null) {
       throw new Error(
-        `DeleteAccountAssignment for "${operation.permissionSetName}" on "${operation.accountName}" returned no request id.`,
+        `DeleteAccountAssignment for "${props.operation.permissionSetName}" on "${props.operation.accountName}" returned no request id.`,
       );
     }
     await waitForAccountAssignmentDeletionSuccess({
@@ -1030,10 +1038,10 @@ export async function executeOperation(
       requestId,
       timeoutInMs: props.runtime.accountAssignment.timeoutInMs,
       pollIntervalInMs: props.runtime.accountAssignment.pollIntervalInMs,
-      operationLabel: `"${operation.permissionSetName}" on "${operation.accountName}"`,
+      operationLabel: `"${props.operation.permissionSetName}" on "${props.operation.accountName}"`,
     });
     props.logger.log(
-      `Done: "${operation.permissionSetName}" x "${operation.accountName}"`,
+      `Done: "${props.operation.permissionSetName}" x "${props.operation.accountName}"`,
     );
     return removeAccountAssignmentFromWorkingState({
       workingState: props.state,
@@ -1045,164 +1053,179 @@ export async function executeOperation(
       },
     });
   }
-  if (operation.kind === "createOrgPolicy") {
+  if (props.operation.kind === "createOrgPolicy") {
     props.logger.log(
-      `Creating org policy "${operation.policyName}" (${operation.policyType})...`,
+      `Creating org policy "${props.operation.policyName}" (${props.operation.policyType})...`,
     );
     const response = await props.organizationsClient.send(
       new CreatePolicyCommand({
-        Name: operation.policyName,
-        Description: operation.description.length > 0 ? operation.description : undefined,
-        Content: operation.content,
-        Type: operation.policyType,
+        Name: props.operation.policyName,
+        Description:
+          props.operation.description.length > 0 ? props.operation.description : undefined,
+        Content: props.operation.content,
+        Type: props.operation.policyType,
       }),
     );
     const policy = response.Policy?.PolicySummary;
     if (policy?.Id == null || policy.Arn == null) {
       throw new Error(
-        `CreatePolicy for "${operation.policyName}" returned incomplete data.`,
+        `CreatePolicy for "${props.operation.policyName}" returned incomplete data.`,
       );
     }
-    props.logger.log(`Done: "${operation.policyName}"`);
+    props.logger.log(`Done: "${props.operation.policyName}"`);
     return upsertOrgPolicyInWorkingState({
       workingState: props.state,
       policy: {
         id: policy.Id,
         arn: policy.Arn,
-        name: operation.policyName,
-        description: operation.description,
-        type: operation.policyType,
-        content: operation.content,
+        name: props.operation.policyName,
+        description: props.operation.description,
+        type: props.operation.policyType,
+        content: props.operation.content,
       },
     });
   }
-  if (operation.kind === "updateOrgPolicyContent") {
-    props.logger.log(`Updating org policy content "${operation.policyName}"...`);
+  if (props.operation.kind === "updateOrgPolicyContent") {
+    props.logger.log(
+      `Updating org policy content "${props.operation.policyName}"...`,
+    );
     await props.organizationsClient.send(
       new UpdatePolicyCommand({
-        PolicyId: operation.policyId,
-        Content: operation.content,
+        PolicyId: props.operation.policyId,
+        Content: props.operation.content,
       }),
     );
-    props.logger.log(`Done: "${operation.policyName}"`);
-    const currentPolicy = props.state.organization.policiesById[operation.policyId];
+    props.logger.log(`Done: "${props.operation.policyName}"`);
+    const currentPolicy =
+      props.state.organization.policiesById[props.operation.policyId];
     if (currentPolicy == null) {
       return props.state;
     }
     return upsertOrgPolicyInWorkingState({
       workingState: props.state,
-      policy: { ...currentPolicy, content: operation.content },
+      policy: { ...currentPolicy, content: props.operation.content },
     });
   }
-  if (operation.kind === "updateOrgPolicyDescription") {
+  if (props.operation.kind === "updateOrgPolicyDescription") {
     props.logger.log(
-      `Updating org policy description "${operation.policyName}"...`,
+      `Updating org policy description "${props.operation.policyName}"...`,
     );
     await props.organizationsClient.send(
       new UpdatePolicyCommand({
-        PolicyId: operation.policyId,
-        Description: operation.description,
+        PolicyId: props.operation.policyId,
+        Description: props.operation.description,
       }),
     );
-    props.logger.log(`Done: "${operation.policyName}"`);
-    const currentPolicy = props.state.organization.policiesById[operation.policyId];
+    props.logger.log(`Done: "${props.operation.policyName}"`);
+    const currentPolicy =
+      props.state.organization.policiesById[props.operation.policyId];
     if (currentPolicy == null) {
       return props.state;
     }
     return upsertOrgPolicyInWorkingState({
       workingState: props.state,
-      policy: { ...currentPolicy, description: operation.description },
+      policy: { ...currentPolicy, description: props.operation.description },
     });
   }
-  if (operation.kind === "attachOrgPolicy") {
+  if (props.operation.kind === "attachOrgPolicy") {
     props.logger.log(
-      `Attaching org policy "${operation.policyName}" to "${operation.targetName}"...`,
+      `Attaching org policy "${props.operation.policyName}" to "${props.operation.targetName}"...`,
     );
     const resolvedPolicyId = resolvePolicyId({
       state: props.state,
-      policyId: operation.policyId,
-      policyName: operation.policyName,
+      policyId: props.operation.policyId,
+      policyName: props.operation.policyName,
     });
     await props.organizationsClient.send(
       new AttachPolicyCommand({
         PolicyId: resolvedPolicyId,
-        TargetId: operation.targetId,
+        TargetId: props.operation.targetId,
       }),
     );
-    props.logger.log(`Done: "${operation.policyName}" -> "${operation.targetName}"`);
-    const targetType = operation.targetId === props.context.organization.rootId
-      ? "ROOT" as const
-      : props.state.organization.organizationalUnitsById[operation.targetId] != null
-        ? "ORGANIZATIONAL_UNIT" as const
-        : "ACCOUNT" as const;
+    props.logger.log(
+      `Done: "${props.operation.policyName}" -> "${props.operation.targetName}"`,
+    );
+    const targetType =
+      props.operation.targetId === props.context.organization.rootId
+        ? ("ROOT" as const)
+        : props.state.organization.organizationalUnitsById[
+              props.operation.targetId
+            ] != null
+          ? ("ORGANIZATIONAL_UNIT" as const)
+          : ("ACCOUNT" as const);
     return addOrgPolicyAttachmentToWorkingState({
       workingState: props.state,
       attachment: {
         policyId: resolvedPolicyId,
-        targetId: operation.targetId,
+        targetId: props.operation.targetId,
         targetType,
       },
     });
   }
-  if (operation.kind === "detachOrgPolicy") {
+  if (props.operation.kind === "detachOrgPolicy") {
     props.logger.log(
-      `Detaching org policy "${operation.policyName}" from "${operation.targetName}"...`,
+      `Detaching org policy "${props.operation.policyName}" from "${props.operation.targetName}"...`,
     );
     await props.organizationsClient.send(
       new DetachPolicyCommand({
-        PolicyId: operation.policyId,
-        TargetId: operation.targetId,
+        PolicyId: props.operation.policyId,
+        TargetId: props.operation.targetId,
       }),
     );
-    props.logger.log(`Done: "${operation.policyName}" x "${operation.targetName}"`);
+    props.logger.log(
+      `Done: "${props.operation.policyName}" x "${props.operation.targetName}"`,
+    );
     return removeOrgPolicyAttachmentFromWorkingState({
       workingState: props.state,
-      policyId: operation.policyId,
-      targetId: operation.targetId,
+      policyId: props.operation.policyId,
+      targetId: props.operation.targetId,
     });
   }
-  if (operation.kind === "deleteOrgPolicy") {
-    props.logger.log(`Deleting org policy "${operation.policyName}"...`);
+  if (props.operation.kind === "deleteOrgPolicy") {
+    props.logger.log(`Deleting org policy "${props.operation.policyName}"...`);
     await props.organizationsClient.send(
-      new DeletePolicyCommand({ PolicyId: operation.policyId }),
+      new DeletePolicyCommand({ PolicyId: props.operation.policyId }),
     );
-    props.logger.log(`Done: "${operation.policyName}"`);
+    props.logger.log(`Done: "${props.operation.policyName}"`);
     return removeOrgPolicyFromWorkingState({
       workingState: props.state,
-      policyId: operation.policyId,
+      policyId: props.operation.policyId,
     });
   }
-  if (operation.kind === "putAlternateContact") {
+  if (props.operation.kind === "putAlternateContact") {
+    const { contactType } = props.operation;
     props.logger.log(
-      `Setting ${operation.contactType} alternate contact for "${operation.accountName}" (${operation.accountId})...`,
+      `Setting ${contactType} alternate contact for "${props.operation.accountName}" (${props.operation.accountId})...`,
     );
     await props.accountClient.send(
       new PutAlternateContactCommand({
-        AccountId: operation.accountId,
-        AlternateContactType: operation.contactType,
-        Name: operation.name,
-        EmailAddress: operation.email,
-        PhoneNumber: operation.phone,
-        Title: operation.title,
+        AccountId: props.operation.accountId,
+        AlternateContactType: contactType,
+        Name: props.operation.name,
+        EmailAddress: props.operation.email,
+        PhoneNumber: props.operation.phone,
+        Title: props.operation.title,
       }),
     );
-    props.logger.log(`Done: ${operation.contactType} contact for "${operation.accountName}"`);
-    const account = props.state.organization.accountsById[operation.accountId];
+    props.logger.log(
+      `Done: ${contactType} contact for "${props.operation.accountName}"`,
+    );
+    const account = props.state.organization.accountsById[props.operation.accountId];
     if (account == null) {
       throw new Error(
-        `Could not resolve account (${operation.accountId}) in working state.`,
+        `Could not resolve account (${props.operation.accountId}) in working state.`,
       );
     }
     const updatedContacts = [
       ...(account.alternateContacts ?? []).filter(
-        (c) => c.contactType !== operation.contactType,
+        (c) => c.contactType !== contactType,
       ),
       {
-        contactType: operation.contactType,
-        name: operation.name,
-        email: operation.email,
-        phone: operation.phone,
-        title: operation.title,
+        contactType,
+        name: props.operation.name,
+        email: props.operation.email,
+        phone: props.operation.phone,
+        title: props.operation.title,
       },
     ];
     return upsertAccountInWorkingState({
@@ -1210,21 +1233,24 @@ export async function executeOperation(
       account: { ...account, alternateContacts: updatedContacts },
     });
   }
-  if (operation.kind === "deleteAlternateContact") {
+  if (props.operation.kind === "deleteAlternateContact") {
+    const { contactType } = props.operation;
     props.logger.log(
-      `Deleting ${operation.contactType} alternate contact for "${operation.accountName}" (${operation.accountId})...`,
+      `Deleting ${contactType} alternate contact for "${props.operation.accountName}" (${props.operation.accountId})...`,
     );
     await props.accountClient.send(
       new DeleteAlternateContactCommand({
-        AccountId: operation.accountId,
-        AlternateContactType: operation.contactType,
+        AccountId: props.operation.accountId,
+        AlternateContactType: contactType,
       }),
     );
-    props.logger.log(`Done: removed ${operation.contactType} contact for "${operation.accountName}"`);
-    const account = props.state.organization.accountsById[operation.accountId];
+    props.logger.log(
+      `Done: removed ${contactType} contact for "${props.operation.accountName}"`,
+    );
+    const account = props.state.organization.accountsById[props.operation.accountId];
     if (account == null) {
       throw new Error(
-        `Could not resolve account (${operation.accountId}) in working state.`,
+        `Could not resolve account (${props.operation.accountId}) in working state.`,
       );
     }
     return upsertAccountInWorkingState({
@@ -1232,20 +1258,20 @@ export async function executeOperation(
       account: {
         ...account,
         alternateContacts: (account.alternateContacts ?? []).filter(
-          (c) => c.contactType !== operation.contactType,
+          (c) => c.contactType !== contactType,
         ),
       },
     });
   }
-  if (operation.kind === "setIdcAccessControlAttributes") {
+  if (props.operation.kind === "setIdcAccessControlAttributes") {
     props.logger.log(
-      `Setting IdC access control attributes (${operation.attributes.length} attribute(s))...`,
+      `Setting IdC access control attributes (${props.operation.attributes.length} attribute(s))...`,
     );
     await props.ssoAdminClient.send(
       new UpdateInstanceAccessControlAttributeConfigurationCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
         InstanceAccessControlAttributeConfiguration: {
-          AccessControlAttributes: operation.attributes.map((attr) => ({
+          AccessControlAttributes: props.operation.attributes.map((attr) => ({
             Key: attr.key,
             Value: { Source: attr.source },
           })),
@@ -1257,11 +1283,51 @@ export async function executeOperation(
       ...props.state,
       identityCenter: {
         ...props.state.identityCenter,
-        accessControlAttributes: operation.attributes,
+        accessControlAttributes: props.operation.attributes,
       },
     };
   }
-  assertUnreachable(operation, "Unsupported operation kind in apply.");
+  if (props.operation.kind === "registerDelegatedAdministrator") {
+    props.logger.log(
+      `Registering delegated administrator "${props.operation.accountName}" (${props.operation.accountId}) for ${props.operation.servicePrincipal}...`,
+    );
+    await props.organizationsClient.send(
+      new RegisterDelegatedAdministratorCommand({
+        AccountId: props.operation.accountId,
+        ServicePrincipal: props.operation.servicePrincipal,
+      }),
+    );
+    props.logger.log(
+      `Done: "${props.operation.accountName}" for ${props.operation.servicePrincipal}`,
+    );
+    return upsertDelegatedAdministratorInWorkingState({
+      workingState: props.state,
+      delegatedAdministrator: {
+        accountId: props.operation.accountId,
+        servicePrincipal: props.operation.servicePrincipal,
+      },
+    });
+  }
+  if (props.operation.kind === "deregisterDelegatedAdministrator") {
+    props.logger.log(
+      `Deregistering delegated administrator "${props.operation.accountName}" (${props.operation.accountId}) for ${props.operation.servicePrincipal}...`,
+    );
+    await props.organizationsClient.send(
+      new DeregisterDelegatedAdministratorCommand({
+        AccountId: props.operation.accountId,
+        ServicePrincipal: props.operation.servicePrincipal,
+      }),
+    );
+    props.logger.log(
+      `Done: removed "${props.operation.accountName}" for ${props.operation.servicePrincipal}`,
+    );
+    return removeDelegatedAdministratorFromWorkingState({
+      workingState: props.state,
+      accountId: props.operation.accountId,
+      servicePrincipal: props.operation.servicePrincipal,
+    });
+  }
+  assertUnreachable(props.operation, "Unsupported operation kind in apply.");
 }
 
 function resolveAssignmentDependencies(props: {

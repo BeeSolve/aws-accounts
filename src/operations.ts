@@ -252,6 +252,20 @@ const deleteAlternateContactOperationSchema = v.strictObject({
   contactType: alternateContactTypeSchema,
 });
 
+const registerDelegatedAdministratorOperationSchema = v.strictObject({
+  kind: v.literal("registerDelegatedAdministrator"),
+  accountId: v.string(),
+  accountName: v.string(),
+  servicePrincipal: v.string(),
+});
+
+const deregisterDelegatedAdministratorOperationSchema = v.strictObject({
+  kind: v.literal("deregisterDelegatedAdministrator"),
+  accountId: v.string(),
+  accountName: v.string(),
+  servicePrincipal: v.string(),
+});
+
 const createOrgPolicyOperationSchema = v.strictObject({
   kind: v.literal("createOrgPolicy"),
   policyName: v.string(),
@@ -342,6 +356,8 @@ export const operationSchema = v.variant("kind", [
   putAlternateContactOperationSchema,
   deleteAlternateContactOperationSchema,
   setIdcAccessControlAttributesOperationSchema,
+  registerDelegatedAdministratorOperationSchema,
+  deregisterDelegatedAdministratorOperationSchema,
 ]);
 
 const unsupportedDiffKindSchema = v.picklist([

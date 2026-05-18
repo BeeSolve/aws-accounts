@@ -145,58 +145,52 @@ export const awsConfigModelSchema = v.strictObject({
       accounts: v.array(v.string()),
     }),
   ),
-  accessControlAttributes: v.optional(
-    v.array(
-      v.strictObject({
-        key: v.string(),
-        source: v.array(v.string()),
-      }),
-    ),
-  ),
-  policies: v.optional(
+  accessControlAttributes: v.array(
     v.strictObject({
-      serviceControlPolicies: v.optional(
-        v.array(
-          v.strictObject({
-            name: v.string(),
-            description: v.optional(v.string()),
-            content: v.record(v.string(), v.unknown()),
-            targets: v.array(v.string()),
-          }),
-        ),
-      ),
-      resourceControlPolicies: v.optional(
-        v.array(
-          v.strictObject({
-            name: v.string(),
-            description: v.optional(v.string()),
-            content: v.record(v.string(), v.unknown()),
-            targets: v.array(v.string()),
-          }),
-        ),
-      ),
-      tagPolicies: v.optional(
-        v.array(
-          v.strictObject({
-            name: v.string(),
-            description: v.optional(v.string()),
-            content: v.record(v.string(), v.unknown()),
-            targets: v.array(v.string()),
-          }),
-        ),
-      ),
-      aiServicesOptOutPolicies: v.optional(
-        v.array(
-          v.strictObject({
-            name: v.string(),
-            description: v.optional(v.string()),
-            content: v.record(v.string(), v.unknown()),
-            targets: v.array(v.string()),
-          }),
-        ),
-      ),
+      key: v.string(),
+      source: v.array(v.string()),
     }),
   ),
+  delegatedAdministrators: v.array(
+    v.strictObject({
+      account: v.string(),
+      servicePrincipal: v.string(),
+    }),
+  ),
+  policies: v.strictObject({
+    serviceControlPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.string()),
+      }),
+    ),
+    resourceControlPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.string()),
+      }),
+    ),
+    tagPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.string()),
+      }),
+    ),
+    aiServicesOptOutPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.string()),
+      }),
+    ),
+  }),
 });
 
 export type AwsConfigModel = v.InferOutput<typeof awsConfigModelSchema>;
@@ -280,12 +274,7 @@ export async function writeAwsConfigFromState(
 
   const mappedConfig = mapStateToAwsConfig({ state });
   const mergedConfig: AwsConfigModel =
-    props.existingConfig != null
-      ? {
-          ...props.existingConfig,
-          policies: props.existingConfig.policies ?? mappedConfig.policies,
-        }
-      : mappedConfig;
+    props.existingConfig != null ? props.existingConfig : mappedConfig;
   const sortedConfig = sortAwsConfigModel({
     config: mergedConfig,
   });
@@ -709,6 +698,13 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
       ),
     }));
 
+  const stateDelegatedAdmins =
+    props.state.organization.delegatedAdministrators ?? [];
+  const mappedDelegatedAdministrators = stateDelegatedAdmins.map((da) => ({
+    account: accountById[da.accountId]?.name ?? da.accountId,
+    servicePrincipal: da.servicePrincipal,
+  }));
+
   const mapped: AwsConfigModel = {
     organizationalUnits,
     users: props.state.identityCenter.users.map((user) => ({
@@ -745,27 +741,17 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     ),
     assignments: [...assignmentsByKey.values()],
     accessControlAttributes:
-      props.state.identityCenter.accessControlAttributes.length > 0
-        ? props.state.identityCenter.accessControlAttributes.map((attr) => ({
-            key: attr.key,
-            source: [...attr.source],
-          }))
-        : undefined,
-    policies:
-      scps.length > 0 ||
-      rcps.length > 0 ||
-      tagPolicies.length > 0 ||
-      aiServicesOptOutPolicies.length > 0
-        ? {
-            serviceControlPolicies: scps.length > 0 ? scps : undefined,
-            resourceControlPolicies: rcps.length > 0 ? rcps : undefined,
-            tagPolicies: tagPolicies.length > 0 ? tagPolicies : undefined,
-            aiServicesOptOutPolicies:
-              aiServicesOptOutPolicies.length > 0
-                ? aiServicesOptOutPolicies
-                : undefined,
-          }
-        : undefined,
+      props.state.identityCenter.accessControlAttributes.map((attr) => ({
+        key: attr.key,
+        source: [...attr.source],
+      })),
+    delegatedAdministrators: mappedDelegatedAdministrators,
+    policies: {
+      serviceControlPolicies: scps,
+      resourceControlPolicies: rcps,
+      tagPolicies,
+      aiServicesOptOutPolicies,
+    },
   };
 
   assertUniqueNames({
@@ -1124,7 +1110,7 @@ export function mapAwsConfigToState(
     return { targetId: pendingCreationId, targetType: "ACCOUNT" };
   }
 
-  for (const policy of configPolicies?.serviceControlPolicies ?? []) {
+  for (const policy of configPolicies.serviceControlPolicies) {
     allConfigPolicies.push({
       name: policy.name,
       description: policy.description ?? "",
@@ -1134,7 +1120,7 @@ export function mapAwsConfigToState(
     });
   }
 
-  for (const policy of configPolicies?.resourceControlPolicies ?? []) {
+  for (const policy of configPolicies.resourceControlPolicies) {
     allConfigPolicies.push({
       name: policy.name,
       description: policy.description ?? "",
@@ -1144,7 +1130,7 @@ export function mapAwsConfigToState(
     });
   }
 
-  for (const policy of configPolicies?.tagPolicies ?? []) {
+  for (const policy of configPolicies.tagPolicies) {
     allConfigPolicies.push({
       name: policy.name,
       description: policy.description ?? "",
@@ -1154,7 +1140,7 @@ export function mapAwsConfigToState(
     });
   }
 
-  for (const policy of configPolicies?.aiServicesOptOutPolicies ?? []) {
+  for (const policy of configPolicies.aiServicesOptOutPolicies) {
     allConfigPolicies.push({
       name: policy.name,
       description: policy.description ?? "",
@@ -1199,6 +1185,15 @@ export function mapAwsConfigToState(
     }
   }
 
+  const configDelegatedAdmins = props.config.delegatedAdministrators;
+  const mappedDelegatedAdministrators =
+    configDelegatedAdmins.length > 0
+      ? configDelegatedAdmins.map(({ account, servicePrincipal }) => ({
+          accountId: stateAccountByName[account]?.id ?? pendingCreationId,
+          servicePrincipal,
+        }))
+      : undefined;
+
   const mapped: StateFile = {
     version: props.currentState.version,
     generatedAt: props.currentState.generatedAt,
@@ -1208,6 +1203,7 @@ export function mapAwsConfigToState(
       accounts: mappedAccounts,
       policies: mappedPolicies,
       policyAttachments: mappedPolicyAttachments,
+      delegatedAdministrators: mappedDelegatedAdministrators,
     },
     identityCenter: {
       instanceArn: props.context.identityCenter.instanceArn,
@@ -1257,25 +1253,19 @@ export function mapAwsConfigToState(
     entityName: "permission set",
   });
   assertUniqueNames({
-    values: (props.config.policies?.serviceControlPolicies ?? []).map(
-      (p) => p.name,
-    ),
+    values: props.config.policies.serviceControlPolicies.map((p) => p.name),
     entityName: "SCP",
   });
   assertUniqueNames({
-    values: (props.config.policies?.resourceControlPolicies ?? []).map(
-      (p) => p.name,
-    ),
+    values: props.config.policies.resourceControlPolicies.map((p) => p.name),
     entityName: "RCP",
   });
   assertUniqueNames({
-    values: (props.config.policies?.tagPolicies ?? []).map((p) => p.name),
+    values: props.config.policies.tagPolicies.map((p) => p.name),
     entityName: "tag policy",
   });
   assertUniqueNames({
-    values: (props.config.policies?.aiServicesOptOutPolicies ?? []).map(
-      (p) => p.name,
-    ),
+    values: props.config.policies.aiServicesOptOutPolicies.map((p) => p.name),
     entityName: "AI services opt-out policy",
   });
 
@@ -1384,68 +1374,65 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
         }
         return left.permissionSet.localeCompare(right.permissionSet);
       }),
-    accessControlAttributes:
-      props.config.accessControlAttributes == null
-        ? undefined
-        : [...props.config.accessControlAttributes]
-            .map((attr) => ({
-              ...attr,
-              source: [...attr.source].sort((a, b) => a.localeCompare(b)),
-            }))
-            .sort((a, b) => a.key.localeCompare(b.key)),
-    policies:
-      props.config.policies == null
-        ? undefined
-        : {
-            serviceControlPolicies:
-              props.config.policies.serviceControlPolicies == null
-                ? undefined
-                : [...props.config.policies.serviceControlPolicies]
-                    .map((p) => ({
-                      ...p,
-                      content: sortJsonRecord(p.content),
-                      targets: [...p.targets].sort((a, b) =>
-                        a.localeCompare(b),
-                      ),
-                    }))
-                    .sort((a, b) => a.name.localeCompare(b.name)),
-            resourceControlPolicies:
-              props.config.policies.resourceControlPolicies == null
-                ? undefined
-                : [...props.config.policies.resourceControlPolicies]
-                    .map((p) => ({
-                      ...p,
-                      content: sortJsonRecord(p.content),
-                      targets: [...p.targets].sort((a, b) =>
-                        a.localeCompare(b),
-                      ),
-                    }))
-                    .sort((a, b) => a.name.localeCompare(b.name)),
-            tagPolicies:
-              props.config.policies.tagPolicies == null
-                ? undefined
-                : [...props.config.policies.tagPolicies]
-                    .map((p) => ({
-                      ...p,
-                      content: sortJsonRecord(p.content),
-                      targets: [...p.targets].sort((a, b) =>
-                        a.localeCompare(b),
-                      ),
-                    }))
-                    .sort((a, b) => a.name.localeCompare(b.name)),
-            aiServicesOptOutPolicies:
-              props.config.policies.aiServicesOptOutPolicies == null
-                ? undefined
-                : [...props.config.policies.aiServicesOptOutPolicies]
-                    .map((p) => ({
-                      ...p,
-                      content: sortJsonRecord(p.content),
-                      targets: [...p.targets].sort((a, b) =>
-                        a.localeCompare(b),
-                      ),
-                    }))
-                    .sort((a, b) => a.name.localeCompare(b.name)),
-          },
+    accessControlAttributes: [...props.config.accessControlAttributes]
+      .map((attr) => ({
+        ...attr,
+        source: [...attr.source].sort((left, right) =>
+          left.localeCompare(right),
+        ),
+      }))
+      .sort((left, right) => left.key.localeCompare(right.key)),
+    delegatedAdministrators: [...props.config.delegatedAdministrators].sort(
+      (left, right) => {
+        const accountComparison = left.account.localeCompare(right.account);
+        if (accountComparison !== 0) {
+          return accountComparison;
+        }
+        return left.servicePrincipal.localeCompare(right.servicePrincipal);
+      },
+    ),
+    policies: {
+      serviceControlPolicies: [...props.config.policies.serviceControlPolicies]
+        .map((p) => ({
+          ...p,
+          content: sortJsonRecord(p.content),
+          targets: [...p.targets].sort((left, right) =>
+            left.localeCompare(right),
+          ),
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+      resourceControlPolicies: [
+        ...props.config.policies.resourceControlPolicies,
+      ]
+        .map((p) => ({
+          ...p,
+          content: sortJsonRecord(p.content),
+          targets: [...p.targets].sort((left, right) =>
+            left.localeCompare(right),
+          ),
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+      tagPolicies: [...props.config.policies.tagPolicies]
+        .map((p) => ({
+          ...p,
+          content: sortJsonRecord(p.content),
+          targets: [...p.targets].sort((left, right) =>
+            left.localeCompare(right),
+          ),
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+      aiServicesOptOutPolicies: [
+        ...props.config.policies.aiServicesOptOutPolicies,
+      ]
+        .map((p) => ({
+          ...p,
+          content: sortJsonRecord(p.content),
+          targets: [...p.targets].sort((left, right) =>
+            left.localeCompare(right),
+          ),
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    },
   };
 }
 
@@ -1760,58 +1747,52 @@ export const awsConfigSchema = v.strictObject({
       accounts: v.array(accountNameSchema),
     }),
   ),
-  accessControlAttributes: v.optional(
-    v.array(
-      v.strictObject({
-        key: v.string(),
-        source: v.array(v.string()),
-      }),
-    ),
-  ),
-  policies: v.optional(
+  accessControlAttributes: v.array(
     v.strictObject({
-      serviceControlPolicies: v.optional(
-        v.array(
-          v.strictObject({
-            name: v.string(),
-            description: v.optional(v.string()),
-            content: v.record(v.string(), v.unknown()),
-            targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
-          }),
-        ),
-      ),
-      resourceControlPolicies: v.optional(
-        v.array(
-          v.strictObject({
-            name: v.string(),
-            description: v.optional(v.string()),
-            content: v.record(v.string(), v.unknown()),
-            targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
-          }),
-        ),
-      ),
-      tagPolicies: v.optional(
-        v.array(
-          v.strictObject({
-            name: v.string(),
-            description: v.optional(v.string()),
-            content: v.record(v.string(), v.unknown()),
-            targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
-          }),
-        ),
-      ),
-      aiServicesOptOutPolicies: v.optional(
-        v.array(
-          v.strictObject({
-            name: v.string(),
-            description: v.optional(v.string()),
-            content: v.record(v.string(), v.unknown()),
-            targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
-          }),
-        ),
-      ),
+      key: v.string(),
+      source: v.array(v.string()),
     }),
   ),
+  delegatedAdministrators: v.array(
+    v.strictObject({
+      account: accountNameSchema,
+      servicePrincipal: v.string(),
+    }),
+  ),
+  policies: v.strictObject({
+    serviceControlPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
+      }),
+    ),
+    resourceControlPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
+      }),
+    ),
+    tagPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
+      }),
+    ),
+    aiServicesOptOutPolicies: v.array(
+      v.strictObject({
+        name: v.string(),
+        description: v.optional(v.string()),
+        content: v.record(v.string(), v.unknown()),
+        targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
+      }),
+    ),
+  }),
 });
 
 export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;
