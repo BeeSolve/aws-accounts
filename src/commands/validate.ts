@@ -29,6 +29,7 @@ export async function runValidateCommand(input: ValidateCommandInput): Promise<b
   checkInlinePolicySizes(config, errors);
   checkOrgPolicySizes(config, errors);
   checkOrgPolicyTargets(config, errors);
+  checkDelegatedAdministratorDuplicates(config, errors);
 
   if (errors.length > 0) {
     for (const error of errors) {
@@ -126,6 +127,19 @@ function checkOrgPolicyTargets(config: AwsConfigModel, errors: string[]): void {
         );
       }
     }
+  }
+}
+
+function checkDelegatedAdministratorDuplicates(config: AwsConfigModel, errors: string[]): void {
+  const seen = new Set<string>();
+  for (const da of config.delegatedAdministrators) {
+    const key = `${da.account}|${da.servicePrincipal}`;
+    if (seen.has(key)) {
+      errors.push(
+        `Duplicate delegated administrator entry: account "${da.account}" + service principal "${da.servicePrincipal}".`,
+      );
+    }
+    seen.add(key);
   }
 }
 

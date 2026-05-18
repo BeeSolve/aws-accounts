@@ -21,24 +21,14 @@ Post-v1 features organized by priority tier. See [feature-parity-research.md](./
 
 - **Account alternate contacts** — manage billing, operations, and security contacts per account. Satisfies CIS AWS Foundations Benchmark 1.1/1.2.
 - **ABAC — Attributes for Access Control** — define attribute mappings on the Identity Center instance that enable `${aws:PrincipalTag/key}` conditions in permission set policies.
+- **Permission set boundaries** — `PermissionsBoundary` on permission sets (AWS managed or customer-managed policy ARN).
+- **Delegated administrator** — register/deregister member accounts as delegated administrators for services (SSO, Organizations, etc.). Useful for security-conscious orgs that avoid running from the management account.
 
 ---
 
 ## Tier 3 — Solid additions (remaining)
 
-### Permission set boundaries
-
-Support `PermissionsBoundary` on permission sets (AWS managed or customer-managed policy ARN). Already supported by the SSO Admin API, just not modeled in config yet.
-
-**Effort:** Low.
-
----
-
-### Delegated administrator
-
-Register/deregister member accounts as delegated administrators for services (SSO, Organizations, etc.). Useful for security-conscious orgs that avoid running from the management account.
-
-**Effort:** Low.
+_(All Tier 3 items have been implemented.)_
 
 ---
 

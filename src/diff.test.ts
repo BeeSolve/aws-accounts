@@ -982,6 +982,60 @@ test("diffStates emits IdC group membership removals when entities remain", () =
   assert.deepEqual(plan.unsupported, []);
 });
 
+test("diffStates emits registerDelegatedAdministrator when a new delegated admin is added", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  next.organization.delegatedAdministrators = [
+    { accountId: "111111111111", servicePrincipal: "sso.amazonaws.com" },
+  ];
+
+  const plan = diffStates({ current, next });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "registerDelegatedAdministrator",
+      accountId: "111111111111",
+      accountName: "app-a",
+      servicePrincipal: "sso.amazonaws.com",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates emits deregisterDelegatedAdministrator when a delegated admin is removed", () => {
+  const current = createBaseState();
+  current.organization.delegatedAdministrators = [
+    { accountId: "111111111111", servicePrincipal: "sso.amazonaws.com" },
+  ];
+  const next = cloneState(current);
+  next.organization.delegatedAdministrators = [];
+
+  const plan = diffStates({ current, next });
+
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "deregisterDelegatedAdministrator",
+      accountId: "111111111111",
+      accountName: "app-a",
+      servicePrincipal: "sso.amazonaws.com",
+    },
+  ]);
+  assert.deepEqual(plan.unsupported, []);
+});
+
+test("diffStates emits no delegated admin operations when state is unchanged", () => {
+  const current = createBaseState();
+  current.organization.delegatedAdministrators = [
+    { accountId: "111111111111", servicePrincipal: "sso.amazonaws.com" },
+  ];
+  const next = cloneState(current);
+
+  const plan = diffStates({ current, next });
+
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, []);
+});
+
 test("diffStates keeps deterministic mixed Organizations and IdC ordering", () => {
   const current = createBaseState();
   const next = cloneState(current);
