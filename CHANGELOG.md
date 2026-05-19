@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.3.1
+
+### Patch Changes
+
+- cdc83ec: Fix regenerate crashing when account or OU names have been renamed in aws.config.ts. The generated config file no longer validates itself against the stale types schema at load time; validation happens in the CLI command instead.
+
 ## 1.3.0
 
 ### Minor Changes
