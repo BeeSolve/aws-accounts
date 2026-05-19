@@ -396,12 +396,9 @@ export async function writeAwsConfigFromState(
 export async function regenerateAwsConfigTypes(
   props: RegenerateAwsConfigTypesInput,
 ): Promise<RegenerateAwsConfigTypesResult> {
-  const typesModule = await loadAwsConfigTypesModule({
-    typesPath: props.typesPath,
-  });
   const loadedConfig = await loadAwsConfigFromTsFile({
     configPath: props.configPath,
-    schema: typesModule.awsConfigSchema,
+    schema: awsConfigModelSchema,
   });
   const sortedConfig = sortAwsConfigModel({
     config: loadedConfig,

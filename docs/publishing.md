@@ -1,33 +1,28 @@
 # Publishing a New Version
 
+Publishing is managed by [Changesets](https://github.com/changesets/changesets).
+
 ## Prerequisites
 
 - Push access to `main` branch
 - npm OIDC publishing configured (already set up — the workflow uses `id-token: write` permission and `--provenance` for tokenless publishing)
 
-## Steps
+## Developer workflow
 
-1. **Bump the version:**
+When your PR includes a user-visible change (feature, fix, breaking change), add a changeset before merging:
 
-   ```bash
-   npm version patch   # 1.0.1 → 1.0.2
-   npm version minor   # 1.0.1 → 1.1.0
-   npm version major   # 1.0.1 → 2.0.0
-   ```
+```bash
+npx changeset
+```
 
-   This updates `package.json`, creates a commit, and tags it.
+This prompts you to choose a semver bump type (`patch` / `minor` / `major`) and write a short summary. It creates a `.changeset/*.md` file — commit it alongside your code changes.
 
-2. **Push to main:**
+## How publishing works
 
-   ```bash
-   git push && git push --tags
-   ```
-
-3. **Done.** The GitHub Actions workflow will:
-   - Run typecheck and tests
-   - Detect the new version isn't on npm yet
-   - Build the CLI and Lambda
-   - Publish to npm with provenance (via OIDC, no token needed)
+1. **Merge your PR** (with the `.changeset/*.md` file) to `main`.
+2. The GitHub Actions workflow detects the pending changeset and automatically creates or updates a **"Version Packages"** PR that bumps `package.json` and writes `CHANGELOG.md`.
+3. **Merge the "Version Packages" PR** when ready to release.
+4. The workflow publishes to npm with provenance (via OIDC, no token needed).
 
 ## Verify
 

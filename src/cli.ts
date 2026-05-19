@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline/promises";
+import { basename } from "node:path";
 import { S3Client } from "@aws-sdk/client-s3";
 import { IAMClient } from "@aws-sdk/client-iam";
 import { LambdaClient } from "@aws-sdk/client-lambda";
@@ -227,35 +228,36 @@ async function main(): Promise<void> {
 }
 
 function printHelp(logger: Logger): void {
+  const cmd = basename(process.argv[1], ".js");
   logger.log("@beesolve/aws-accounts");
   logger.log("");
   logger.log("Usage:");
   logger.log(
-    "  npm run cli -- bootstrap [--profile <name>] [--region <region>] [--yes]",
+    `  ${cmd} bootstrap [--profile <name>] [--region <region>] [--yes]`,
   );
-  logger.log("  npm run cli -- scan [--profile <name>] [--region <region>]");
+  logger.log(`  ${cmd} scan [--profile <name>] [--region <region>]`);
   logger.log(
-    "  npm run cli -- init [--profile <name>] [--region <region>] [--yes]",
-  );
-  logger.log(
-    "  npm run cli -- init --update [--profile <name>] [--region <region>] [--yes]",
-  );
-  logger.log("  npm run cli -- regenerate [--yes]");
-  logger.log("  npm run cli -- validate");
-  logger.log("  npm run cli -- graveyard");
-  logger.log("  npm run cli -- graveyard close");
-  logger.log(
-    "  npm run cli -- profile --sso-start-url <url> [--sso-session <name>]  (env: AWS_SSO_START_URL)",
+    `  ${cmd} init [--profile <name>] [--region <region>] [--yes]`,
   );
   logger.log(
-    "  npm run cli -- plan [--profile <name>] [--region <region>] [--refresh]",
+    `  ${cmd} init --update [--profile <name>] [--region <region>] [--yes]`,
+  );
+  logger.log(`  ${cmd} regenerate [--yes]`);
+  logger.log(`  ${cmd} validate`);
+  logger.log(`  ${cmd} graveyard`);
+  logger.log(`  ${cmd} graveyard close`);
+  logger.log(
+    `  ${cmd} profile --sso-start-url <url> [--sso-session <name>]  (env: AWS_SSO_START_URL)`,
   );
   logger.log(
-    "  npm run cli -- apply [--profile <name>] [--region <region>] [--yes] [--allow-destructive] [--ignore-unsupported]",
+    `  ${cmd} plan [--profile <name>] [--region <region>] [--refresh]`,
   );
-  logger.log("  npm run cli -- upgrade [--profile <name>] [--region <region>]");
   logger.log(
-    "  npm run cli -- drift [--profile <name>] [--region <region>] [--refresh]",
+    `  ${cmd} apply [--profile <name>] [--region <region>] [--yes] [--allow-destructive] [--ignore-unsupported]`,
+  );
+  logger.log(`  ${cmd} upgrade [--profile <name>] [--region <region>]`);
+  logger.log(
+    `  ${cmd} drift [--profile <name>] [--region <region>] [--refresh]`,
   );
   logger.log("");
   logger.log("Environment fallback:");
