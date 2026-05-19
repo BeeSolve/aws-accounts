@@ -11,3 +11,5 @@ coverage/
 
 .remote-state-cache.json
 state.json
+
+.claude/
