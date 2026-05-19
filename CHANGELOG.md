@@ -1,5 +1,25 @@
 # @beesolve/aws-accounts
 
+## 1.4.0
+
+### Minor Changes
+
+- 8183e10: Improve CLI user-facing messages and add progress feedback for long-running operations.
+
+  - `plan` and `apply` now explain why there are no changes and what to do next instead of printing bare "No changes."
+  - Cache age is shown when using cached state, with a hint to use `--refresh`
+  - Destructive operations are now blocked at the CLI level before invoking Lambda if `--allow-destructive` is not passed
+  - Unsupported diffs list now includes a note that manual AWS Console action is required
+  - Apply partial failure now suggests running `scan --refresh` before retrying
+  - Version mismatch warning is printed before command output instead of after
+  - Progress timers print elapsed time every 5 seconds during `apply`, `scan`, `init`, `drift`, and remote state fetch
+  - Redundant "State cache updated." after a successful `apply` is suppressed
+
+### Patch Changes
+
+- 751aed6: Fix regenerate crashing when account or OU names have been renamed in aws.config.ts. The generated config file no longer validates itself against the stale types schema at load time; validation happens in the CLI command instead.
+- 9eb1c55: Add TTL-gated npm registry version check on CLI start. When a newer version of @beesolve/aws-accounts is available, a one-line upgrade notice is printed at most once per 24 hours.
+
 ## 1.3.1
 
 ### Patch Changes
