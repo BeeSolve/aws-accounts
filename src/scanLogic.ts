@@ -664,27 +664,39 @@ async function getPermissionsBoundaryForPermissionSet(props: {
 }): Promise<
   StateFile["identityCenter"]["permissionSets"][number]["permissionsBoundary"]
 > {
-  const response = await props.ssoAdminClient.send(
-    new GetPermissionsBoundaryForPermissionSetCommand({
-      InstanceArn: props.instanceArn,
-      PermissionSetArn: props.permissionSetArn,
-    }),
-  );
-  const boundary = response.PermissionsBoundary;
-  if (boundary == null) {
+  try {
+    const response = await props.ssoAdminClient.send(
+      new GetPermissionsBoundaryForPermissionSetCommand({
+        InstanceArn: props.instanceArn,
+        PermissionSetArn: props.permissionSetArn,
+      }),
+    );
+    const boundary = response.PermissionsBoundary;
+    if (boundary == null) {
+      return null;
+    }
+    if (boundary.ManagedPolicyArn != null) {
+      return { managedPolicyArn: boundary.ManagedPolicyArn };
+    }
+    const ref = boundary.CustomerManagedPolicyReference;
+    if (ref?.Name != null) {
+      return {
+        customerManagedPolicyName: ref.Name,
+        customerManagedPolicyPath: ref.Path ?? "/",
+      };
+    }
     return null;
+  } catch (err) {
+    if (
+      err != null &&
+      typeof err === "object" &&
+      "name" in err &&
+      err.name === "ResourceNotFoundException"
+    ) {
+      return null;
+    }
+    throw err;
   }
-  if (boundary.ManagedPolicyArn != null) {
-    return { managedPolicyArn: boundary.ManagedPolicyArn };
-  }
-  const ref = boundary.CustomerManagedPolicyReference;
-  if (ref?.Name != null) {
-    return {
-      customerManagedPolicyName: ref.Name,
-      customerManagedPolicyPath: ref.Path ?? "/",
-    };
-  }
-  return null;
 }
 
 async function listManagedPoliciesInPermissionSet(props: {
