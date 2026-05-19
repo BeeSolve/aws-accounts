@@ -34,7 +34,11 @@ import {
   toUsageError,
 } from "./error.js";
 import { assertUnreachable } from "./helpers.js";
-import { readAwsContextFromFile, readPackageVersion } from "./awsConfig.js";
+import {
+  checkForNewVersionIfNeeded,
+  readAwsContextFromFile,
+  readPackageVersion,
+} from "./awsConfig.js";
 
 const commands = [
   "bootstrap",
@@ -92,6 +96,8 @@ async function main(): Promise<void> {
     profile,
     region,
   });
+
+  await checkForNewVersionIfNeeded({ contextPath, logger });
 
   if (command === "regenerate") {
     const overwriteConfirmation = buildOverwriteConfirmation({
