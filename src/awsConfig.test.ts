@@ -785,10 +785,9 @@ test("loadAwsConfigModelFromTsFile supports IAM action helper functions", async 
 
     await writeFile(
       configPath,
-      `import * as v from "valibot";
-import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
+      `import { iam, type AwsConfig } from "./aws.config.types.js";
 
-const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
+const awsConfig: AwsConfig = {
   organizationalUnits: [
     {
       name: "root",
@@ -863,7 +862,7 @@ const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
     aiServicesOptOutPolicies: [],
     backupPolicies: [],
   },
-} satisfies AwsConfig);
+} satisfies AwsConfig;
 
 export default awsConfig;
 `,

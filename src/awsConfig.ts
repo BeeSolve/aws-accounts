@@ -1433,8 +1433,7 @@ function renderAwsConfigTs(props: { config: AwsConfigModel }): string {
     indentLevel: 0,
     withinInlinePolicy: false,
   });
-  return `import * as v from "valibot";
-import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
+  return `import { iam, type AwsConfig } from "./aws.config.types.js";
 
 /**
  * Human-editable AWS config.
@@ -1446,7 +1445,7 @@ import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
  * "Graveyard" is bootstrap-managed and used internally as the account-removal sink;
  * it is intentionally omitted from generated organizationalUnits in this file.
  */
-const awsConfig: AwsConfig = v.parse(awsConfigSchema, ${serializedConfig} satisfies AwsConfig);
+const awsConfig: AwsConfig = ${serializedConfig} satisfies AwsConfig;
 
 export default awsConfig;
 `;
