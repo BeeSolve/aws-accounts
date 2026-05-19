@@ -366,6 +366,7 @@ const unsupportedDiffKindSchema = v.picklist([
   "reparentedOu",
   "newOuWithUnknownParent",
   "newAccountWithUnknownOu",
+  "existingAccountWithUnknownTargetOu",
   "removedOu",
 ]);
 

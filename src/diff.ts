@@ -125,6 +125,14 @@ export function diffStates(props: DiffStatesProps): Plan {
       .map((account) => account.id),
   );
 
+  const ouNamesBeingCreated = new Set(
+    nextOrganization.organizationalUnits
+      .filter(
+        (ou) => !currentOrganization.organizationalUnitByName.has(ou.name),
+      )
+      .map((ou) => ou.name),
+  );
+
   for (const nextAccount of nextOrganization.accounts) {
     const currentAccount =
       nextAccount.id !== pendingCreationId
@@ -146,11 +154,21 @@ export function diffStates(props: DiffStatesProps): Plan {
             organizationalUnitId: nextAccount.parentId,
           }) === false
         ) {
-          unsupported.push({
-            kind: "newAccountWithUnknownOu",
-            category: "unsupportedMutation",
-            description: `new account "${nextAccount.name}" has unresolved target OU "${targetOuName}" (${nextAccount.parentId})`,
-          });
+          if (ouNamesBeingCreated.has(targetOuName)) {
+            operations.push({
+              kind: "createAccount",
+              accountName: nextAccount.name,
+              accountEmail: nextAccount.email,
+              targetOuId: nextAccount.parentId,
+              targetOuName,
+            });
+          } else {
+            unsupported.push({
+              kind: "newAccountWithUnknownOu",
+              category: "unsupportedMutation",
+              description: `new account "${nextAccount.name}" has unresolved target OU "${targetOuName}" (${nextAccount.parentId})`,
+            });
+          }
           continue;
         }
         operations.push({
@@ -196,8 +214,7 @@ export function diffStates(props: DiffStatesProps): Plan {
     if (
       currentAccount.id === pendingCreationId ||
       nextAccount.id === pendingCreationId ||
-      currentAccount.parentId === pendingCreationId ||
-      nextAccount.parentId === pendingCreationId
+      currentAccount.parentId === pendingCreationId
     ) {
       continue;
     }
@@ -212,6 +229,41 @@ export function diffStates(props: DiffStatesProps): Plan {
       rootId: nextOrganization.rootId,
       organizationalUnitId: nextAccount.parentId,
     });
+    if (nextAccount.parentId === pendingCreationId) {
+      if (ouNamesBeingCreated.has(toOuName)) {
+        if (currentAccount.name !== nextAccount.name) {
+          operations.push({
+            kind: "updateAccountName",
+            accountId: nextAccount.id,
+            fromAccountName: currentAccount.name,
+            toAccountName: nextAccount.name,
+          });
+        }
+        operations.push({
+          kind: "moveAccount",
+          accountId: nextAccount.id,
+          accountName: nextAccount.name,
+          fromOuId: currentAccount.parentId,
+          fromOuName,
+          toOuId: nextAccount.parentId,
+          toOuName,
+        });
+        diffAlternateContacts({
+          operations,
+          accountId: nextAccount.id,
+          accountName: nextAccount.name,
+          currentContacts: currentAccount.alternateContacts ?? [],
+          nextContacts: nextAccount.alternateContacts ?? [],
+        });
+      } else {
+        unsupported.push({
+          kind: "existingAccountWithUnknownTargetOu",
+          category: "unsupportedMutation",
+          description: `existing account "${nextAccount.name}" has unresolved target OU "${toOuName}" (${nextAccount.parentId})`,
+        });
+      }
+      continue;
+    }
     if (currentAccount.name !== nextAccount.name) {
       operations.push({
         kind: "updateAccountName",
@@ -425,11 +477,23 @@ export function diffStates(props: DiffStatesProps): Plan {
         organizationalUnitId: addedOrganizationalUnit.parentId,
       }) === false
     ) {
-      unsupported.push({
-        kind: "newOuWithUnknownParent",
-        category: "unsupportedMutation",
-        description: `new OU "${addedOrganizationalUnit.name}" has unresolved parent "${parentOuName}" (${addedOrganizationalUnit.parentId})`,
-      });
+      if (
+        ouNamesBeingCreated.has(parentOuName) &&
+        parentOuName !== addedOrganizationalUnit.name
+      ) {
+        operations.push({
+          kind: "createOu",
+          ouName: addedOrganizationalUnit.name,
+          parentOuId: addedOrganizationalUnit.parentId,
+          parentOuName,
+        });
+      } else {
+        unsupported.push({
+          kind: "newOuWithUnknownParent",
+          category: "unsupportedMutation",
+          description: `new OU "${addedOrganizationalUnit.name}" has unresolved parent "${parentOuName}" (${addedOrganizationalUnit.parentId})`,
+        });
+      }
       continue;
     }
     operations.push({
@@ -1082,6 +1146,31 @@ export function diffStates(props: DiffStatesProps): Plan {
     }
     return getOperationSortKey(left).localeCompare(getOperationSortKey(right));
   });
+
+  // Topo-sort createOu ops so parent OUs are always created before children.
+  // Only the subset where parentOuId is pendingCreationId has ordering constraints.
+  const createOuOps = operations.filter(
+    (op): op is Extract<Operation, { kind: "createOu" }> =>
+      op.kind === "createOu",
+  );
+  const otherOps = operations.filter((op) => op.kind !== "createOu");
+  if (createOuOps.some((op) => op.parentOuId === pendingCreationId)) {
+    const createOuByName = new Map(createOuOps.map((op) => [op.ouName, op]));
+    const visited = new Set<string>();
+    const topoSorted: typeof createOuOps = [];
+    function visitOu(op: (typeof createOuOps)[0]): void {
+      if (visited.has(op.ouName)) return;
+      visited.add(op.ouName);
+      if (op.parentOuId === pendingCreationId) {
+        const parent = createOuByName.get(op.parentOuName);
+        if (parent != null) visitOu(parent);
+      }
+      topoSorted.push(op);
+    }
+    for (const op of createOuOps) visitOu(op);
+    operations.splice(0, operations.length, ...topoSorted, ...otherOps);
+  }
+
   unsupported.sort((left, right) => {
     const kindComparison = left.kind.localeCompare(right.kind);
     if (kindComparison !== 0) {

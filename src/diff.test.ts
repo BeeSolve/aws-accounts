@@ -662,6 +662,137 @@ test("diffStates reports new account with unresolved target OU", () => {
   ]);
 });
 
+test("diffStates emits createOu and createAccount in same plan when new account targets new OU", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  addOrganizationalUnit({
+    state: next,
+    organizationalUnit: {
+      id: "__pending_creation__",
+      parentId: "r-root",
+      arn: "__pending_creation__",
+      name: "integration",
+    },
+  });
+  next.organization.accounts.push({
+    id: "__pending_creation__",
+    arn: "__pending_creation__",
+    name: "kit-lambda-test",
+    email: "kit-lambda-test@example.com",
+    status: "ACTIVE",
+    tags: [],
+    parentId: "__pending_creation__",
+  });
+  const plan = diffStates({ current, next });
+  assert.deepEqual(plan.unsupported, []);
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "createOu",
+      ouName: "integration",
+      parentOuId: "r-root",
+      parentOuName: "root",
+    },
+    {
+      kind: "createAccount",
+      accountName: "kit-lambda-test",
+      accountEmail: "kit-lambda-test@example.com",
+      targetOuId: "__pending_creation__",
+      targetOuName: "integration",
+    },
+  ]);
+});
+
+test("diffStates emits createOu and moveAccount in same plan when existing account targets new OU", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  addOrganizationalUnit({
+    state: next,
+    organizationalUnit: {
+      id: "__pending_creation__",
+      parentId: "r-root",
+      arn: "__pending_creation__",
+      name: "integration",
+    },
+  });
+  setAccountParentId({
+    state: next,
+    accountName: "app-a",
+    parentId: "__pending_creation__",
+  });
+  const plan = diffStates({ current, next });
+  assert.deepEqual(plan.unsupported, []);
+  assert.deepEqual(plan.operations, [
+    {
+      kind: "createOu",
+      ouName: "integration",
+      parentOuId: "r-root",
+      parentOuName: "root",
+    },
+    {
+      kind: "moveAccount",
+      accountId: "111111111111",
+      accountName: "app-a",
+      fromOuId: "ou-eng",
+      fromOuName: "Engineering",
+      toOuId: "__pending_creation__",
+      toOuName: "integration",
+    },
+  ]);
+});
+
+test("diffStates topologically sorts createOu ops when parent and child OU are both new", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  // The child must be pushed before the parent so that the Map built in
+  // normalizeOrganizationState maps __pending_creation__ → "platform" (last-wins),
+  // allowing diffStates to resolve the child's parent name correctly.
+  addOrganizationalUnit({
+    state: next,
+    organizationalUnit: {
+      id: "__pending_creation__",
+      parentId: "__pending_creation__",
+      arn: "__pending_creation__",
+      name: "platform-dev",
+    },
+  });
+  addOrganizationalUnit({
+    state: next,
+    organizationalUnit: {
+      id: "__pending_creation__",
+      parentId: "r-root",
+      arn: "__pending_creation__",
+      name: "platform",
+    },
+  });
+  const plan = diffStates({ current, next });
+  assert.deepEqual(plan.unsupported, []);
+  assert.equal(plan.operations.length, 2);
+  assert.equal(plan.operations[0]!.kind, "createOu");
+  assert.equal((plan.operations[0] as { ouName: string }).ouName, "platform");
+  assert.equal(plan.operations[1]!.kind, "createOu");
+  assert.equal((plan.operations[1] as { ouName: string }).ouName, "platform-dev");
+});
+
+test("diffStates reports existing account with truly unknown target OU", () => {
+  const current = createBaseState();
+  const next = cloneState(current);
+  setAccountParentId({
+    state: next,
+    accountName: "app-a",
+    parentId: "__pending_creation__",
+  });
+  const plan = diffStates({ current, next });
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, [
+    {
+      kind: "existingAccountWithUnknownTargetOu",
+      category: "unsupportedMutation",
+      description:
+        'existing account "app-a" has unresolved target OU "unknown" (__pending_creation__)',
+    },
+  ]);
+});
+
 test("diffStates emits IdC entity creation operations", () => {
   const current = createBaseState();
   const next = cloneState(current);

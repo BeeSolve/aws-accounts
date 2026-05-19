@@ -122,27 +122,37 @@ export async function executeOperation(
     props.logger.log(
       `Moving "${props.operation.accountName}" (${props.operation.accountId}): ${props.operation.fromOuName} -> ${props.operation.toOuName}`,
     );
+    const toOuId = resolveOrganizationalUnitId({
+      state: props.state,
+      organizationalUnitId: props.operation.toOuId,
+      organizationalUnitName: props.operation.toOuName,
+    });
     await props.organizationsClient.send(
       new MoveAccountCommand({
         AccountId: props.operation.accountId,
         SourceParentId: props.operation.fromOuId,
-        DestinationParentId: props.operation.toOuId,
+        DestinationParentId: toOuId,
       }),
     );
     props.logger.log(`Done: "${props.operation.accountName}"`);
     return moveAccountInWorkingState({
       workingState: props.state,
       accountId: props.operation.accountId,
-      parentId: props.operation.toOuId,
+      parentId: toOuId,
     });
   }
   if (props.operation.kind === "createOu") {
     props.logger.log(
       `Creating OU "${props.operation.ouName}" under ${props.operation.parentOuName}...`,
     );
+    const parentOuId = resolveOrganizationalUnitId({
+      state: props.state,
+      organizationalUnitId: props.operation.parentOuId,
+      organizationalUnitName: props.operation.parentOuName,
+    });
     const response = await props.organizationsClient.send(
       new CreateOrganizationalUnitCommand({
-        ParentId: props.operation.parentOuId,
+        ParentId: parentOuId,
         Name: props.operation.ouName,
       }),
     );
@@ -161,7 +171,7 @@ export async function executeOperation(
       workingState: props.state,
       organizationalUnit: {
         id: createdOu.Id,
-        parentId: props.operation.parentOuId,
+        parentId: parentOuId,
         arn: createdOu.Arn,
         name: createdOu.Name,
       },
@@ -203,13 +213,18 @@ export async function executeOperation(
     });
   }
   if (props.operation.kind === "createAccount") {
+    const targetOuId = resolveOrganizationalUnitId({
+      state: props.state,
+      organizationalUnitId: props.operation.targetOuId,
+      organizationalUnitName: props.operation.targetOuName,
+    });
     const result = await createAccountAndMoveToOu({
       organizationsClient: props.organizationsClient,
       logger: props.logger,
       accountName: props.operation.accountName,
       accountEmail: props.operation.accountEmail,
       sourceParentId: props.context.organization.rootId,
-      destinationParentId: props.operation.targetOuId,
+      destinationParentId: targetOuId,
       timeoutInMs: props.runtime.createAccount.timeoutInMs,
       pollIntervalInMs: props.runtime.createAccount.pollIntervalInMs,
     });
@@ -221,7 +236,7 @@ export async function executeOperation(
         name: result.account.name,
         email: result.account.email,
         status: result.account.status,
-        parentId: props.operation.targetOuId,
+        parentId: targetOuId,
         tags: [],
       },
     });
@@ -1406,6 +1421,25 @@ function resolveGroupByDisplayName(props: {
     );
   }
   return group;
+}
+
+function resolveOrganizationalUnitId(props: {
+  state: WorkingState;
+  organizationalUnitId: string;
+  organizationalUnitName: string;
+}): string {
+  if (props.organizationalUnitId !== "__pending_creation__") {
+    return props.organizationalUnitId;
+  }
+  const ou = Object.values(
+    props.state.organization.organizationalUnitsById,
+  ).find((ou) => ou.name === props.organizationalUnitName);
+  if (ou == null) {
+    throw new Error(
+      `Could not resolve OU "${props.organizationalUnitName}" in working state.`,
+    );
+  }
+  return ou.id;
 }
 
 function resolvePolicyId(props: {
