@@ -629,7 +629,7 @@ export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;
 function createMinimalConfigFile(): string {
   return `import { type AwsConfig } from "./aws.config.types.js";
 
-const awsConfig: AwsConfig = {
+const awsConfig = {
   organizationalUnits: [
     {
       name: "Pending",
@@ -651,7 +651,7 @@ export default awsConfig;
 function createConfigWithExtraOu(): string {
   return `import { type AwsConfig } from "./aws.config.types.js";
 
-const awsConfig: AwsConfig = {
+const awsConfig = {
   organizationalUnits: [
     {
       name: "Pending",

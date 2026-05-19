@@ -26,6 +26,11 @@ Post-v1 features organized by priority tier. See [feature-parity-research.md](./
 - **`drift` command** — compares last-known state against a fresh live scan to show what changed in AWS since last scan. Helps audit manual console changes before deciding to `scan` (accept as new baseline) or `plan` (reconcile via config).
 - **Backup policies** — centralized AWS Backup plans across accounts via `BACKUP_POLICY` org policy type.
 
+### v1.3.0
+
+- **Same-plan OU dependency resolution** — new OUs and accounts/moves targeting them can now be planned and applied in a single cycle. See [ADR 005](./adr/005-same-plan-ou-dependency-resolution.md).
+- **npm version check** — TTL-gated check on every CLI start; prints a one-line upgrade notice when a newer version is available on npm. See [ADR 006](./adr/006-npm-version-check.md).
+
 ---
 
 ## Tier 3 — Solid additions (remaining)

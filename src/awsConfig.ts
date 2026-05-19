@@ -66,6 +66,7 @@ const awsContextSchema = v.strictObject({
     identityStoreId: nonEmptyString,
   }),
   deployment: v.optional(deploymentSchema),
+  versionCheckLastRunAt: v.optional(nonEmptyString),
 });
 
 export type AwsContextFile = v.InferOutput<typeof awsContextSchema>;
@@ -1445,7 +1446,7 @@ function renderAwsConfigTs(props: { config: AwsConfigModel }): string {
  * "Graveyard" is bootstrap-managed and used internally as the account-removal sink;
  * it is intentionally omitted from generated organizationalUnits in this file.
  */
-const awsConfig: AwsConfig = ${serializedConfig} satisfies AwsConfig;
+const awsConfig = ${serializedConfig} satisfies AwsConfig;
 
 export default awsConfig;
 `;
@@ -2009,6 +2010,70 @@ export async function readAwsContextFromFile(
   path: string,
 ): Promise<AwsContextFile> {
   return readAwsContextFile(path);
+}
+
+const VERSION_CHECK_TTL_MS = 24 * 60 * 60 * 1000;
+
+export async function checkForNewVersionIfNeeded(props: {
+  contextPath: string;
+  logger: Logger;
+}): Promise<void> {
+  try {
+    let lastCheckedAt: string | undefined;
+    let rawContext: Record<string, unknown> | undefined;
+    try {
+      const raw = await readFile(props.contextPath, "utf8");
+      rawContext = JSON.parse(raw) as Record<string, unknown>;
+      lastCheckedAt =
+        typeof rawContext.versionCheckLastRunAt === "string"
+          ? rawContext.versionCheckLastRunAt
+          : undefined;
+    } catch {
+      // context file absent — proceed without TTL guard
+    }
+
+    if (lastCheckedAt != null) {
+      const elapsed = Date.now() - new Date(lastCheckedAt).getTime();
+      if (elapsed < VERSION_CHECK_TTL_MS) return;
+    }
+
+    const [currentVersion, latestVersion] = await Promise.all([
+      readPackageVersion(),
+      fetchLatestNpmVersion(),
+    ]);
+
+    if (rawContext != null) {
+      await writeFile(
+        props.contextPath,
+        JSON.stringify(
+          { ...rawContext, versionCheckLastRunAt: new Date().toISOString() },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+    }
+
+    if (latestVersion !== currentVersion) {
+      props.logger.log("");
+      props.logger.log(
+        `A new version of aws-accounts is available: ${latestVersion} (you have ${currentVersion}). Run: npx @beesolve/aws-accounts@latest upgrade`,
+      );
+    }
+  } catch {
+    // version check is best-effort — never block or crash the CLI
+  }
+}
+
+async function fetchLatestNpmVersion(): Promise<string> {
+  const response = await fetch(
+    "https://registry.npmjs.org/@beesolve/aws-accounts/latest",
+  );
+  if (!response.ok) throw new Error(`npm registry returned ${response.status}`);
+  const body = (await response.json()) as { version?: unknown };
+  if (typeof body.version !== "string")
+    throw new Error("Unexpected npm registry response.");
+  return body.version;
 }
 
 export async function readPackageVersion(): Promise<string> {

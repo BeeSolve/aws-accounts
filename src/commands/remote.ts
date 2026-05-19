@@ -62,7 +62,7 @@ import {
 } from "../remoteStateCache.js";
 import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 import { validateState, type StateFile } from "../state.js";
-import { assertUnreachable, delay } from "../helpers.js";
+import { assertUnreachable, delay, startProgressTimer } from "../helpers.js";
 import { toPreconditionError } from "../error.js";
 import { sts, organizations, sso, identitystore, s3, logs, account, iam, lambda } from "@beesolve/iam-policy-ts";
 
@@ -495,11 +495,15 @@ export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
   const lambdaClient = new LambdaClient(clientConfig);
 
   input.logger.log("Invoking remote scan...");
+  const stopScanProgress = startProgressTimer((elapsed) => {
+    input.logger.log(`Still scanning... (${elapsed}s)`);
+  });
   const result = await invokeLambda({
     lambdaClient,
     lambdaArn: deployment.lambdaArn,
     payload: { action: "scan" },
   });
+  stopScanProgress();
 
   if (!result.ok) {
     throw new Error(formatLambdaError(result.error));
@@ -546,11 +550,15 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   ]);
 
   input.logger.log("Invoking remote scan...");
+  const stopInitScanProgress = startProgressTimer((elapsed) => {
+    input.logger.log(`Still scanning... (${elapsed}s)`);
+  });
   const result = await invokeLambda({
     lambdaClient: input.lambdaClient,
     lambdaArn: deployment.lambdaArn,
     payload: { action: "scan" },
   });
+  stopInitScanProgress();
 
   if (!result.ok) {
     throw new Error(formatLambdaError(result.error));
@@ -646,6 +654,11 @@ export async function runRemotePlan(input: RemoteCommandInput): Promise<void> {
     context,
   });
 
+  if (plan.operations.length === 0) {
+    input.logger.log("No changes: aws.config.ts already matches the current remote state.");
+    return;
+  }
+
   displayPlan({ plan, logger: input.logger });
 }
 
@@ -681,11 +694,16 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
   });
 
   if (plan.operations.length === 0) {
-    input.logger.log("No changes.");
+    input.logger.log("No changes: aws.config.ts already matches the current remote state.");
+    input.logger.log("If you expected changes, verify your config with aws-accounts validate or run with --refresh to fetch fresh state.");
     return;
   }
 
   displayPlan({ plan, logger: input.logger });
+
+  if (plan.operations.some(isDestructiveOperation) && !input.flags.allowDestructive) {
+    throw new Error("Destructive operations detected. Pass --allow-destructive to proceed.");
+  }
 
   if (!input.flags.yes) {
     if (process.stdin.isTTY !== true) {
@@ -718,6 +736,9 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
   const lambdaClient = new LambdaClient(clientConfig);
 
   input.logger.log("Applying changes remotely...");
+  const stopProgress = startProgressTimer((elapsed) => {
+    input.logger.log(`Still applying... (${elapsed}s)`);
+  });
   const result = await invokeLambda({
     lambdaClient,
     lambdaArn: deployment.lambdaArn,
@@ -727,6 +748,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
       allowDestructive: input.flags.allowDestructive,
     },
   });
+  stopProgress();
 
   if (!result.ok) {
     const error = result.error;
@@ -740,6 +762,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
       );
       await writeStateCache(cachePath, error.partialState);
       input.logger.log("State cache updated with partial state.");
+      input.logger.log("Run aws-accounts scan --refresh to refresh state before retrying.");
       return;
     }
     throw new Error(formatLambdaError(error));
@@ -752,7 +775,6 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
 
   input.logger.log(`Applied ${response.operationsCompleted} operation(s).`);
   await writeStateCache(cachePath, response.state);
-  input.logger.log("State cache updated.");
 
   await regenerateTypesFromState({
     state: response.state,
@@ -818,11 +840,15 @@ export async function runRemoteDrift(input: RemoteCommandInput): Promise<void> {
   const lambdaClient = new LambdaClient(clientConfig);
 
   input.logger.log("Scanning live AWS state...");
+  const stopDriftProgress = startProgressTimer((elapsed) => {
+    input.logger.log(`Still scanning... (${elapsed}s)`);
+  });
   const result = await invokeLambda({
     lambdaClient,
     lambdaArn: deployment.lambdaArn,
     payload: { action: "scan" },
   });
+  stopDriftProgress();
 
   if (!result.ok) {
     throw new Error(formatLambdaError(result.error));
@@ -912,7 +938,8 @@ async function fetchCurrentState(props: {
   if (!props.input.flags.refresh) {
     const cache = await readStateCache(cachePath);
     if (cache != null && isCacheFresh(cache, props.deployment.stateCacheTtlSeconds)) {
-      props.input.logger.log("Using cached state.");
+      const elapsedMinutes = Math.round((Date.now() - new Date(cache.fetchedAt).getTime()) / 60000);
+      props.input.logger.log(`Using cached state (fetched ${elapsedMinutes} minute(s) ago). Use --refresh to force a fresh fetch.`);
       return cache.state;
     }
   }
@@ -924,6 +951,10 @@ async function fetchCurrentState(props: {
   });
   const lambdaClient = new LambdaClient(clientConfig);
 
+  const stopFetchProgress = startProgressTimer((elapsed) => {
+    props.input.logger.log(`Still fetching... (${elapsed}s)`);
+  });
+
   const result = await invokeLambda({
     lambdaClient,
     lambdaArn: props.deployment.lambdaArn,
@@ -931,15 +962,19 @@ async function fetchCurrentState(props: {
   });
 
   if (!result.ok) {
+    stopFetchProgress();
     throw new Error(formatLambdaError(result.error));
   }
 
   const response = result.response;
   if (!("action" in response) || response.action !== "getStateUrl") {
+    stopFetchProgress();
     throw new Error("Unexpected response from Lambda getStateUrl action.");
   }
 
   const stateResponse = await fetch(response.url);
+  stopFetchProgress();
+
   if (!stateResponse.ok) {
     throw new Error(
       `Failed to fetch state from pre-signed URL: ${stateResponse.status} ${stateResponse.statusText}`,
@@ -978,6 +1013,7 @@ function displayPlan(props: { plan: Plan; logger: Logger }): void {
     for (const diff of props.plan.unsupported) {
       props.logger.log(`  - ${diff.description} [${diff.category}]`);
     }
+    props.logger.log("These changes require manual action in the AWS Console and will not be applied automatically.");
   }
 }
 

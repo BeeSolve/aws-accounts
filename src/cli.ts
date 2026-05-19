@@ -34,7 +34,11 @@ import {
   toUsageError,
 } from "./error.js";
 import { assertUnreachable } from "./helpers.js";
-import { readAwsContextFromFile, readPackageVersion } from "./awsConfig.js";
+import {
+  checkForNewVersionIfNeeded,
+  readAwsContextFromFile,
+  readPackageVersion,
+} from "./awsConfig.js";
 
 const commands = [
   "bootstrap",
@@ -92,6 +96,8 @@ async function main(): Promise<void> {
     profile,
     region,
   });
+
+  await checkForNewVersionIfNeeded({ contextPath, logger });
 
   if (command === "regenerate") {
     const overwriteConfirmation = buildOverwriteConfirmation({
@@ -189,39 +195,34 @@ async function main(): Promise<void> {
     ssoAdminClient: new SSOAdminClient(clientConfig),
   };
 
+  await printVersionBannerIfNeeded(logger);
+
   if (command === "bootstrap") {
     await runRemoteBootstrap(remoteInput);
-    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "scan") {
     await runRemoteScan(remoteInput);
-    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "init") {
     await runRemoteInit(remoteInput);
-    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "plan") {
     await runRemotePlan(remoteInput);
-    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "apply") {
     await runRemoteApply(remoteInput);
-    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "upgrade") {
     await runRemoteUpgrade(remoteInput);
-    await printVersionBannerIfNeeded(logger);
     return;
   }
   if (command === "drift") {
     await runRemoteDrift(remoteInput);
-    await printVersionBannerIfNeeded(logger);
     return;
   }
   assertUnreachable(command, `Unhandled remote command: "${command}"`);

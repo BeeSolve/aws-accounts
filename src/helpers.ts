@@ -1,3 +1,14 @@
+/**
+ * Asserts that a code path is unreachable at compile time via the `never` type.
+ * Throws at runtime if somehow reached, including the offending value in the message.
+ *
+ * @example Exhaustive if/return guard
+ * ```ts
+ *    if (action.kind === 'create') return handleCreate(action);
+ *    if (action.kind === 'delete') return handleDelete(action);
+ *    assertUnreachable(action.kind);
+ * ```
+ */
 export function assertUnreachable(
   value: never,
   message: string = JSON.stringify(value),
@@ -87,8 +98,38 @@ export function toRecordByProperty<T extends { [key: string]: any }>(
   );
 }
 
+/**
+ * Returns a promise that resolves after `ms` milliseconds.
+ *
+ * @example Pause between retry attempts
+ * ```ts
+ *    await delay(2000);
+ * ```
+ */
 export async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * Starts a repeating timer that calls `onTick` with the total elapsed seconds on each interval.
+ * Returns a stop function — call it to cancel the timer once the operation completes.
+ *
+ * @example Show progress during a long-running async call
+ * ```ts
+ *    const stop = startProgressTimer((elapsed) => {
+ *        logger.log(`Still working... (${elapsed}s)`);
+ *    });
+ *    await slowOperation();
+ *    stop();
+ * ```
+ */
+export function startProgressTimer(onTick: (elapsed: number) => void, intervalMs = 5000): () => void {
+  let elapsed = 0;
+  const timer = setInterval(() => {
+    elapsed += intervalMs / 1000;
+    onTick(elapsed);
+  }, intervalMs);
+  return () => clearInterval(timer);
 }

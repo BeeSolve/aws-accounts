@@ -202,6 +202,13 @@ export function diffStates(props: DiffStatesProps): Plan {
           ),
         });
       }
+      if (currentAccount.email !== nextAccount.email) {
+        unsupported.push({
+          kind: "accountEmailChange",
+          category: "unsupportedMutation",
+          description: `account "${nextAccount.name}" email cannot be changed via API (from "${currentAccount.email}" to "${nextAccount.email}"); update it directly in the AWS account's root user settings`,
+        });
+      }
       diffAlternateContacts({
         operations,
         accountId: nextAccount.id,

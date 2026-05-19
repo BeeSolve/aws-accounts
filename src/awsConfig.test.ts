@@ -51,7 +51,7 @@ test("writeAwsConfigFromState generates aws.config.ts and aws.config.types.ts", 
 
     const configRaw = await readFile(configPath, "utf8");
     const typesRaw = await readFile(typesPath, "utf8");
-    assert.match(configRaw, /const awsConfig:/);
+    assert.match(configRaw, /const awsConfig =/);
     assert.match(typesRaw, /export const awsConfigSchema/);
     assert.match(typesRaw, /@beesolve\/iam-policy-ts/);
     assert.match(typesRaw, /export \* as iam from "@beesolve\/iam-policy-ts"/);
@@ -787,7 +787,7 @@ test("loadAwsConfigModelFromTsFile supports IAM action helper functions", async 
       configPath,
       `import { iam, type AwsConfig } from "./aws.config.types.js";
 
-const awsConfig: AwsConfig = {
+const awsConfig = {
   organizationalUnits: [
     {
       name: "root",
