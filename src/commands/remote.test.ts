@@ -627,10 +627,9 @@ export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;
 }
 
 function createMinimalConfigFile(): string {
-  return `import * as v from "valibot";
-import { awsConfigSchema, type AwsConfig } from "./aws.config.types.js";
+  return `import { type AwsConfig } from "./aws.config.types.js";
 
-const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
+const awsConfig = {
   organizationalUnits: [
     {
       name: "Pending",
@@ -644,16 +643,15 @@ const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
   groups: [],
   permissionSets: [],
   assignments: [],
-} satisfies AwsConfig);
+} satisfies AwsConfig;
 export default awsConfig;
 `;
 }
 
 function createConfigWithExtraOu(): string {
-  return `import * as v from "valibot";
-import { awsConfigSchema, type AwsConfig } from "./aws.config.types.js";
+  return `import { type AwsConfig } from "./aws.config.types.js";
 
-const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
+const awsConfig = {
   organizationalUnits: [
     {
       name: "Pending",
@@ -672,7 +670,7 @@ const awsConfig: AwsConfig = v.parse(awsConfigSchema, {
   groups: [],
   permissionSets: [],
   assignments: [],
-} satisfies AwsConfig);
+} satisfies AwsConfig;
 export default awsConfig;
 `;
 }

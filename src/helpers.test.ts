@@ -27,7 +27,7 @@ type IamActionFactory = (action: string) => string;
 type IamHelper = Record<string, IamActionFactory>;
 
 const configExpressionPattern =
-  /const awsConfig: AwsConfig = v\.parse\(awsConfigSchema,\s*([\s\S]*?)\s*(?:satisfies AwsConfig)?\);\s*export default awsConfig;/;
+  /const awsConfig = ([\s\S]*?)\s*satisfies AwsConfig;\s*export default awsConfig;/;
 
 export async function readConfigModelForTest<T>(props: {
   configPath: string;
@@ -50,10 +50,9 @@ export async function writeConfigModelForTest(props: {
   configPath: string;
   config: unknown;
 }): Promise<void> {
-  const nextConfig = `import * as v from "valibot";
-import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
+  const nextConfig = `import { iam, type AwsConfig } from "./aws.config.types.js";
 
-const awsConfig: AwsConfig = v.parse(awsConfigSchema, ${JSON.stringify(props.config, null, 2)} satisfies AwsConfig);
+const awsConfig = ${JSON.stringify(props.config, null, 2)} satisfies AwsConfig;
 
 export default awsConfig;
 `;
