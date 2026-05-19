@@ -164,6 +164,11 @@ test("unsupportedDiffSchema accepts remaining unsupported diff kinds", () => {
       category: "destructive",
       description: 'removed OU "Platform"',
     },
+    {
+      kind: "accountEmailChange",
+      category: "unsupportedMutation",
+      description: 'account "Prod" email cannot be changed via API (from "old@example.com" to "new@example.com"); update it directly in the AWS account\'s root user settings',
+    },
   ];
 
   for (const unsupportedDiff of unsupportedDiffs) {

@@ -368,6 +368,7 @@ const unsupportedDiffKindSchema = v.picklist([
   "newAccountWithUnknownOu",
   "existingAccountWithUnknownTargetOu",
   "removedOu",
+  "accountEmailChange",
 ]);
 
 const unsupportedDiffCategorySchema = v.picklist([

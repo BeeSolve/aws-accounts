@@ -151,6 +151,32 @@ test("diffStates emits updateAccountName when desired name differs for the same 
   assert.deepEqual(plan.unsupported, []);
 });
 
+test("diffStates reports accountEmailChange as unsupported when email differs for an existing account", () => {
+  const current = createBaseState();
+  current.identityCenter.accountAssignments = [];
+  current.identityCenter.accessRoles = [];
+  const next = cloneState(current);
+  const account = next.organization.accounts.find(
+    (candidate) => candidate.name === "app-a",
+  );
+  if (account == null) {
+    throw new Error('Expected fixture account "app-a".');
+  }
+  account.email = "new-email@example.com";
+  const plan = diffStates({
+    current,
+    next,
+  });
+  assert.deepEqual(plan.operations, []);
+  assert.deepEqual(plan.unsupported, [
+    {
+      kind: "accountEmailChange",
+      category: "unsupportedMutation",
+      description: `account "app-a" email cannot be changed via API (from "app-a@example.com" to "new-email@example.com"); update it directly in the AWS account's root user settings`,
+    },
+  ]);
+});
+
 test("diffStates emits updateAccountName before moveAccount when renaming and moving together", () => {
   const current = createBaseState();
   current.identityCenter.accountAssignments = [];
