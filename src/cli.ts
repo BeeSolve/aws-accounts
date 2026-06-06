@@ -6,16 +6,9 @@ import { IAMClient } from "@aws-sdk/client-iam";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { STSClient } from "@aws-sdk/client-sts";
 import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
-import {
-  buildAwsClientConfig,
-  resolveAwsProfile,
-  resolveAwsRegion,
-} from "./awsClientConfig.js";
+import { buildAwsClientConfig, resolveAwsProfile, resolveAwsRegion } from "./awsClientConfig.js";
 import { consoleLogger, type Logger } from "./logger.js";
-import {
-  runGraveyardCloseCommand,
-  runGraveyardCommand,
-} from "./commands/graveyard.js";
+import { runGraveyardCloseCommand, runGraveyardCommand } from "./commands/graveyard.js";
 import { runProfileCommand } from "./commands/profile.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
 import { runValidateCommand } from "./commands/validate.js";
@@ -28,11 +21,7 @@ import {
   runRemoteUpgrade,
   runRemoteDrift,
 } from "./commands/remote.js";
-import {
-  classifyCliError,
-  exitCodeForCliErrorKind,
-  toUsageError,
-} from "./error.js";
+import { classifyCliError, exitCodeForCliErrorKind, toUsageError } from "./error.js";
 import { assertUnreachable } from "./helpers.js";
 import {
   checkForNewVersionIfNeeded,
@@ -137,9 +126,7 @@ async function main(): Promise<void> {
     }
     if (subcommand != null) {
       printHelp(logger);
-      throw toUsageError(
-        `Unknown graveyard subcommand: "${subcommand}". Valid subcommands: close`,
-      );
+      throw toUsageError(`Unknown graveyard subcommand: "${subcommand}". Valid subcommands: close`);
     }
     await runGraveyardCommand({
       logger,
@@ -150,8 +137,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "profile") {
-    const ssoStartUrl =
-      args.values["sso-start-url"] ?? process.env.AWS_SSO_START_URL;
+    const ssoStartUrl = args.values["sso-start-url"] ?? process.env.AWS_SSO_START_URL;
     if (ssoStartUrl == null) {
       printHelp(logger);
       throw toUsageError(
@@ -163,7 +149,7 @@ async function main(): Promise<void> {
       cachePath: ".remote-state-cache.json",
       contextPath,
       ssoStartUrl,
-      ssoSession: args.values["sso-session"] ?? "sso",
+      ssoSession: args.values["sso-session"] ?? process.env.AWS_SSO_SESSION ?? "sso",
       isTty: process.stdin.isTTY,
     });
     return;
@@ -233,33 +219,23 @@ function printHelp(logger: Logger): void {
   logger.log("@beesolve/aws-accounts");
   logger.log("");
   logger.log("Usage:");
-  logger.log(
-    `  ${cmd} bootstrap [--profile <name>] [--region <region>] [--yes]`,
-  );
+  logger.log(`  ${cmd} bootstrap [--profile <name>] [--region <region>] [--yes]`);
   logger.log(`  ${cmd} scan [--profile <name>] [--region <region>]`);
-  logger.log(
-    `  ${cmd} init [--profile <name>] [--region <region>] [--yes]`,
-  );
-  logger.log(
-    `  ${cmd} init --update [--profile <name>] [--region <region>] [--yes]`,
-  );
+  logger.log(`  ${cmd} init [--profile <name>] [--region <region>] [--yes]`);
+  logger.log(`  ${cmd} init --update [--profile <name>] [--region <region>] [--yes]`);
   logger.log(`  ${cmd} regenerate [--yes]`);
   logger.log(`  ${cmd} validate`);
   logger.log(`  ${cmd} graveyard`);
   logger.log(`  ${cmd} graveyard close`);
   logger.log(
-    `  ${cmd} profile --sso-start-url <url> [--sso-session <name>]  (env: AWS_SSO_START_URL)`,
+    `  ${cmd} profile --sso-start-url <url> [--sso-session <name>]  (env: AWS_SSO_START_URL, AWS_SSO_SESSION)`,
   );
-  logger.log(
-    `  ${cmd} plan [--profile <name>] [--region <region>] [--refresh]`,
-  );
+  logger.log(`  ${cmd} plan [--profile <name>] [--region <region>] [--refresh]`);
   logger.log(
     `  ${cmd} apply [--profile <name>] [--region <region>] [--yes] [--allow-destructive] [--ignore-unsupported]`,
   );
   logger.log(`  ${cmd} upgrade [--profile <name>] [--region <region>]`);
-  logger.log(
-    `  ${cmd} drift [--profile <name>] [--region <region>] [--refresh]`,
-  );
+  logger.log(`  ${cmd} drift [--profile <name>] [--region <region>] [--refresh]`);
   logger.log("");
   logger.log("Environment fallback:");
   logger.log("  AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION");
@@ -273,9 +249,7 @@ type BuildOverwriteConfirmationProps = {
 function buildOverwriteConfirmation(
   props: BuildOverwriteConfirmationProps,
 ): (props: { fileSummaries: string[] }) => Promise<boolean> {
-  return async (overwriteProps: {
-    fileSummaries: string[];
-  }): Promise<boolean> => {
+  return async (overwriteProps: { fileSummaries: string[] }): Promise<boolean> => {
     if (overwriteProps.fileSummaries.length === 0) {
       return true;
     }
@@ -283,18 +257,14 @@ function buildOverwriteConfirmation(
       return true;
     }
     if (props.isTty !== true) {
-      throw new Error(
-        "Refusing to overwrite config files in non-interactive mode without --yes.",
-      );
+      throw new Error("Refusing to overwrite config files in non-interactive mode without --yes.");
     }
     const readlineInterface = createInterface({
       input: process.stdin,
       output: process.stdout,
     });
     try {
-      const answer = await readlineInterface.question(
-        "Proceed with writing config files? [y/N] ",
-      );
+      const answer = await readlineInterface.question("Proceed with writing config files? [y/N] ");
       const normalized = answer.trim().toLowerCase();
       return normalized === "y" || normalized === "yes";
     } finally {

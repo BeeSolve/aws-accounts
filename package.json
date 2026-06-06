@@ -3,6 +3,10 @@
   "version": "1.4.0",
   "description": "AWS Organizations and IAM Identity Center management CLI",
   "main": "dist/cli.js",
+  "exports": {
+    ".": "./dist/cli.js",
+    "./policies": "./dist/policies.js"
+  },
   "bin": {
     "aws-accounts": "bin/cli.js"
   },

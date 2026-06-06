@@ -203,7 +203,7 @@ sso_region = eu-central-1
 sso_registration_scopes = sso:account:access
 ```
 
-The SSO start URL is not returned by the AWS API — set it via the flag or the `AWS_SSO_START_URL` environment variable to avoid typing it every time. Use `--sso-session <name>` to customise the session name (default: `sso`).
+The SSO start URL is not returned by the AWS API — set it via the flag or the `AWS_SSO_START_URL` environment variable to avoid typing it every time. Use `--sso-session <name>` or the `AWS_SSO_SESSION` environment variable to customise the session name (default: `sso`).
 
 Requires a populated local state cache — run `plan` or `scan` first if the cache is empty.
 
@@ -221,7 +221,7 @@ Options:
   --ignore-unsupported      Proceed with non-destructive unsupported diffs (apply command)
   --refresh                 Force state refresh before planning (plan command)
   --sso-start-url <url>     IAM Identity Center access portal URL (fallback: AWS_SSO_START_URL)
-  --sso-session <name>      SSO session name for profile output (default: sso)
+  --sso-session <name>      SSO session name for profile output (fallback: AWS_SSO_SESSION; default: sso)
   --help                    Show help
 ```
 
@@ -243,6 +243,61 @@ The CLI delegates all AWS operations to a deployed Lambda. Day-to-day usage requ
 `bootstrap` and `upgrade` require broader permissions for deploying infrastructure (S3, IAM, Lambda, SSO). See the full policy in the [docs](./docs/adr/002-architecture-and-technology-choices.md).
 
 Commands that need no AWS permissions: `regenerate` (local codegen only), `validate` (local config checks only), `graveyard` (reads local cache only).
+
+## SCP Patterns
+
+The package ships reusable Service Control Policy builders you can use directly in `aws.config.ts`. Import from the `@beesolve/aws-accounts/policies` sub-path:
+
+```ts
+import { scp } from "@beesolve/aws-accounts/policies";
+```
+
+### `scp.blockExpensiveResources(options)`
+
+Generates a deny-by-default SCP that blocks expensive resource creation — designed to protect against account compromise (cryptomining, LLM API abuse).
+
+**What it blocks:**
+
+- All Amazon Bedrock actions (`bedrock:*`)
+- All EC2 instance types **except** those you explicitly allow
+- Expensive compute services: SageMaker, ECS, EKS nodegroups, Lightsail, App Runner
+- Expensive purchases: reserved instances, savings plans, Marketplace subscriptions, vault locks, Shield, domain registration, Snowball, and more
+
+**Options:**
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `allowedEc2InstanceTypes` | `string[]` | *required* | EC2 instance types to allow (everything else is denied) |
+| `exemptAccounts` | `string[]` | `[]` | Account IDs exempt from all restrictions |
+| `targets` | `string[]` | `["root"]` | OU/account names to attach the SCP to |
+| `name` | `string` | `"BlockExpensiveResources"` | Policy name |
+
+**Example:**
+
+```ts
+policies: {
+  serviceControlPolicies: [
+    scp.blockExpensiveResources({
+      exemptAccounts: [],
+      allowedEc2InstanceTypes: [
+        "t3.nano", "t3.micro", "t3.small", "t3.medium",
+        "t4g.nano", "t4g.micro", "t4g.small", "t4g.medium",
+        "m8g.medium", "m8g.large",
+      ],
+      targets: ["root"],
+    }),
+  ],
+}
+```
+
+To grant GPU/Bedrock access to a specific account, add its account ID to `exemptAccounts`:
+
+```ts
+scp.blockExpensiveResources({
+  exemptAccounts: ["123456789012"],
+  allowedEc2InstanceTypes: ["t3.micro", "t3.small", "t4g.medium", "m8g.medium"],
+})
+```
 
 ## FAQ
 
