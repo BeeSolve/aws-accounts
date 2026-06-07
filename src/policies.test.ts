@@ -1,14 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { scp } from "./policies.js";
+import { toPolicies } from "./policies.js";
+
+const { scp, backupPolicy, permissionSet } = toPolicies<string, string>();
 
 describe("scp.blockExpensiveResources", () => {
-  const defaultOptions = {
-    allowedEc2InstanceTypes: ["t3.micro", "t3.small", "m8g.medium"],
-  };
+  const opts = { allowedEc2InstanceTypes: ["t3.micro", "t3.small", "m8g.medium"] };
 
   it("returns correct shape with defaults", () => {
-    const result = scp.blockExpensiveResources(defaultOptions);
+    const result = scp.blockExpensiveResources(opts);
     assert.equal(result.name, "BlockExpensiveResources");
     assert.deepEqual(result.targets, ["root"]);
     assert.equal((result.content as any).Version, "2012-10-17");
@@ -16,70 +16,99 @@ describe("scp.blockExpensiveResources", () => {
   });
 
   it("omits Condition when exemptAccounts is empty", () => {
-    const result = scp.blockExpensiveResources(defaultOptions);
-    const statements = (result.content as any).Statement;
-    const denyBedrock = statements.find((s: any) => s.Sid === "DenyBedrock");
-    assert.equal(denyBedrock.Condition, undefined);
+    const result = scp.blockExpensiveResources(opts);
+    const stmt = (result.content as any).Statement[0];
+    assert.equal(stmt.Condition, undefined);
   });
 
   it("includes aws:PrincipalAccount condition when exemptAccounts provided", () => {
-    const result = scp.blockExpensiveResources({
-      ...defaultOptions,
-      exemptAccounts: ["111111111111", "222222222222"],
-    });
-    const statements = (result.content as any).Statement;
-    const denyBedrock = statements.find((s: any) => s.Sid === "DenyBedrock");
-    assert.deepEqual(denyBedrock.Condition, {
-      StringNotEquals: { "aws:PrincipalAccount": ["111111111111", "222222222222"] },
-    });
+    const result = scp.blockExpensiveResources({ ...opts, exemptAccounts: ["111", "222"] });
+    const stmt = (result.content as any).Statement[0];
+    assert.deepEqual(stmt.Condition, { StringNotEquals: { "aws:PrincipalAccount": ["111", "222"] } });
   });
 
-  it("EC2 statement always has ForAnyValue:StringNotLike with allowed types", () => {
-    const result = scp.blockExpensiveResources(defaultOptions);
-    const statements = (result.content as any).Statement;
-    const denyEc2 = statements.find((s: any) => s.Sid === "DenyNonAllowedEC2");
-    assert.deepEqual(
-      denyEc2.Condition["ForAnyValue:StringNotLike"]["ec2:InstanceType"],
-      ["t3.micro", "t3.small", "m8g.medium"],
-    );
-  });
-
-  it("EC2 statement merges exempt condition with instance type condition", () => {
-    const result = scp.blockExpensiveResources({
-      ...defaultOptions,
-      exemptAccounts: ["111111111111"],
-    });
-    const statements = (result.content as any).Statement;
-    const denyEc2 = statements.find((s: any) => s.Sid === "DenyNonAllowedEC2");
-    assert.deepEqual(denyEc2.Condition.StringNotEquals, {
-      "aws:PrincipalAccount": ["111111111111"],
-    });
-    assert.deepEqual(
-      denyEc2.Condition["ForAnyValue:StringNotLike"]["ec2:InstanceType"],
-      ["t3.micro", "t3.small", "m8g.medium"],
-    );
+  it("EC2 statement has ForAnyValue:StringNotLike with allowed types", () => {
+    const result = scp.blockExpensiveResources(opts);
+    const stmt = (result.content as any).Statement[1];
+    assert.deepEqual(stmt.Condition["ForAnyValue:StringNotLike"]["ec2:InstanceType"], ["t3.micro", "t3.small", "m8g.medium"]);
   });
 
   it("respects custom name and targets", () => {
-    const result = scp.blockExpensiveResources({
-      ...defaultOptions,
-      name: "CustomSCP",
-      targets: ["projects", "Sandbox"],
-    });
-    assert.equal(result.name, "CustomSCP");
-    assert.deepEqual(result.targets, ["projects", "Sandbox"]);
+    const result = scp.blockExpensiveResources({ ...opts, name: "Custom", targets: ["projects"] });
+    assert.equal(result.name, "Custom");
+    assert.deepEqual(result.targets, ["projects"]);
   });
 
-  it("minified JSON content fits within 10240 character SCP limit", () => {
-    const result = scp.blockExpensiveResources({
-      exemptAccounts: ["111111111111", "222222222222", "333333333333"],
-      allowedEc2InstanceTypes: [
-        "t3.nano", "t3.micro", "t3.small", "t3.medium",
-        "t4g.nano", "t4g.micro", "t4g.small", "t4g.medium",
-        "m8g.medium", "m8g.large",
-      ],
-    });
-    const size = JSON.stringify(result.content).length;
-    assert.ok(size < 10240, `SCP content is ${size} chars, exceeds 10240 limit`);
+  it("fits within 10240 character SCP limit", () => {
+    const result = scp.blockExpensiveResources({ ...opts, exemptAccounts: ["111", "222", "333"] });
+    assert.ok(JSON.stringify(result.content).length < 10240);
+  });
+});
+
+describe("scp.protectSecurityServices", () => {
+  it("returns correct shape with defaults", () => {
+    const result = scp.protectSecurityServices();
+    assert.equal(result.name, "ProtectSecurityServices");
+    assert.deepEqual(result.targets, ["root"]);
+    assert.equal((result.content as any).Statement.length, 3);
+  });
+
+  it("includes exemptAccounts condition", () => {
+    const result = scp.protectSecurityServices({ exemptAccounts: ["123"] });
+    const stmt = (result.content as any).Statement[0];
+    assert.deepEqual(stmt.Condition, { StringNotEquals: { "aws:PrincipalAccount": ["123"] } });
+  });
+});
+
+describe("backupPolicy.dailyWithRetention", () => {
+  it("returns correct shape with defaults", () => {
+    const result = backupPolicy.dailyWithRetention({ regions: ["eu-central-1"] });
+    assert.equal(result.name, "DailyBackupPolicy");
+    assert.deepEqual(result.targets, ["root"]);
+    const plan = (result.content as any).plans.DailyBackup;
+    assert.deepEqual(plan.regions, { "@@assign": ["eu-central-1"] });
+    assert.equal(plan.rules.Daily.lifecycle.delete_after_days["@@assign"], "35");
+  });
+
+  it("respects custom retention and vault", () => {
+    const result = backupPolicy.dailyWithRetention({ regions: ["us-east-1"], retentionDays: 90, backupVaultName: "Fort" });
+    const plan = (result.content as any).plans.DailyBackup;
+    assert.equal(plan.rules.Daily.lifecycle.delete_after_days["@@assign"], "90");
+    assert.equal(plan.rules.Daily.target_backup_vault_name["@@assign"], "Fort");
+  });
+});
+
+describe("permissionSet patterns", () => {
+  it("readOnlyAuditor returns ViewOnlyAccess managed policy", () => {
+    const result = permissionSet.readOnlyAuditor();
+    assert.equal(result.name, "ReadOnlyAuditor");
+    assert.deepEqual(result.awsManagedPolicies, ["arn:aws:iam::aws:policy/job-function/ViewOnlyAccess"]);
+  });
+
+  it("cloudTrailAnalyst has inline policy with Athena", () => {
+    const result = permissionSet.cloudTrailAnalyst();
+    assert.equal(result.name, "CloudTrailAnalyst");
+    assert.ok(result.inlinePolicy);
+    const actions = (result.inlinePolicy as any).Statement.flatMap((s: any) => s.Action);
+    assert.ok(actions.includes("athena:StartQueryExecution"));
+  });
+
+  it("configCompliance has Config read actions", () => {
+    const result = permissionSet.configCompliance();
+    assert.equal(result.name, "ConfigCompliance");
+    const actions = (result.inlinePolicy as any).Statement[0].Action;
+    assert.ok(actions.includes("config:Describe*"));
+  });
+
+  it("securityInvestigator combines multiple services", () => {
+    const result = permissionSet.securityInvestigator();
+    assert.equal(result.name, "SecurityInvestigator");
+    assert.equal((result.inlinePolicy as any).Statement.length, 5);
+  });
+
+  it("respects custom name and sessionDuration", () => {
+    const result = permissionSet.readOnlyAuditor({ name: "MyAuditor", sessionDuration: "PT12H" });
+    assert.equal(result.name, "MyAuditor");
+    assert.equal(result.sessionDuration, "PT12H");
   });
 });

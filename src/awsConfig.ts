@@ -665,7 +665,13 @@ function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
     type: p.type,
     name: p.name,
     description: p.description.length > 0 ? p.description : undefined,
-    content: JSON.parse(p.content) as Record<string, unknown>,
+    content:
+      p.type === "SERVICE_CONTROL_POLICY"
+        ? resolveAccountIdsInPolicyContent(
+            JSON.parse(p.content) as Record<string, unknown>,
+            orgAccountById,
+          )
+        : (JSON.parse(p.content) as Record<string, unknown>),
     targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((left, right) =>
       left.localeCompare(right),
     ),
@@ -1104,7 +1110,9 @@ export function mapAwsConfigToState(
       name: policy.name,
       description: policy.description ?? "",
       type: "SERVICE_CONTROL_POLICY",
-      content: JSON.stringify(policy.content),
+      content: JSON.stringify(
+        resolveAccountNamesInPolicyContent(policy.content, stateAccountByName),
+      ),
       targets: policy.targets.map((t) => resolveTargetId(t)),
     });
   }
@@ -1624,6 +1632,7 @@ function renderAwsConfigTypesTs(props: { config: AwsConfigModel }): string {
 
   return `import * as v from "valibot";
 import { iamPolicyDocumentSchema } from "@beesolve/iam-policy-ts";
+import { toPolicies } from "@beesolve/aws-accounts/policies";
 export * as iam from "@beesolve/iam-policy-ts";
 export {
   iamActionCatalog,
@@ -1796,6 +1805,10 @@ export const awsConfigSchema = v.strictObject({
 });
 
 export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;
+
+type PolicyTarget = v.InferOutput<typeof organizationalUnitNameSchema> | v.InferOutput<typeof accountNameSchema>;
+type AccountName = v.InferOutput<typeof accountNameSchema>;
+export const policies = toPolicies<PolicyTarget, AccountName>();
 `;
 }
 
@@ -2178,6 +2191,7 @@ async function loadTsModule(props: { modulePath: string }): Promise<unknown> {
       target: "node24",
       absWorkingDir: projectRootPath,
       nodePaths: [join(projectRootPath, "node_modules")],
+      external: ["@beesolve/aws-accounts", "@beesolve/aws-accounts/*"],
       write: true,
     });
     const moduleUrl = pathToFileURL(temporaryOutputAtProjectRoot).href;
@@ -2209,6 +2223,72 @@ async function safeUnlink(path: string): Promise<void> {
     }
     throw error;
   }
+}
+
+function resolveAccountNamesInPolicyContent(
+  content: Record<string, unknown>,
+  accountByName: Record<string, { id: string }>,
+): Record<string, unknown> {
+  const statements = (content as { Statement?: unknown[] }).Statement;
+  if (!Array.isArray(statements)) return content;
+  return {
+    ...content,
+    Statement: statements.map((stmt) => {
+      if (stmt == null || typeof stmt !== "object") return stmt;
+      const s = stmt as Record<string, unknown>;
+      const condition = s.Condition as Record<string, unknown> | undefined;
+      if (condition == null) return stmt;
+      const sne = condition.StringNotEquals as Record<string, unknown> | undefined;
+      if (sne == null) return stmt;
+      const accounts = sne["aws:PrincipalAccount"];
+      if (!Array.isArray(accounts)) return stmt;
+      return {
+        ...s,
+        Condition: {
+          ...condition,
+          StringNotEquals: {
+            ...sne,
+            "aws:PrincipalAccount": accounts.map(
+              (name: string) => accountByName[name]?.id ?? name,
+            ),
+          },
+        },
+      };
+    }),
+  };
+}
+
+function resolveAccountIdsInPolicyContent(
+  content: Record<string, unknown>,
+  accountById: Record<string, { name: string }>,
+): Record<string, unknown> {
+  const statements = (content as { Statement?: unknown[] }).Statement;
+  if (!Array.isArray(statements)) return content;
+  return {
+    ...content,
+    Statement: statements.map((stmt) => {
+      if (stmt == null || typeof stmt !== "object") return stmt;
+      const s = stmt as Record<string, unknown>;
+      const condition = s.Condition as Record<string, unknown> | undefined;
+      if (condition == null) return stmt;
+      const sne = condition.StringNotEquals as Record<string, unknown> | undefined;
+      if (sne == null) return stmt;
+      const accounts = sne["aws:PrincipalAccount"];
+      if (!Array.isArray(accounts)) return stmt;
+      return {
+        ...s,
+        Condition: {
+          ...condition,
+          StringNotEquals: {
+            ...sne,
+            "aws:PrincipalAccount": accounts.map(
+              (id: string) => accountById[id]?.name ?? id,
+            ),
+          },
+        },
+      };
+    }),
+  };
 }
 
 function isValiErrorLike(error: unknown): error is Error {
