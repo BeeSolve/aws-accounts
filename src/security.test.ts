@@ -178,3 +178,83 @@ describe("withSecurityBaseline", () => {
     assert.equal(result.securityBaseline, undefined);
   });
 });
+
+describe("securityBaseline stackSet declarations", () => {
+  const baseConfig = {
+    organizationalUnits: [
+      { name: "root", parentName: null, accounts: [] },
+      {
+        name: "Security",
+        parentName: "root",
+        accounts: [
+          { name: "SecurityAudit", email: "sec@test.com", tags: [] },
+          { name: "LogArchive", email: "log@test.com", tags: [] },
+        ],
+      },
+    ],
+    delegatedAdministrators: [],
+  };
+
+  it("configRecorder produces stackSet with correct templateKey and parameters", () => {
+    const result = withSecurityBaseline(baseConfig, {
+      configRecorder: {
+        enabled: true,
+        delegatedAdminAccount: "SecurityAudit",
+        deliveryBucketAccount: "LogArchive",
+        targets: ["root"],
+        deliveryFrequency: "Six_Hours",
+        recordAllResourceTypes: false,
+      },
+    });
+    const ss = result.securityBaseline!.stackSets[0];
+    assert.equal(ss.templateKey, "config-recorder");
+    assert.deepEqual(ss.targets, ["root"]);
+    assert.ok(ss.parameters.some((p) => p.key === "DeliveryFrequency" && p.value === "Six_Hours"));
+    assert.ok(ss.parameters.some((p) => p.key === "AllSupported" && p.value === "false"));
+  });
+
+  it("guardDuty produces stackSet with custom frequency", () => {
+    const result = withSecurityBaseline(baseConfig, {
+      guardDuty: {
+        enabled: true,
+        delegatedAdminAccount: "SecurityAudit",
+        findingPublishingFrequency: "ONE_HOUR",
+        targets: ["Security"],
+      },
+    });
+    const ss = result.securityBaseline!.stackSets[0];
+    assert.equal(ss.templateKey, "guardduty-member");
+    assert.deepEqual(ss.targets, ["Security"]);
+    assert.ok(ss.parameters.some((p) => p.key === "FindingPublishingFrequency" && p.value === "ONE_HOUR"));
+  });
+
+  it("multiple features produce multiple stackSets", () => {
+    const result = withSecurityBaseline(baseConfig, {
+      configRecorder: { enabled: true, delegatedAdminAccount: "SecurityAudit", deliveryBucketAccount: "LogArchive", targets: ["root"] },
+      guardDuty: { enabled: true, delegatedAdminAccount: "SecurityAudit" },
+    });
+    assert.equal(result.securityBaseline!.stackSets.length, 2);
+    assert.equal(result.securityBaseline!.stackSets[0].templateKey, "config-recorder");
+    assert.equal(result.securityBaseline!.stackSets[1].templateKey, "guardduty-member");
+  });
+
+  it("disabled features produce no stackSets", () => {
+    const result = withSecurityBaseline(baseConfig, {
+      configRecorder: { enabled: false, delegatedAdminAccount: "SecurityAudit", deliveryBucketAccount: "LogArchive", targets: ["root"] },
+    });
+    assert.equal(result.securityBaseline, undefined);
+  });
+});
+
+describe("template resolution", () => {
+  it("default templates exist in package", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
+    const configRecorder = await readFile(join(packageDir, "templates", "config-recorder.yaml"), "utf8");
+    const guardduty = await readFile(join(packageDir, "templates", "guardduty-member.yaml"), "utf8");
+    assert.ok(configRecorder.includes("AWS::Config::ConfigurationRecorder"));
+    assert.ok(guardduty.includes("AWS::GuardDuty::Detector"));
+  });
+});

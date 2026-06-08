@@ -2,15 +2,13 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import type { LambdaClient, InvokeCommandOutput } from "@aws-sdk/client-lambda";
 import { createTestWorkspace } from "../helpers.test.js";
-import { noopLogger } from "../logger.js";
 import type { Logger } from "../logger.js";
+import { noopLogger } from "../logger.js";
 import {
-  runRemoteBootstrap,
-  runRemoteScan,
-  runRemotePlan,
   runRemoteApply,
+  runRemotePlan,
+  runRemoteScan,
   runRemoteUpgrade,
   type RemoteCommandInput,
 } from "./remote.js";
@@ -48,11 +46,11 @@ function createBaseInput(overrides?: Partial<RemoteCommandInput>): RemoteCommand
     },
     logger: overrides?.logger ?? noopLogger,
     overwriteConfirmation: overrides?.overwriteConfirmation ?? (async () => true),
-    stsClient: overrides?.stsClient ?? { send: async () => ({}) } as any,
-    s3Client: overrides?.s3Client ?? { send: async () => ({}) } as any,
-    iamClient: overrides?.iamClient ?? { send: async () => ({}) } as any,
-    lambdaClient: overrides?.lambdaClient ?? { send: async () => ({}) } as any,
-    ssoAdminClient: overrides?.ssoAdminClient ?? { send: async () => ({}) } as any,
+    stsClient: overrides?.stsClient ?? ({ send: async () => ({}) } as any),
+    s3Client: overrides?.s3Client ?? ({ send: async () => ({}) } as any),
+    iamClient: overrides?.iamClient ?? ({ send: async () => ({}) } as any),
+    lambdaClient: overrides?.lambdaClient ?? ({ send: async () => ({}) } as any),
+    ssoAdminClient: overrides?.ssoAdminClient ?? ({ send: async () => ({}) } as any),
   };
 }
 
@@ -223,7 +221,7 @@ test("runRemoteUpgrade throws error when deployment is missing from context", as
 
 // --- Tests: CLI argument parsing for top-level commands ---
 
-test("CLI parses top-level commands and routes to handler", async (t) => {
+test("CLI parses top-level commands and routes to handler", async () => {
   // We test the CLI argument parsing logic by importing the parseArgs behavior
   // and verifying the top-level command routing logic from cli.ts
   const { parseArgs } = await import("node:util");
@@ -292,26 +290,16 @@ test("CLI prints help text listing all top-level commands", async () => {
   logger.log("@beesolve/aws-accounts");
   logger.log("");
   logger.log("Usage:");
-  logger.log(
-    "  npm run cli -- bootstrap [--profile <name>] [--region <region>] [--yes]",
-  );
-  logger.log(
-    "  npm run cli -- scan [--profile <name>] [--region <region>]",
-  );
-  logger.log(
-    "  npm run cli -- init [--profile <name>] [--region <region>] [--yes]",
-  );
+  logger.log("  npm run cli -- bootstrap [--profile <name>] [--region <region>] [--yes]");
+  logger.log("  npm run cli -- scan [--profile <name>] [--region <region>]");
+  logger.log("  npm run cli -- init [--profile <name>] [--region <region>] [--yes]");
   logger.log("  npm run cli -- regenerate [--yes]");
   logger.log("  npm run cli -- graveyard");
-  logger.log(
-    "  npm run cli -- plan [--profile <name>] [--region <region>] [--refresh]",
-  );
+  logger.log("  npm run cli -- plan [--profile <name>] [--region <region>] [--refresh]");
   logger.log(
     "  npm run cli -- apply [--profile <name>] [--region <region>] [--yes] [--allow-destructive] [--ignore-unsupported]",
   );
-  logger.log(
-    "  npm run cli -- upgrade [--profile <name>] [--region <region>]",
-  );
+  logger.log("  npm run cli -- upgrade [--profile <name>] [--region <region>]");
 
   // Verify help text contains expected commands
   const allText = logger.logs.join("\n");
@@ -364,7 +352,13 @@ test("--refresh flag causes fetchCurrentState to skip cache check", async () => 
     const logger = createCollectingLogger();
     const input = createBaseInput({
       subcommand: "plan",
-      flags: { yes: false, refresh: true, allowDestructive: false, ignoreUnsupported: false, update: false },
+      flags: {
+        yes: false,
+        refresh: true,
+        allowDestructive: false,
+        ignoreUnsupported: false,
+        update: false,
+      },
       logger,
     });
 
@@ -374,9 +368,7 @@ test("--refresh flag causes fetchCurrentState to skip cache check", async () => 
       // With --refresh, it should skip cache and try to invoke Lambda.
       // Since there's no real Lambda, it will throw an invocation error.
       // The key assertion is that it does NOT log "Using cached state."
-      await assert.rejects(
-        () => runRemotePlan(input),
-      );
+      await assert.rejects(() => runRemotePlan(input));
       // Verify it did NOT use cached state
       assert.ok(
         !logger.logs.some((line) => line.includes("Using cached state")),
@@ -424,7 +416,13 @@ test("without --refresh flag, fresh cache is used", async () => {
     const logger = createCollectingLogger();
     const input = createBaseInput({
       subcommand: "plan",
-      flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, update: false },
+      flags: {
+        yes: false,
+        refresh: false,
+        allowDestructive: false,
+        ignoreUnsupported: false,
+        update: false,
+      },
       logger,
     });
 
@@ -487,7 +485,13 @@ test("runRemoteApply displays concurrency conflict message", async () => {
     const logger = createCollectingLogger();
     const input = createBaseInput({
       subcommand: "apply",
-      flags: { yes: true, refresh: false, allowDestructive: false, ignoreUnsupported: false, update: false },
+      flags: {
+        yes: true,
+        refresh: false,
+        allowDestructive: false,
+        ignoreUnsupported: false,
+        update: false,
+      },
       logger,
     });
 
@@ -514,7 +518,16 @@ test("runRemoteApply displays concurrency conflict message", async () => {
 // --- Tests: Top-level command validation ---
 
 test("top-level command validation rejects unknown commands", () => {
-  const commands = ["bootstrap", "scan", "init", "regenerate", "graveyard", "plan", "apply", "upgrade"];
+  const commands = [
+    "bootstrap",
+    "scan",
+    "init",
+    "regenerate",
+    "graveyard",
+    "plan",
+    "apply",
+    "upgrade",
+  ];
   function isCommandName(value: string): boolean {
     return commands.includes(value);
   }

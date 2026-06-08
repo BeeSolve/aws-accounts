@@ -54,17 +54,23 @@ import type { AwsTag } from "../tags.js";
 import { diffStates } from "../diff.js";
 import { invokeLambda } from "../lambdaClient.js";
 import type { Logger } from "../logger.js";
-import type { Operation, Plan } from "../operations.js";
-import {
-  isCacheFresh,
-  readStateCache,
-  writeStateCache,
-} from "../remoteStateCache.js";
+import type { Operation, Plan, StackSetOperation } from "../operations.js";
+import { isCacheFresh, readStateCache, writeStateCache } from "../remoteStateCache.js";
 import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 import { validateState, type StateFile } from "../state.js";
 import { assertUnreachable, delay, startProgressTimer } from "../helpers.js";
 import { toPreconditionError } from "../error.js";
-import { sts, organizations, sso, identitystore, s3, logs, account, iam, lambda } from "@beesolve/iam-policy-ts";
+import {
+  sts,
+  organizations,
+  sso,
+  identitystore,
+  s3,
+  logs,
+  account,
+  iam,
+  lambda,
+} from "@beesolve/iam-policy-ts";
 
 const remoteCommandSchema = v.object({
   subcommand: v.picklist(["bootstrap", "scan", "init", "plan", "apply", "upgrade", "drift"]),
@@ -96,7 +102,6 @@ const cachePath = ".remote-state-cache.json";
 const lambdaRoleName = "beesolve-aws-accounts-lambda-role";
 const lambdaFunctionName = "beesolve-aws-accounts";
 
-
 export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<void> {
   const lambdaZip = await readLambdaZip();
 
@@ -106,7 +111,8 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
     throw new Error("Could not determine AWS account ID from STS.");
   }
 
-  const resolvedRegion = input.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "us-east-1";
+  const resolvedRegion =
+    input.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "us-east-1";
   const bucketName = `beesolve-aws-accounts-state-${accountId}-${resolvedRegion}`;
 
   input.logger.log(`Account: ${accountId}`);
@@ -114,32 +120,35 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
   input.logger.log(`Bucket: ${bucketName}`);
 
   try {
-    await input.s3Client.send(new CreateBucketCommand({
-      Bucket: bucketName,
-      CreateBucketConfiguration: resolvedRegion !== "us-east-1" ? {
-        LocationConstraint:
-          resolvedRegion as BucketLocationConstraint,
-      } : undefined
-    }));
+    await input.s3Client.send(
+      new CreateBucketCommand({
+        Bucket: bucketName,
+        CreateBucketConfiguration:
+          resolvedRegion !== "us-east-1"
+            ? {
+                LocationConstraint: resolvedRegion as BucketLocationConstraint,
+              }
+            : undefined,
+      }),
+    );
     input.logger.log(`Created S3 bucket: ${bucketName}`);
   } catch (error: unknown) {
     const s3Error = error as S3ServiceException;
-    if (
-      s3Error.name === "BucketAlreadyOwnedByYou" ||
-      s3Error.name === "BucketAlreadyExists"
-    ) {
+    if (s3Error.name === "BucketAlreadyOwnedByYou" || s3Error.name === "BucketAlreadyExists") {
       input.logger.log(`S3 bucket already exists: ${bucketName}`);
     } else {
       throw error;
     }
   }
 
-  await input.s3Client.send(new PutBucketTaggingCommand({
-    Bucket: bucketName,
-    Tagging: {
-      TagSet: getStandardTags("state-storage"),
-    },
-  }));
+  await input.s3Client.send(
+    new PutBucketTaggingCommand({
+      Bucket: bucketName,
+      Tagging: {
+        TagSet: getStandardTags("state-storage"),
+      },
+    }),
+  );
 
   const { roleArn } = await ensureIamRole({
     iamClient: input.iamClient,
@@ -173,15 +182,20 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
     cliVersion: cliVersionForBootstrap,
   };
 
-  const updatedContext = context != null
-    ? { ...context, deployment }
-    : {
-      version: "1",
-      generatedAt: new Date().toISOString(),
-      organization: { managementAccountId: accountId, rootId: "pending", graveyardOuId: "pending" },
-      identityCenter: { instanceArn: "pending", identityStoreId: "pending" },
-      deployment,
-    };
+  const updatedContext =
+    context != null
+      ? { ...context, deployment }
+      : {
+          version: "1",
+          generatedAt: new Date().toISOString(),
+          organization: {
+            managementAccountId: accountId,
+            rootId: "pending",
+            graveyardOuId: "pending",
+          },
+          identityCenter: { instanceArn: "pending", identityStoreId: "pending" },
+          deployment,
+        };
 
   const ordered: Record<string, unknown> = {
     version: updatedContext.version,
@@ -200,10 +214,11 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
       instanceArn,
       tags: getStandardTags("organization-management"),
       logger: input.logger,
-    })
-      .catch((error: unknown) => {
-        input.logger.log(`Error creating OrganizationManagement permission set: ${error instanceof Error ? error.message : String(error)}`);
-      });
+    }).catch((error: unknown) => {
+      input.logger.log(
+        `Error creating OrganizationManagement permission set: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
 
     await ensureOrganizationRemoteManagementPermissionSet({
       ssoAdminClient: input.ssoAdminClient,
@@ -211,10 +226,11 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
       lambdaArn,
       tags: getStandardTags("remote-invocation"),
       logger: input.logger,
-    })
-      .catch((error: unknown) => {
-        input.logger.log(`Error creating OrganizationRemoteManagement permission set: ${error instanceof Error ? error.message : String(error)}`);
-      });
+    }).catch((error: unknown) => {
+      input.logger.log(
+        `Error creating OrganizationRemoteManagement permission set: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
   }
 
   if (instanceArn == null || instanceArn === "") {
@@ -241,24 +257,17 @@ async function applyLambdaRolePolicy(props: {
       },
       {
         Effect: "Allow",
-        Action: [sso('*'), identitystore('*')],
+        Action: [sso("*"), identitystore("*")],
         Resource: "*",
       },
       {
         Effect: "Allow",
         Action: [s3("GetObject"), s3("PutObject"), s3("ListBucket")],
-        Resource: [
-          `arn:aws:s3:::${props.bucketName}`,
-          `arn:aws:s3:::${props.bucketName}/*`,
-        ],
+        Resource: [`arn:aws:s3:::${props.bucketName}`, `arn:aws:s3:::${props.bucketName}/*`],
       },
       {
         Effect: "Allow",
-        Action: [
-          logs("CreateLogGroup"),
-          logs("CreateLogStream"),
-          logs("PutLogEvents"),
-        ],
+        Action: [logs("CreateLogGroup"), logs("CreateLogStream"), logs("PutLogEvents")],
         Resource: "arn:aws:logs:*:*:*",
       },
       {
@@ -335,9 +344,7 @@ async function getOrCreateIamRole(props: {
   logger: Logger;
 }): Promise<{ roleArn: string }> {
   try {
-    const getRole = await props.iamClient.send(
-      new GetRoleCommand({ RoleName: lambdaRoleName }),
-    );
+    const getRole = await props.iamClient.send(new GetRoleCommand({ RoleName: lambdaRoleName }));
     const roleArn = getRole.Role?.Arn ?? "";
     if (roleArn === "") {
       throw new Error("IAM role exists but ARN is empty.");
@@ -421,7 +428,7 @@ async function ensureLambdaFunction(props: {
     await props.lambdaClient.send(
       new TagResourceCommand({
         Resource: existingArn,
-        Tags: Object.fromEntries(getStandardTags("remote-execution").map(t => [t.Key, t.Value])),
+        Tags: Object.fromEntries(getStandardTags("remote-execution").map((t) => [t.Key, t.Value])),
       }),
     );
 
@@ -480,7 +487,9 @@ async function createLambdaFunctionWithRetry(props: {
               STATE_BUCKET_NAME: props.bucketName,
             },
           },
-          Tags: Object.fromEntries(getStandardTags("remote-execution").map(t => [t.Key, t.Value])),
+          Tags: Object.fromEntries(
+            getStandardTags("remote-execution").map((t) => [t.Key, t.Value]),
+          ),
         }),
       );
       const lambdaArn = createResult.FunctionArn ?? "";
@@ -493,13 +502,14 @@ async function createLambdaFunctionWithRetry(props: {
       if (!isRoleNotReady || attempt === IAM_PROPAGATION_MAX_ATTEMPTS) {
         throw error;
       }
-      props.logger.log(`Waiting for IAM role to propagate (attempt ${attempt}/${IAM_PROPAGATION_MAX_ATTEMPTS})...`);
+      props.logger.log(
+        `Waiting for IAM role to propagate (attempt ${attempt}/${IAM_PROPAGATION_MAX_ATTEMPTS})...`,
+      );
       await delay(IAM_PROPAGATION_RETRY_INTERVAL_MS);
     }
   }
   throw new Error("Unreachable: retry loop exhausted without throwing.");
 }
-
 
 export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
   const deployment = await readDeploymentFromContext();
@@ -670,12 +680,14 @@ export async function runRemotePlan(input: RemoteCommandInput): Promise<void> {
     context,
   });
 
-  if (plan.operations.length === 0) {
+  const stackSetOperations = computeStackSetOperations(config);
+
+  if (plan.operations.length === 0 && (stackSetOperations?.length ?? 0) === 0) {
     input.logger.log("No changes: aws.config.ts already matches the current remote state.");
     return;
   }
 
-  displayPlan({ plan, logger: input.logger });
+  displayPlan({ plan, stackSetOperations, logger: input.logger });
 }
 
 export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
@@ -709,13 +721,17 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     context,
   });
 
-  if (plan.operations.length === 0) {
+  const stackSetOperations = computeStackSetOperations(config);
+
+  if (plan.operations.length === 0 && (stackSetOperations?.length ?? 0) === 0) {
     input.logger.log("No changes: aws.config.ts already matches the current remote state.");
-    input.logger.log("If you expected changes, verify your config with aws-accounts validate or run with --refresh to fetch fresh state.");
+    input.logger.log(
+      "If you expected changes, verify your config with aws-accounts validate or run with --refresh to fetch fresh state.",
+    );
     return;
   }
 
-  displayPlan({ plan, logger: input.logger });
+  displayPlan({ plan, stackSetOperations, logger: input.logger });
 
   if (plan.operations.some(isDestructiveOperation) && !input.flags.allowDestructive) {
     throw new Error("Destructive operations detected. Pass --allow-destructive to proceed.");
@@ -723,9 +739,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
 
   if (!input.flags.yes) {
     if (process.stdin.isTTY !== true) {
-      throw new Error(
-        "Refusing to apply changes in non-interactive mode without --yes.",
-      );
+      throw new Error("Refusing to apply changes in non-interactive mode without --yes.");
     }
     const readlineInterface = createInterface({
       input: process.stdin,
@@ -751,54 +765,65 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
   });
   const lambdaClient = new LambdaClient(clientConfig);
 
-  input.logger.log("Applying changes remotely...");
-  const stopProgress = startProgressTimer((elapsed) => {
-    input.logger.log(`Still applying... (${elapsed}s)`);
-  });
-  const result = await invokeLambda({
-    lambdaClient,
-    lambdaArn: deployment.lambdaArn,
-    payload: {
-      action: "apply",
-      operations: plan.operations,
-      allowDestructive: input.flags.allowDestructive,
-    },
-  });
-  stopProgress();
+  if (plan.operations.length > 0) {
+    input.logger.log("Applying changes remotely...");
+    const stopProgress = startProgressTimer((elapsed) => {
+      input.logger.log(`Still applying... (${elapsed}s)`);
+    });
+    const result = await invokeLambda({
+      lambdaClient,
+      lambdaArn: deployment.lambdaArn,
+      payload: {
+        action: "apply",
+        operations: plan.operations,
+        allowDestructive: input.flags.allowDestructive,
+      },
+    });
+    stopProgress();
 
-  if (!result.ok) {
-    const error = result.error;
-    if (error.kind === "concurrencyConflict") {
-      input.logger.log("Another apply is in progress. Retry later.");
-      return;
+    if (!result.ok) {
+      const error = result.error;
+      if (error.kind === "concurrencyConflict") {
+        input.logger.log("Another apply is in progress. Retry later.");
+        return;
+      }
+      if (error.kind === "operationFailed") {
+        input.logger.log(
+          `Apply failed at operation ${error.failedOperation + 1} of ${error.totalOperations}: ${error.error}`,
+        );
+        await writeStateCache(cachePath, error.partialState);
+        input.logger.log("State cache updated with partial state.");
+        input.logger.log("Run aws-accounts scan --refresh to refresh state before retrying.");
+        return;
+      }
+      throw new Error(formatLambdaError(error));
     }
-    if (error.kind === "operationFailed") {
-      input.logger.log(
-        `Apply failed at operation ${error.failedOperation + 1} of ${error.totalOperations}: ${error.error}`,
-      );
-      await writeStateCache(cachePath, error.partialState);
-      input.logger.log("State cache updated with partial state.");
-      input.logger.log("Run aws-accounts scan --refresh to refresh state before retrying.");
-      return;
+
+    const response = result.response;
+    if (!("action" in response) || response.action !== "apply") {
+      throw new Error("Unexpected response from Lambda apply action.");
     }
-    throw new Error(formatLambdaError(error));
+
+    input.logger.log(`Applied ${response.operationsCompleted} operation(s).`);
+    await writeStateCache(cachePath, response.state);
+
+    await regenerateTypesFromState({
+      state: response.state,
+      contextPath: contextFilePath,
+      configPath: configFilePath,
+      typesPath: typesFilePath,
+      logger: input.logger,
+    });
   }
 
-  const response = result.response;
-  if (!("action" in response) || response.action !== "apply") {
-    throw new Error("Unexpected response from Lambda apply action.");
+  if (stackSetOperations != null && stackSetOperations.length > 0) {
+    await executeStackSetOperations({
+      stackSetOperations,
+      lambdaClient,
+      lambdaArn: deployment.lambdaArn,
+      logger: input.logger,
+    });
   }
-
-  input.logger.log(`Applied ${response.operationsCompleted} operation(s).`);
-  await writeStateCache(cachePath, response.state);
-
-  await regenerateTypesFromState({
-    state: response.state,
-    contextPath: contextFilePath,
-    configPath: configFilePath,
-    typesPath: typesFilePath,
-    logger: input.logger,
-  });
 }
 
 export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void> {
@@ -838,7 +863,9 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
   await writeFile(contextFilePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf8");
 
   input.logger.log("");
-  input.logger.log("Run init --update to sync your config with new remote features before using plan/apply.");
+  input.logger.log(
+    "Run init --update to sync your config with new remote features before using plan/apply.",
+  );
 }
 
 export async function runRemoteDrift(input: RemoteCommandInput): Promise<void> {
@@ -921,7 +948,9 @@ function warnIfRemotePoliciesNotInConfig(props: {
     props.config.policies.resourceControlPolicies.length > 0;
   if (hasRemotePolicies && !hasLocalPolicies) {
     props.logger.log("");
-    props.logger.log("Warning: remote state contains SCPs/RCPs not present in your config. Proceeding could delete them.");
+    props.logger.log(
+      "Warning: remote state contains SCPs/RCPs not present in your config. Proceeding could delete them.",
+    );
     props.logger.log("Run init --update to sync first.");
     props.logger.log("");
   }
@@ -933,9 +962,7 @@ async function readDeploymentFromContext(): Promise<Deployment> {
     context = await readAwsContextFromFile(contextFilePath);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      throw toPreconditionError(
-        "aws.context.json not found. Run `aws-accounts bootstrap` first.",
-      );
+      throw toPreconditionError("aws.context.json not found. Run `aws-accounts bootstrap` first.");
     }
     throw err;
   }
@@ -955,7 +982,9 @@ async function fetchCurrentState(props: {
     const cache = await readStateCache(cachePath);
     if (cache != null && isCacheFresh(cache, props.deployment.stateCacheTtlSeconds)) {
       const elapsedMinutes = Math.round((Date.now() - new Date(cache.fetchedAt).getTime()) / 60000);
-      props.input.logger.log(`Using cached state (fetched ${elapsedMinutes} minute(s) ago). Use --refresh to force a fresh fetch.`);
+      props.input.logger.log(
+        `Using cached state (fetched ${elapsedMinutes} minute(s) ago). Use --refresh to force a fresh fetch.`,
+      );
       return cache.state;
     }
   }
@@ -1006,14 +1035,17 @@ async function fetchCurrentState(props: {
   return state;
 }
 
-function displayPlan(props: { plan: Plan; logger: Logger }): void {
+function displayPlan(props: {
+  plan: Plan;
+  stackSetOperations?: StackSetOperation[];
+  logger: Logger;
+}): void {
+  const stackSetCount = props.stackSetOperations?.length ?? 0;
   props.logger.log(
-    `Plan: ${props.plan.operations.length} operation(s), ${props.plan.unsupported.length} unsupported diff(s)`,
+    `Plan: ${props.plan.operations.length} operation(s)${stackSetCount > 0 ? `, ${stackSetCount} stackset operation(s)` : ""}, ${props.plan.unsupported.length} unsupported diff(s)`,
   );
 
-  const destructiveOperations = props.plan.operations.filter((op) =>
-    isDestructiveOperation(op),
-  );
+  const destructiveOperations = props.plan.operations.filter((op) => isDestructiveOperation(op));
   if (destructiveOperations.length > 0) {
     props.logger.log(
       `Destructive operations detected: ${destructiveOperations.length}. Apply requires --allow-destructive.`,
@@ -1024,12 +1056,22 @@ function displayPlan(props: { plan: Plan; logger: Logger }): void {
     props.logger.log(formatOperationLine(operation));
   }
 
+  if (props.stackSetOperations != null) {
+    for (const op of props.stackSetOperations) {
+      props.logger.log(
+        `  [stackset] ${op.action} "${op.stackSetName}" targeting ${op.targets.join(", ")}`,
+      );
+    }
+  }
+
   if (props.plan.unsupported.length > 0) {
     props.logger.log("Unsupported diffs:");
     for (const diff of props.plan.unsupported) {
       props.logger.log(`  - ${diff.description} [${diff.category}]`);
     }
-    props.logger.log("These changes require manual action in the AWS Console and will not be applied automatically.");
+    props.logger.log(
+      "These changes require manual action in the AWS Console and will not be applied automatically.",
+    );
   }
 }
 
@@ -1183,20 +1225,14 @@ function formatOperationLine(operation: Operation): string {
   assertUnreachable(operation, "Unsupported operation kind in formatOperationLine.");
 }
 
-function formatPrincipalLabel(
-  principalType: "GROUP" | "USER",
-  principalName: string,
-): string {
+function formatPrincipalLabel(principalType: "GROUP" | "USER", principalName: string): string {
   if (principalType === "GROUP") {
     return `group "${principalName}"`;
   }
   return `user "${principalName}"`;
 }
 
-function formatLambdaError(error: {
-  kind: string;
-  [key: string]: unknown;
-}): string {
+function formatLambdaError(error: { kind: string; [key: string]: unknown }): string {
   if (error.kind === "validation") {
     return `Lambda validation error: ${error.details}`;
   }
@@ -1249,16 +1285,19 @@ async function ensureOrganizationManagementPermissionSet(props: {
   logger: Logger;
 }): Promise<{ permissionSetArn: string }> {
   const permissionSetName = "OrganizationManagement";
-  const description = "Full organization management access for AWS Organizations, IAM Identity Center, and IAM";
+  const description =
+    "Full organization management access for AWS Organizations, IAM Identity Center, and IAM";
   const sessionDuration = "PT4H";
 
   const inlinePolicy = JSON.stringify({
     Version: "2012-10-17",
-    Statement: [{
-      Effect: "Allow",
-      Action: [organizations("*"), sso("*"), identitystore("*"), account("*"), iam("*")],
-      Resource: "*",
-    }],
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: [organizations("*"), sso("*"), identitystore("*"), account("*"), iam("*")],
+        Resource: "*",
+      },
+    ],
   });
 
   const existingArn = await findPermissionSetByName({
@@ -1267,25 +1306,26 @@ async function ensureOrganizationManagementPermissionSet(props: {
     name: permissionSetName,
   });
 
-  const permissionSetArn = existingArn != null
-    ? await updateExistingPermissionSet({
-      ssoAdminClient: props.ssoAdminClient,
-      instanceArn: props.instanceArn,
-      permissionSetArn: existingArn,
-      permissionSetName,
-      description,
-      sessionDuration,
-      logger: props.logger,
-    })
-    : await createNewPermissionSet({
-      ssoAdminClient: props.ssoAdminClient,
-      instanceArn: props.instanceArn,
-      permissionSetName,
-      description,
-      sessionDuration,
-      tags: props.tags,
-      logger: props.logger,
-    });
+  const permissionSetArn =
+    existingArn != null
+      ? await updateExistingPermissionSet({
+          ssoAdminClient: props.ssoAdminClient,
+          instanceArn: props.instanceArn,
+          permissionSetArn: existingArn,
+          permissionSetName,
+          description,
+          sessionDuration,
+          logger: props.logger,
+        })
+      : await createNewPermissionSet({
+          ssoAdminClient: props.ssoAdminClient,
+          instanceArn: props.instanceArn,
+          permissionSetName,
+          description,
+          sessionDuration,
+          tags: props.tags,
+          logger: props.logger,
+        });
 
   await props.ssoAdminClient.send(
     new PutInlinePolicyToPermissionSetCommand({
@@ -1300,7 +1340,7 @@ async function ensureOrganizationManagementPermissionSet(props: {
     new SsoTagResourceCommand({
       InstanceArn: props.instanceArn,
       ResourceArn: permissionSetArn,
-      Tags: props.tags.map(t => ({ Key: t.Key, Value: t.Value })),
+      Tags: props.tags.map((t) => ({ Key: t.Key, Value: t.Value })),
     }),
   );
 
@@ -1320,11 +1360,13 @@ async function ensureOrganizationRemoteManagementPermissionSet(props: {
 
   const inlinePolicy = JSON.stringify({
     Version: "2012-10-17",
-    Statement: [{
-      Effect: "Allow",
-      Action: [lambda("InvokeFunction")],
-      Resource: props.lambdaArn,
-    }],
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: [lambda("InvokeFunction")],
+        Resource: props.lambdaArn,
+      },
+    ],
   });
 
   const existingArn = await findPermissionSetByName({
@@ -1333,25 +1375,26 @@ async function ensureOrganizationRemoteManagementPermissionSet(props: {
     name: permissionSetName,
   });
 
-  const permissionSetArn = existingArn != null
-    ? await updateExistingPermissionSet({
-      ssoAdminClient: props.ssoAdminClient,
-      instanceArn: props.instanceArn,
-      permissionSetArn: existingArn,
-      permissionSetName,
-      description,
-      sessionDuration,
-      logger: props.logger,
-    })
-    : await createNewPermissionSet({
-      ssoAdminClient: props.ssoAdminClient,
-      instanceArn: props.instanceArn,
-      permissionSetName,
-      description,
-      sessionDuration,
-      tags: props.tags,
-      logger: props.logger,
-    });
+  const permissionSetArn =
+    existingArn != null
+      ? await updateExistingPermissionSet({
+          ssoAdminClient: props.ssoAdminClient,
+          instanceArn: props.instanceArn,
+          permissionSetArn: existingArn,
+          permissionSetName,
+          description,
+          sessionDuration,
+          logger: props.logger,
+        })
+      : await createNewPermissionSet({
+          ssoAdminClient: props.ssoAdminClient,
+          instanceArn: props.instanceArn,
+          permissionSetName,
+          description,
+          sessionDuration,
+          tags: props.tags,
+          logger: props.logger,
+        });
 
   await props.ssoAdminClient.send(
     new PutInlinePolicyToPermissionSetCommand({
@@ -1366,7 +1409,7 @@ async function ensureOrganizationRemoteManagementPermissionSet(props: {
     new SsoTagResourceCommand({
       InstanceArn: props.instanceArn,
       ResourceArn: permissionSetArn,
-      Tags: props.tags.map(t => ({ Key: t.Key, Value: t.Value })),
+      Tags: props.tags.map((t) => ({ Key: t.Key, Value: t.Value })),
     }),
   );
 
@@ -1409,7 +1452,7 @@ async function createNewPermissionSet(props: {
       Name: props.permissionSetName,
       Description: props.description,
       SessionDuration: props.sessionDuration,
-      Tags: props.tags.map(t => ({ Key: t.Key, Value: t.Value })),
+      Tags: props.tags.map((t) => ({ Key: t.Key, Value: t.Value })),
     }),
   );
   const permissionSetArn = createResponse.PermissionSet?.PermissionSetArn ?? "";
@@ -1419,7 +1462,6 @@ async function createNewPermissionSet(props: {
   props.logger.log(`Created permission set: ${props.permissionSetName}`);
   return permissionSetArn;
 }
-
 
 async function readLambdaZip(): Promise<Buffer> {
   const thisFile = fileURLToPath(import.meta.url);
@@ -1435,10 +1477,7 @@ async function readLambdaZip(): Promise<Buffer> {
   }
 }
 
-async function waitForLambdaReady(
-  lambdaClient: LambdaClient,
-  functionName: string,
-): Promise<void> {
+async function waitForLambdaReady(lambdaClient: LambdaClient, functionName: string): Promise<void> {
   const maxAttempts = 30;
   for (let i = 0; i < maxAttempts; i++) {
     const response = await lambdaClient.send(
@@ -1456,4 +1495,92 @@ async function waitForLambdaReady(
     await delay(2000);
   }
   throw new Error("Timed out waiting for Lambda function to become ready.");
+}
+
+const validStackSetNames = new Set(["config-recorder", "guardduty-member"]);
+
+function computeStackSetOperations(config: AwsConfigModel): StackSetOperation[] | undefined {
+  const baseline = config.securityBaseline;
+  if (baseline == null || baseline.stackSets.length === 0) return undefined;
+  return baseline.stackSets.flatMap((ss) => {
+    if (!validStackSetNames.has(ss.templateKey)) return [];
+    return [
+      {
+        action: "create" as const,
+        stackSetName: ss.templateKey as "config-recorder" | "guardduty-member",
+        targets: ss.targets,
+        parameters: ss.parameters,
+        regions: [process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "eu-central-1"],
+      },
+    ];
+  });
+}
+
+async function executeStackSetOperations(props: {
+  stackSetOperations: StackSetOperation[];
+  lambdaClient: LambdaClient;
+  lambdaArn: string;
+  logger: Logger;
+}): Promise<void> {
+  for (const op of props.stackSetOperations) {
+    props.logger.log(
+      `  [stackset] deploying "${op.stackSetName}" targeting ${op.targets.join(", ")}...`,
+    );
+
+    const uploadResult = await invokeLambda({
+      lambdaClient: props.lambdaClient,
+      lambdaArn: props.lambdaArn,
+      payload: { action: "getUploadUrl" as const, stackSetName: op.stackSetName },
+    });
+    if (!uploadResult.ok) {
+      throw new Error(
+        `Failed to get upload URL for stackset "${op.stackSetName}": ${formatLambdaError(uploadResult.error)}`,
+      );
+    }
+    const uploadResponse = uploadResult.response;
+    if (!("action" in uploadResponse) || uploadResponse.action !== "getUploadUrl") {
+      throw new Error(
+        `Unexpected response from Lambda getUploadUrl action for "${op.stackSetName}".`,
+      );
+    }
+
+    const templateContent = await resolveTemplateContent(op.stackSetName);
+    const putResponse = await fetch(uploadResponse.url, {
+      method: "PUT",
+      body: templateContent,
+      headers: { "Content-Type": "application/x-yaml" },
+    });
+    if (!putResponse.ok) {
+      throw new Error(`Failed to upload template for "${op.stackSetName}": ${putResponse.status}`);
+    }
+
+    const deployResult = await invokeLambda({
+      lambdaClient: props.lambdaClient,
+      lambdaArn: props.lambdaArn,
+      payload: {
+        action: "deployStackSet" as const,
+        stackSetName: op.stackSetName,
+        targets: op.targets,
+        parameters: op.parameters,
+        regions: op.regions,
+      },
+    });
+    if (!deployResult.ok) {
+      throw new Error(
+        `Failed to deploy stackset "${op.stackSetName}": ${formatLambdaError(deployResult.error)}`,
+      );
+    }
+    props.logger.log(`  [stackset] "${op.stackSetName}" deployed.`);
+  }
+}
+
+async function resolveTemplateContent(templateKey: string): Promise<string> {
+  const userPath = join(process.cwd(), "templates", `${templateKey}.yaml`);
+  try {
+    return await readFile(userPath, "utf8");
+  } catch {
+    const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
+    const defaultPath = join(packageDir, "templates", `${templateKey}.yaml`);
+    return await readFile(defaultPath, "utf8");
+  }
 }

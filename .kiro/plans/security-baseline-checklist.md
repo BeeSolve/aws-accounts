@@ -57,7 +57,7 @@ Reference: `.kiro/plans/security-baseline-stacksets.md`
   - Manage StackSet instances for target OUs
   - Test: create, update, idempotency
 
-- [ ] **Task 8: Add StackSet operation types to plan/apply**
+- [x] **Task 8: Add StackSet operation types to plan/apply**
   - New operation kinds in `src/operations.ts`: `createStackSet`, `updateStackSet`, `deleteStackSet`
   - Diff logic in `src/diff.ts`: compare desired StackSets vs current state
   - Apply logic in `src/applyLogic.ts`: upload template → invoke `deployStackSet`

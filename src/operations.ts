@@ -382,6 +382,14 @@ export const unsupportedDiffSchema = v.strictObject({
   description: v.string(),
 });
 
+export const stackSetOperationSchema = v.strictObject({
+  action: v.picklist(["create", "update"]),
+  stackSetName: v.picklist(["config-recorder", "guardduty-member"]),
+  targets: v.array(v.string()),
+  parameters: v.array(v.strictObject({ key: v.string(), value: v.string() })),
+  regions: v.array(v.string()),
+});
+
 export const planSchema = v.strictObject({
   operations: v.array(operationSchema),
   unsupported: v.array(unsupportedDiffSchema),
@@ -390,3 +398,4 @@ export const planSchema = v.strictObject({
 export type Operation = v.InferOutput<typeof operationSchema>;
 export type UnsupportedDiff = v.InferOutput<typeof unsupportedDiffSchema>;
 export type Plan = v.InferOutput<typeof planSchema>;
+export type StackSetOperation = v.InferOutput<typeof stackSetOperationSchema>;
