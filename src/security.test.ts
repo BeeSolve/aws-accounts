@@ -258,3 +258,63 @@ describe("template resolution", () => {
     assert.ok(guardduty.includes("AWS::GuardDuty::Detector"));
   });
 });
+
+describe("scp.denyRootWithoutMfa", () => {
+  it("returns correct SCP with MFA condition", () => {
+    const { scp } = toPolicies<string, string>();
+    const result = scp.denyRootWithoutMfa();
+    assert.equal(result.name, "DenyRootWithoutMFA");
+    assert.deepEqual(result.targets, ["root"]);
+    const stmt = (result.content as any).Statement[0];
+    assert.equal(stmt.Effect, "Deny");
+    assert.equal(stmt.Action, "*");
+    assert.deepEqual(stmt.Condition.BoolIfExists, { "aws:MultiFactorAuthPresent": "false" });
+    assert.deepEqual(stmt.Condition.StringLike, { "aws:PrincipalArn": "arn:aws:iam::*:root" });
+  });
+
+  it("respects custom targets", () => {
+    const { scp } = toPolicies<string, string>();
+    const result = scp.denyRootWithoutMfa({ targets: ["projects"] });
+    assert.deepEqual(result.targets, ["projects"]);
+  });
+});
+
+describe("withSecurityBaseline rootAccessManagement", () => {
+  const baseConfig = {
+    organizationalUnits: [
+      { name: "root", parentName: null, accounts: [] as Array<{ name: string; email: string; tags: Array<{ key: string; value: string }> }> },
+      {
+        name: "Security",
+        parentName: "root",
+        accounts: [
+          { name: "SecurityAudit", email: "sec@test.com", tags: [] },
+          { name: "LogArchive", email: "log@test.com", tags: [] },
+        ],
+      },
+    ],
+    delegatedAdministrators: [] as Array<{ account: string; servicePrincipal: string }>,
+  };
+
+  it("registers iam.amazonaws.com delegated admin", () => {
+    const result = withSecurityBaseline(baseConfig, {
+      rootAccessManagement: { enabled: true, delegatedAdminAccount: "SecurityAudit" },
+    });
+    assert.ok(result.delegatedAdministrators.some(
+      (d) => d.servicePrincipal === "iam.amazonaws.com" && d.account === "SecurityAudit",
+    ));
+  });
+
+  it("works without delegatedAdminAccount", () => {
+    const result = withSecurityBaseline(baseConfig, {
+      rootAccessManagement: { enabled: true },
+    });
+    assert.ok(!result.delegatedAdministrators.some((d) => d.servicePrincipal === "iam.amazonaws.com"));
+  });
+
+  it("does nothing when disabled", () => {
+    const result = withSecurityBaseline(baseConfig, {
+      rootAccessManagement: { enabled: false },
+    });
+    assert.deepEqual(result.delegatedAdministrators, []);
+  });
+});

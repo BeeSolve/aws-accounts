@@ -156,22 +156,25 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
     logger: input.logger,
   });
 
-  const lambdaArn = await ensureLambdaFunction({
-    lambdaClient: input.lambdaClient,
-    roleArn,
-    lambdaZip,
-    bucketName,
-    resolvedRegion,
-    logger: input.logger,
-  });
-
-  // Persist deployment to context file
   let context: AwsContextFile | null = null;
   try {
     context = await readAwsContextFromFile(contextFilePath);
   } catch {
     // File doesn't exist yet on fresh bootstrap — that's expected
   }
+
+  const lambdaArn = await ensureLambdaFunction({
+    lambdaClient: input.lambdaClient,
+    roleArn,
+    lambdaZip,
+    bucketName,
+    resolvedRegion,
+    lambdaMemoryMb: context?.deployment?.lambdaMemoryMb,
+    lambdaTimeoutSeconds: context?.deployment?.lambdaTimeoutSeconds,
+    logger: input.logger,
+  });
+
+  // Persist deployment to context file
   const cliVersionForBootstrap = await readPackageVersion();
   const deployment: Deployment = {
     profile: input.profile ?? "",
@@ -179,6 +182,8 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
     lambdaArn,
     stateBucketName: bucketName,
     stateCacheTtlSeconds: 300,
+    lambdaMemoryMb: context?.deployment?.lambdaMemoryMb ?? 1024,
+    lambdaTimeoutSeconds: context?.deployment?.lambdaTimeoutSeconds ?? 300,
     cliVersion: cliVersionForBootstrap,
   };
 
@@ -386,6 +391,8 @@ async function ensureLambdaFunction(props: {
   lambdaZip: Buffer;
   bucketName: string;
   resolvedRegion: string;
+  lambdaMemoryMb?: number;
+  lambdaTimeoutSeconds?: number;
   logger: Logger;
 }): Promise<string> {
   try {
@@ -412,10 +419,12 @@ async function ensureLambdaFunction(props: {
     // Wait for the code update to complete before updating configuration
     await waitForLambdaReady(props.lambdaClient, lambdaFunctionName);
 
-    // Ensure environment variables are set
+    // Ensure environment variables and resource limits are set
     await props.lambdaClient.send(
       new UpdateFunctionConfigurationCommand({
         FunctionName: lambdaFunctionName,
+        MemorySize: props.lambdaMemoryMb ?? 1024,
+        Timeout: props.lambdaTimeoutSeconds ?? 300,
         Environment: {
           Variables: {
             STATE_BUCKET_NAME: props.bucketName,
@@ -441,6 +450,8 @@ async function ensureLambdaFunction(props: {
         roleArn: props.roleArn,
         lambdaZip: props.lambdaZip,
         bucketName: props.bucketName,
+        lambdaMemoryMb: props.lambdaMemoryMb,
+        lambdaTimeoutSeconds: props.lambdaTimeoutSeconds,
         logger: props.logger,
       });
 
@@ -467,6 +478,8 @@ async function createLambdaFunctionWithRetry(props: {
   roleArn: string;
   lambdaZip: Buffer;
   bucketName: string;
+  lambdaMemoryMb?: number;
+  lambdaTimeoutSeconds?: number;
   logger: Logger;
 }): Promise<string> {
   for (let attempt = 1; attempt <= IAM_PROPAGATION_MAX_ATTEMPTS; attempt++) {
@@ -478,8 +491,8 @@ async function createLambdaFunctionWithRetry(props: {
           Handler: "handler.handler",
           Role: props.roleArn,
           Code: { ZipFile: props.lambdaZip },
-          Timeout: 900,
-          MemorySize: 512,
+          Timeout: props.lambdaTimeoutSeconds ?? 300,
+          MemorySize: props.lambdaMemoryMb ?? 1024,
           PackageType: "Zip",
           Architectures: ["arm64"],
           Environment: {
@@ -844,6 +857,15 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
 
   const lastModified = updateResult.LastModified ?? "unknown";
   input.logger.log(`Lambda updated. Last modified: ${lastModified}`);
+
+  await waitForLambdaReady(input.lambdaClient, deployment.lambdaArn);
+  await input.lambdaClient.send(
+    new UpdateFunctionConfigurationCommand({
+      FunctionName: deployment.lambdaArn,
+      MemorySize: deployment.lambdaMemoryMb ?? 1024,
+      Timeout: deployment.lambdaTimeoutSeconds ?? 300,
+    }),
+  );
 
   input.logger.log("Updating IAM role policy...");
   await applyLambdaRolePolicy({

@@ -3,6 +3,7 @@ export function toPolicies<T extends string, A extends string>() {
     scp: {
       blockExpensiveResources: blockExpensiveResources<T, A>,
       protectSecurityServices: protectSecurityServices<T, A>,
+      denyRootWithoutMfa: denyRootWithoutMfa<T>,
     },
     backupPolicy: {
       dailyWithRetention: dailyWithRetention<T>,
@@ -162,6 +163,36 @@ function protectSecurityServices<T extends string, A extends string>(
     name: options.name ?? "ProtectSecurityServices",
     description: "Prevents member accounts from disabling CloudTrail, AWS Config, and GuardDuty.",
     content: { Version: "2012-10-17", Statement: statements },
+    targets: options.targets ?? (["root"] as T[]),
+  };
+}
+
+type DenyRootWithoutMfaOptions<T extends string> = {
+  targets?: T[];
+  name?: string;
+};
+
+function denyRootWithoutMfa<T extends string>(
+  options: DenyRootWithoutMfaOptions<T> = {},
+): PolicyEntry<T> {
+  return {
+    name: options.name ?? "DenyRootWithoutMFA",
+    description: "Denies all actions by the root user unless MFA is present.",
+    content: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "DenyRootWithoutMFA",
+          Effect: "Deny",
+          Action: "*",
+          Resource: "*",
+          Condition: {
+            StringLike: { "aws:PrincipalArn": "arn:aws:iam::*:root" },
+            BoolIfExists: { "aws:MultiFactorAuthPresent": "false" },
+          },
+        },
+      ],
+    },
     targets: options.targets ?? (["root"] as T[]),
   };
 }
@@ -429,6 +460,10 @@ type SecurityBaselineOptions<T extends string, A extends string> = {
     targets?: T[];
     findingPublishingFrequency?: "FIFTEEN_MINUTES" | "ONE_HOUR" | "SIX_HOURS";
   };
+  rootAccessManagement?: {
+    enabled: boolean;
+    delegatedAdminAccount?: A;
+  };
 };
 
 type StackSetDeclaration = {
@@ -503,6 +538,15 @@ export function withSecurityBaseline<
         { key: "FindingPublishingFrequency", value: options.guardDuty.findingPublishingFrequency ?? "FIFTEEN_MINUTES" },
       ],
     });
+  }
+
+  if (options.rootAccessManagement?.enabled) {
+    if (options.rootAccessManagement.delegatedAdminAccount != null) {
+      assertAccountExists(options.rootAccessManagement.delegatedAdminAccount);
+      if (!delegatedAdmins.some((d) => d.account === options.rootAccessManagement!.delegatedAdminAccount && d.servicePrincipal === "iam.amazonaws.com")) {
+        delegatedAdmins.push({ account: options.rootAccessManagement.delegatedAdminAccount, servicePrincipal: "iam.amazonaws.com" });
+      }
+    }
   }
 
   return {
