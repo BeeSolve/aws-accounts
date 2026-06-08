@@ -4,6 +4,13 @@ import {
   S3Client,
   S3ServiceException,
 } from "@aws-sdk/client-s3";
+import {
+  CloudFormationClient,
+  CreateStackSetCommand,
+  UpdateStackSetCommand,
+  CreateStackInstancesCommand,
+  DescribeStackSetCommand,
+} from "@aws-sdk/client-cloudformation";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { OrganizationsClient } from "@aws-sdk/client-organizations";
 import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
@@ -35,10 +42,31 @@ const applyRequestSchema = v.strictObject({
   allowDestructive: v.boolean(),
 });
 
+const validStackSetNames = ["config-recorder", "guardduty-member"] as const;
+const stackSetNameSchema = v.picklist(validStackSetNames);
+
+const getUploadUrlRequestSchema = v.strictObject({
+  action: v.literal("getUploadUrl"),
+  stackSetName: stackSetNameSchema,
+});
+
+const deployStackSetRequestSchema = v.strictObject({
+  action: v.literal("deployStackSet"),
+  stackSetName: stackSetNameSchema,
+  targets: v.array(v.string()),
+  parameters: v.array(v.strictObject({
+    key: v.string(),
+    value: v.string(),
+  })),
+  regions: v.array(v.string()),
+});
+
 const lambdaRequestSchema = v.variant("action", [
   scanRequestSchema,
   getStateUrlRequestSchema,
   applyRequestSchema,
+  getUploadUrlRequestSchema,
+  deployStackSetRequestSchema,
 ]);
 
 const scanResponseSchema = v.strictObject({
@@ -92,10 +120,26 @@ const errorResponseSchema = v.strictObject({
   }),
 });
 
+const getUploadUrlResponseSchema = v.strictObject({
+  action: v.literal("getUploadUrl"),
+  success: v.literal(true),
+  url: v.string(),
+  expiresInSeconds: v.number(),
+});
+
+const deployStackSetResponseSchema = v.strictObject({
+  action: v.literal("deployStackSet"),
+  success: v.literal(true),
+  stackSetId: v.string(),
+  operationId: v.string(),
+});
+
 const lambdaResponseSchema = v.union([
   scanResponseSchema,
   getStateUrlResponseSchema,
   applySuccessResponseSchema,
+  getUploadUrlResponseSchema,
+  deployStackSetResponseSchema,
   errorResponseSchema,
 ]);
 
@@ -129,6 +173,7 @@ const lambdaLogger = {
 };
 
 const s3Client = new S3Client({});
+const cloudFormationClient = new CloudFormationClient({});
 const organizationsClient = new OrganizationsClient({});
 const ssoAdminClient = new SSOAdminClient({});
 const identityStoreClient = new IdentitystoreClient({});
@@ -181,6 +226,22 @@ export async function handler(event: unknown): Promise<LambdaResponse> {
       });
       return validateResponse(response);
     }
+    if (request.action === "getUploadUrl") {
+      const response = await handleGetUploadUrl({ s3Client, bucket, stackSetName: request.stackSetName });
+      return validateResponse(response);
+    }
+    if (request.action === "deployStackSet") {
+      const response = await handleDeployStackSet({
+        s3Client,
+        cloudFormationClient,
+        bucket,
+        stackSetName: request.stackSetName,
+        targets: request.targets,
+        parameters: request.parameters,
+        regions: request.regions,
+      });
+      return validateResponse(response);
+    }
     assertUnreachable(request, "Unsupported action in handler.");
   } catch (error: unknown) {
     const message =
@@ -188,6 +249,103 @@ export async function handler(event: unknown): Promise<LambdaResponse> {
     const response = buildErrorResponse("internal", message);
     return validateResponse(response);
   }
+}
+
+const UPLOAD_URL_EXPIRY_SECONDS = 60;
+
+function toTemplateS3Key(stackSetName: string): string {
+  return `stackset-templates/${stackSetName}.yaml`;
+}
+
+async function handleGetUploadUrl(props: {
+  s3Client: S3Client;
+  bucket: string;
+  stackSetName: string;
+}): Promise<LambdaResponse> {
+  const command = new PutObjectCommand({
+    Bucket: props.bucket,
+    Key: toTemplateS3Key(props.stackSetName),
+  });
+  const url = await getSignedUrl(props.s3Client, command, {
+    expiresIn: UPLOAD_URL_EXPIRY_SECONDS,
+  });
+  return {
+    action: "getUploadUrl" as const,
+    success: true,
+    url,
+    expiresInSeconds: UPLOAD_URL_EXPIRY_SECONDS,
+  };
+}
+
+async function handleDeployStackSet(props: {
+  s3Client: S3Client;
+  cloudFormationClient: CloudFormationClient;
+  bucket: string;
+  stackSetName: string;
+  targets: string[];
+  parameters: Array<{ key: string; value: string }>;
+  regions: string[];
+}): Promise<LambdaResponse> {
+  const templateObj = await props.s3Client.send(
+    new GetObjectCommand({ Bucket: props.bucket, Key: toTemplateS3Key(props.stackSetName) }),
+  );
+  const templateBody = await templateObj.Body!.transformToString();
+
+  const cfnParams = props.parameters.map((p) => ({
+    ParameterKey: p.key,
+    ParameterValue: p.value,
+  }));
+
+  let stackSetId: string;
+  let operationId: string;
+
+  try {
+    await props.cloudFormationClient.send(
+      new DescribeStackSetCommand({ StackSetName: props.stackSetName }),
+    );
+    const updateResult = await props.cloudFormationClient.send(
+      new UpdateStackSetCommand({
+        StackSetName: props.stackSetName,
+        TemplateBody: templateBody,
+        Parameters: cfnParams,
+        Capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"],
+      }),
+    );
+    stackSetId = props.stackSetName;
+    operationId = updateResult.OperationId ?? "update-in-progress";
+  } catch (error: unknown) {
+    if ((error as { name?: string }).name === "StackSetNotFoundException") {
+      const createResult = await props.cloudFormationClient.send(
+        new CreateStackSetCommand({
+          StackSetName: props.stackSetName,
+          TemplateBody: templateBody,
+          Parameters: cfnParams,
+          PermissionModel: "SERVICE_MANAGED",
+          AutoDeployment: { Enabled: true, RetainStacksOnAccountRemoval: false },
+          Capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"],
+        }),
+      );
+      stackSetId = createResult.StackSetId ?? props.stackSetName;
+
+      const instanceResult = await props.cloudFormationClient.send(
+        new CreateStackInstancesCommand({
+          StackSetName: props.stackSetName,
+          Regions: props.regions,
+          DeploymentTargets: { OrganizationalUnitIds: props.targets },
+        }),
+      );
+      operationId = instanceResult.OperationId ?? "create-in-progress";
+    } else {
+      throw error;
+    }
+  }
+
+  return {
+    action: "deployStackSet" as const,
+    success: true,
+    stackSetId,
+    operationId,
+  };
 }
 
 function buildErrorResponse(

@@ -23,10 +23,28 @@ const applyRequestSchema = v.strictObject({
   allowDestructive: v.boolean(),
 });
 
+const getUploadUrlRequestSchema = v.strictObject({
+  action: v.literal("getUploadUrl"),
+  stackSetName: v.picklist(["config-recorder", "guardduty-member"]),
+});
+
+const deployStackSetRequestSchema = v.strictObject({
+  action: v.literal("deployStackSet"),
+  stackSetName: v.picklist(["config-recorder", "guardduty-member"]),
+  targets: v.array(v.string()),
+  parameters: v.array(v.strictObject({
+    key: v.string(),
+    value: v.string(),
+  })),
+  regions: v.array(v.string()),
+});
+
 export const lambdaRequestSchema = v.variant("action", [
   scanRequestSchema,
   getStateUrlRequestSchema,
   applyRequestSchema,
+  getUploadUrlRequestSchema,
+  deployStackSetRequestSchema,
 ]);
 
 export type LambdaRequestPayload = v.InferOutput<typeof lambdaRequestSchema>;
@@ -82,10 +100,26 @@ const errorResponseSchema = v.strictObject({
   }),
 });
 
+const getUploadUrlResponseSchema = v.strictObject({
+  action: v.literal("getUploadUrl"),
+  success: v.literal(true),
+  url: v.string(),
+  expiresInSeconds: v.number(),
+});
+
+const deployStackSetResponseSchema = v.strictObject({
+  action: v.literal("deployStackSet"),
+  success: v.literal(true),
+  stackSetId: v.string(),
+  operationId: v.string(),
+});
+
 export const lambdaResponseSchema = v.union([
   scanResponseSchema,
   getStateUrlResponseSchema,
   applySuccessResponseSchema,
+  getUploadUrlResponseSchema,
+  deployStackSetResponseSchema,
   errorResponseSchema,
 ]);
 

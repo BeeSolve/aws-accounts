@@ -12,6 +12,7 @@ import { runGraveyardCloseCommand, runGraveyardCommand } from "./commands/gravey
 import { runProfileCommand } from "./commands/profile.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
 import { runValidateCommand } from "./commands/validate.js";
+import { runConfigRevealCommand } from "./commands/configReveal.js";
 import {
   runRemoteBootstrap,
   runRemoteScan,
@@ -36,6 +37,7 @@ const commands = [
   "regenerate",
   "validate",
   "graveyard",
+  "config",
   "profile",
   "plan",
   "apply",
@@ -63,6 +65,7 @@ async function main(): Promise<void> {
       update: { type: "boolean", default: false },
       "sso-start-url": { type: "string" },
       "sso-session": { type: "string", default: "sso" },
+      force: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -134,6 +137,16 @@ async function main(): Promise<void> {
       contextPath,
     });
     return;
+  }
+
+  if (command === "config") {
+    const subcommand = args.positionals[1];
+    if (subcommand === "reveal") {
+      await runConfigRevealCommand({ logger, force: args.values.force === true });
+      return;
+    }
+    printHelp(logger);
+    throw toUsageError(`Unknown config subcommand: "${subcommand}". Valid subcommands: reveal`);
   }
 
   if (command === "profile") {

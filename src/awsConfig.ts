@@ -201,6 +201,23 @@ export const awsConfigModelSchema = v.strictObject({
       }),
     ),
   }),
+  securityBaseline: v.optional(
+    v.strictObject({
+      stackSets: v.array(
+        v.strictObject({
+          name: v.string(),
+          templateKey: v.string(),
+          targets: v.array(v.string()),
+          parameters: v.array(
+            v.strictObject({
+              key: v.string(),
+              value: v.string(),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
 });
 
 export type AwsConfigModel = v.InferOutput<typeof awsConfigModelSchema>;
@@ -1632,7 +1649,7 @@ function renderAwsConfigTypesTs(props: { config: AwsConfigModel }): string {
 
   return `import * as v from "valibot";
 import { iamPolicyDocumentSchema } from "@beesolve/iam-policy-ts";
-import { toPolicies } from "@beesolve/aws-accounts/policies";
+import { toPolicies } from "@beesolve/aws-accounts/security";
 export * as iam from "@beesolve/iam-policy-ts";
 export {
   iamActionCatalog,
@@ -1802,6 +1819,23 @@ export const awsConfigSchema = v.strictObject({
       }),
     ),
   }),
+  securityBaseline: v.optional(
+    v.strictObject({
+      stackSets: v.array(
+        v.strictObject({
+          name: v.string(),
+          templateKey: v.string(),
+          targets: v.array(v.union([organizationalUnitNameSchema, accountNameSchema])),
+          parameters: v.array(
+            v.strictObject({
+              key: v.string(),
+              value: v.string(),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
 });
 
 export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;

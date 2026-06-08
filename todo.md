@@ -1,0 +1,1 @@
+- [ ] lambda function memory and timeout should be configurable through generated aws.context.json - the default values should be 1025MiB and 5m and they should be written to the config as well

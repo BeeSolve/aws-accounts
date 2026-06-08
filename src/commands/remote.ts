@@ -271,6 +271,22 @@ async function applyLambdaRolePolicy(props: {
         ],
         Resource: "*",
       },
+      {
+        Effect: "Allow",
+        Action: [
+          "cloudformation:CreateStackSet",
+          "cloudformation:UpdateStackSet",
+          "cloudformation:DeleteStackSet",
+          "cloudformation:DescribeStackSet",
+          "cloudformation:DescribeStackSetOperation",
+          "cloudformation:ListStackSets",
+          "cloudformation:ListStackInstances",
+          "cloudformation:CreateStackInstances",
+          "cloudformation:UpdateStackInstances",
+          "cloudformation:DeleteStackInstances",
+        ],
+        Resource: "*",
+      },
     ],
   });
 

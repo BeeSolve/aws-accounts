@@ -60,6 +60,7 @@ After `init`, `aws.config.ts` is your source of truth. Edit it to add accounts, 
 | `upgrade` | Updates the deployed Lambda function code |
 | `scan` | Refreshes remote state in S3 (advanced/recovery use) |
 | `validate` | Validates `aws.config.ts` locally without hitting AWS |
+| `config reveal` | Copies default CloudFormation templates to your project for customization |
 | `graveyard` | Lists accounts parked in the Graveyard OU |
 | `profile` | Generates an AWS CLI SSO profile block from local state |
 
@@ -298,6 +299,88 @@ scp.blockExpensiveResources({
   allowedEc2InstanceTypes: ["t3.micro", "t3.small", "t4g.medium", "m8g.medium"],
 })
 ```
+
+## Security Baseline
+
+The `withSecurityBaseline()` wrapper enables AWS security best practices — organization CloudTrail, AWS Config recorders, and GuardDuty — through a single config enhancement. Import from `@beesolve/aws-accounts/security`:
+
+```ts
+import { withSecurityBaseline } from "@beesolve/aws-accounts/security";
+```
+
+### Recommended Security OU
+
+Add this to your `organizationalUnits` array:
+
+```ts
+{
+  name: "Security",
+  parentName: "root",
+  accounts: [
+    { name: "SecurityAudit", email: "security-audit@yourdomain.com", tags: [] },
+    { name: "LogArchive", email: "log-archive@yourdomain.com", tags: [] },
+  ],
+},
+```
+
+### Usage
+
+Wrap your config with `withSecurityBaseline()`:
+
+```ts
+const awsConfig = withSecurityBaseline(
+  {
+    organizationalUnits: [/* your config */],
+    delegatedAdministrators: [],
+    // ... rest of standard config
+  },
+  {
+    cloudTrail: {
+      enabled: true,
+      delegatedAdminAccount: "SecurityAudit",
+      logArchiveAccount: "LogArchive",
+    },
+    configRecorder: {
+      enabled: true,
+      delegatedAdminAccount: "SecurityAudit",
+      deliveryBucketAccount: "LogArchive",
+      targets: ["root"],
+    },
+    guardDuty: {
+      enabled: true,
+      delegatedAdminAccount: "SecurityAudit",
+    },
+  },
+);
+
+export default awsConfig;
+```
+
+The function:
+- Registers delegated administrators for enabled services
+- Records StackSet deployment metadata for per-account infrastructure (Config recorders, GuardDuty detectors)
+- Validates that referenced account names exist in your config
+
+All features are opt-in. Omit a section or set `enabled: false` to skip it.
+
+### Configurable Parameters
+
+| Feature | Parameter | Default | Description |
+|---------|-----------|---------|-------------|
+| Config Recorder | `recordAllResourceTypes` | `true` | Record all resource types |
+| Config Recorder | `includeGlobalResources` | `true` | Include IAM and global resources |
+| Config Recorder | `deliveryFrequency` | `"TwentyFour_Hours"` | Snapshot delivery frequency |
+| GuardDuty | `findingPublishingFrequency` | `"FIFTEEN_MINUTES"` | Finding export frequency |
+
+### Template Overrides
+
+Default CloudFormation templates ship with the package. To customize:
+
+```bash
+npx aws-accounts config reveal
+```
+
+This copies templates to `./templates/` in your project. Local copies take precedence over package defaults. The tool won't overwrite existing files.
 
 ## FAQ
 
