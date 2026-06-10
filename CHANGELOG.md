@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.6.0
+
+### Minor Changes
+
+- 56adb49: Add security baseline StackSet deployments, Config aggregator, delivery bucket creation, async StackSet tracking, CloudWatch log group management, cross-account role assumption, and declaration generation for the security sub-path export.
+
 ## 1.5.0
 
 ### Minor Changes
