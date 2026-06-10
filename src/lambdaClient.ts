@@ -25,18 +25,53 @@ const applyRequestSchema = v.strictObject({
 
 const getUploadUrlRequestSchema = v.strictObject({
   action: v.literal("getUploadUrl"),
-  stackSetName: v.picklist(["config-recorder", "guardduty-member"]),
+  stackSetName: v.picklist(["security-setup", "config-recorder", "guardduty-member"]),
 });
 
 const deployStackSetRequestSchema = v.strictObject({
   action: v.literal("deployStackSet"),
-  stackSetName: v.picklist(["config-recorder", "guardduty-member"]),
+  stackSetName: v.picklist(["security-setup", "config-recorder", "guardduty-member"]),
   targets: v.array(v.string()),
   parameters: v.array(v.strictObject({
     key: v.string(),
     value: v.string(),
   })),
   regions: v.array(v.string()),
+  waitForCompletion: v.optional(v.boolean()),
+});
+
+const createConfigDeliveryBucketRequestSchema = v.strictObject({
+  action: v.literal("createConfigDeliveryBucket"),
+  targetAccountId: v.string(),
+  bucketName: v.string(),
+  region: v.string(),
+});
+
+const recordDeployedStackSetsRequestSchema = v.strictObject({
+  action: v.literal("recordDeployedStackSets"),
+  stackSets: v.array(v.strictObject({
+    name: v.string(),
+    targets: v.array(v.string()),
+  })),
+  pendingOperations: v.optional(v.array(v.strictObject({
+    stackSetName: v.string(),
+    operationId: v.string(),
+    startedAt: v.string(),
+  }))),
+});
+
+const createConfigAggregatorRequestSchema = v.strictObject({
+  action: v.literal("createConfigAggregator"),
+  targetAccountId: v.string(),
+  region: v.string(),
+});
+
+const checkPendingStackSetsRequestSchema = v.strictObject({
+  action: v.literal("checkPendingStackSets"),
+  operations: v.array(v.strictObject({
+    stackSetName: v.string(),
+    operationId: v.string(),
+  })),
 });
 
 export const lambdaRequestSchema = v.variant("action", [
@@ -45,6 +80,10 @@ export const lambdaRequestSchema = v.variant("action", [
   applyRequestSchema,
   getUploadUrlRequestSchema,
   deployStackSetRequestSchema,
+  createConfigDeliveryBucketRequestSchema,
+  recordDeployedStackSetsRequestSchema,
+  createConfigAggregatorRequestSchema,
+  checkPendingStackSetsRequestSchema,
 ]);
 
 export type LambdaRequestPayload = v.InferOutput<typeof lambdaRequestSchema>;
@@ -114,12 +153,43 @@ const deployStackSetResponseSchema = v.strictObject({
   operationId: v.string(),
 });
 
+const createConfigDeliveryBucketResponseSchema = v.strictObject({
+  action: v.literal("createConfigDeliveryBucket"),
+  success: v.literal(true),
+  bucketName: v.string(),
+  created: v.boolean(),
+});
+
+const recordDeployedStackSetsResponseSchema = v.strictObject({
+  action: v.literal("recordDeployedStackSets"),
+  success: v.literal(true),
+});
+
+const createConfigAggregatorResponseSchema = v.strictObject({
+  action: v.literal("createConfigAggregator"),
+  success: v.literal(true),
+});
+
+const checkPendingStackSetsResponseSchema = v.strictObject({
+  action: v.literal("checkPendingStackSets"),
+  success: v.literal(true),
+  results: v.array(v.strictObject({
+    stackSetName: v.string(),
+    operationId: v.string(),
+    status: v.string(),
+  })),
+});
+
 export const lambdaResponseSchema = v.union([
   scanResponseSchema,
   getStateUrlResponseSchema,
   applySuccessResponseSchema,
   getUploadUrlResponseSchema,
   deployStackSetResponseSchema,
+  createConfigDeliveryBucketResponseSchema,
+  recordDeployedStackSetsResponseSchema,
+  createConfigAggregatorResponseSchema,
+  checkPendingStackSetsResponseSchema,
   errorResponseSchema,
 ]);
 
@@ -303,6 +373,7 @@ function buildEmptyStateForError(): StateFile {
     version: "1",
     generatedAt: new Date().toISOString(),
     organization: {
+      organizationId: "o-test123",
       rootId: "",
       organizationalUnits: [],
       accounts: [],

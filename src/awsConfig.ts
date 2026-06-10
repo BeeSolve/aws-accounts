@@ -50,6 +50,7 @@ const deploymentSchema = v.strictObject({
   stateCacheTtlSeconds: v.number(),
   lambdaMemoryMb: v.optional(v.number()),
   lambdaTimeoutSeconds: v.optional(v.number()),
+  logsRetentionDays: v.optional(v.number()),
   cliVersion: v.string(),
 });
 
@@ -59,6 +60,7 @@ const awsContextSchema = v.strictObject({
   version: nonEmptyString,
   generatedAt: nonEmptyString,
   organization: v.strictObject({
+    id: v.optional(nonEmptyString),
     managementAccountId: nonEmptyString,
     rootId: nonEmptyString,
     graveyardOuId: nonEmptyString,
@@ -216,6 +218,11 @@ export const awsConfigModelSchema = v.strictObject({
               value: v.string(),
             }),
           ),
+        }),
+      ),
+      configDeliveryBucket: v.optional(
+        v.strictObject({
+          accountName: v.string(),
         }),
       ),
     }),
@@ -863,7 +870,7 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
         arn: matchedAccount?.arn ?? pendingCreationId,
         name: account.name,
         email: account.email,
-        status: matchedAccount?.status ?? "ACTIVE",
+        state: matchedAccount?.state ?? "ACTIVE",
         parentId: ownerParentId,
         tags: account.tags,
         alternateContacts:
@@ -1103,6 +1110,7 @@ export function mapAwsConfigToState(props: MapAwsConfigToStateProps): StateFile 
     version: props.currentState.version,
     generatedAt: props.currentState.generatedAt,
     organization: {
+      organizationId: props.currentState.organization.organizationId,
       rootId: props.context.organization.rootId,
       organizationalUnits: mappedOrganizationalUnits,
       accounts: mappedAccounts,
@@ -1492,7 +1500,7 @@ function renderAwsConfigTypesTs(props: { config: AwsConfigModel }): string {
 
   return `import * as v from "valibot";
 import { iamPolicyDocumentSchema } from "@beesolve/iam-policy-ts";
-import { toPolicies } from "@beesolve/aws-accounts/security";
+import { toPolicies, toSecurityBaseline, type SecurityBaselineOptions } from "@beesolve/aws-accounts/security";
 export * as iam from "@beesolve/iam-policy-ts";
 export {
   iamActionCatalog,
@@ -1677,6 +1685,11 @@ export const awsConfigSchema = v.strictObject({
           ),
         }),
       ),
+      configDeliveryBucket: v.optional(
+        v.strictObject({
+          accountName: accountNameSchema,
+        }),
+      ),
     }),
   ),
 });
@@ -1686,6 +1699,7 @@ export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;
 type PolicyTarget = v.InferOutput<typeof organizationalUnitNameSchema> | v.InferOutput<typeof accountNameSchema>;
 type AccountName = v.InferOutput<typeof accountNameSchema>;
 export const policies = toPolicies<PolicyTarget, AccountName>();
+export function withSecurityBaseline<C extends Parameters<typeof toSecurityBaseline>[0]>(config: C, options: SecurityBaselineOptions<PolicyTarget, AccountName>) { return toSecurityBaseline(config, options); }
 `;
 }
 

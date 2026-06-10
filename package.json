@@ -2,11 +2,12 @@
   "name": "@beesolve/aws-accounts",
   "version": "1.5.0",
   "description": "AWS Organizations and IAM Identity Center management CLI",
-  "main": "dist/cli.js",
-  "exports": {
-    ".": "./dist/cli.js",
-    "./policies": "./dist/security.js",
-    "./security": "./dist/security.js"
+  "keywords": [],
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BeeSolve/aws-accounts.git"
   },
   "bin": {
     "aws-accounts": "bin/cli.js"
@@ -18,17 +19,22 @@
     "dist-lambda",
     "templates"
   ],
+  "type": "module",
+  "main": "dist/cli.js",
+  "exports": {
+    ".": "./dist/cli.js",
+    "./security": {
+      "types": "./dist/security.d.ts",
+      "default": "./dist/security.js"
+    }
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/BeeSolve/aws-accounts.git"
-  },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && esbuild $(find src -name '*.ts' ! -name '*.test.ts') --platform=node --target=node24 --format=esm --outdir=dist --outbase=src",
+    "build": "npm run clean && esbuild $(find src -name '*.ts' ! -name '*.test.ts') --platform=node --target=node24 --format=esm --outdir=dist --outbase=src && tsc -p tsconfig.declarations.json",
     "build:lambda": "node scripts/buildLambda.ts",
     "build:tests": "find dist -name '*.test.js' -delete && esbuild \"src/**/*.test.ts\" --platform=node --target=node24 --format=esm --outdir=dist --outbase=src",
     "cli": "npm run build && node dist/cli.js",
@@ -36,13 +42,11 @@
     "test": "npm run build && npm run build:tests && node --experimental-test-module-mocks --test \"dist/**/*.test.js\"",
     "prepublishOnly": "npm run typecheck && npm run build && npm run build:lambda"
   },
-  "keywords": [],
-  "author": "",
-  "license": "MIT",
-  "type": "module",
   "dependencies": {
     "@aws-sdk/client-account": "^3.1063.0",
     "@aws-sdk/client-cloudformation": "^3.1063.0",
+    "@aws-sdk/client-cloudwatch-logs": "3.1065.0",
+    "@aws-sdk/client-config-service": "3.1065.0",
     "@aws-sdk/client-iam": "^3.1063.0",
     "@aws-sdk/client-identitystore": "^3.1063.0",
     "@aws-sdk/client-lambda": "^3.1063.0",

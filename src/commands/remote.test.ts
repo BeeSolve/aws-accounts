@@ -59,6 +59,7 @@ function createValidContextFile(opts?: { withDeployment?: boolean }) {
     version: "1",
     generatedAt: "2026-01-01T00:00:00.000Z",
     organization: {
+      id: "o-test123",
       managementAccountId: "123456789012",
       rootId: "r-root",
       graveyardOuId: "ou-graveyard",
@@ -553,6 +554,7 @@ function createMinimalState() {
     version: "1",
     generatedAt: "2026-01-01T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [
         { id: "ou-pending", parentId: "r-root", arn: "arn:ou:pending", name: "Pending" },
@@ -563,7 +565,7 @@ function createMinimalState() {
           arn: "arn:acct:1",
           name: "TestAccount",
           email: "test@example.com",
-          status: "ACTIVE",
+          state: "ACTIVE",
           parentId: "ou-pending",
           tags: [],
         },

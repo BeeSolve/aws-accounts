@@ -17,7 +17,7 @@ const accountIdArb = fc.stringMatching(/^\d{12}$/);
 const accountArb = fc.record({
   id: accountIdArb,
   name: nonEmptyStringArb,
-  status: fc.constantFrom("ACTIVE" as const, "SUSPENDED" as const),
+  state: fc.constantFrom("ACTIVE" as const, "SUSPENDED" as const),
   parentId: fc.constantFrom("ou-graveyard", "ou-other"),
 });
 
@@ -44,11 +44,11 @@ test("Property 4: Graveyard close safety — only ACTIVE graveyard accounts prod
 
           for (const account of accounts) {
             const appearsInOutput = output.includes(`--account-id ${account.id}`);
-            const shouldAppear = account.parentId === "ou-graveyard" && account.status === "ACTIVE";
+            const shouldAppear = account.parentId === "ou-graveyard" && account.state === "ACTIVE";
             assert.equal(
               appearsInOutput,
               shouldAppear,
-              `account ${account.id} (parentId=${account.parentId}, status=${account.status}): expected in output=${shouldAppear}`,
+              `account ${account.id} (parentId=${account.parentId}, state=${account.state}): expected in output=${shouldAppear}`,
             );
           }
         } finally {
@@ -66,7 +66,7 @@ test("Property 4: Graveyard close safety — only ACTIVE graveyard accounts prod
 async function writeFixtures(props: {
   cachePath: string;
   contextPath: string;
-  accounts: Array<{ id: string; name: string; status: string; parentId: string }>;
+  accounts: Array<{ id: string; name: string; state: string; parentId: string }>;
 }): Promise<void> {
   const cache = {
     fetchedAt: "2026-05-01T00:00:00.000Z",
@@ -74,6 +74,7 @@ async function writeFixtures(props: {
       version: "1",
       generatedAt: "2026-05-01T00:00:00.000Z",
       organization: {
+        organizationId: "o-test123",
         rootId: "r-root",
         organizationalUnits: [
           { id: "ou-graveyard", parentId: "r-root", arn: "arn:aws:organizations:::ou/graveyard", name: "Graveyard" },
@@ -84,7 +85,7 @@ async function writeFixtures(props: {
           arn: `arn:aws:organizations:::account/${a.id}`,
           name: a.name,
           email: `${a.id}@example.com`,
-          status: a.status,
+          state: a.state,
           parentId: a.parentId,
           tags: [],
         })),
@@ -106,7 +107,7 @@ async function writeFixtures(props: {
   const context = {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
-    organization: { managementAccountId: "999999999999", rootId: "r-root", graveyardOuId: "ou-graveyard" },
+    organization: { id: "o-test123", managementAccountId: "999999999999", rootId: "r-root", graveyardOuId: "ou-graveyard" },
     identityCenter: { instanceArn: "arn:aws:sso:::instance/ssoins-123", identityStoreId: "d-123" },
     deployment: { profile: "default", region: "eu-central-1", lambdaArn: "", stateBucketName: "", stateCacheTtlSeconds: 300, cliVersion: "0.0.0-test" },
   };

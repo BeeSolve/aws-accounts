@@ -26,6 +26,7 @@ test("validateState rejects unknown fields", () => {
     version: "1",
     generatedAt: "2026-05-06T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [],
       accounts: []
@@ -52,6 +53,7 @@ test("validateState rejects invalid principalType", () => {
     version: "1",
     generatedAt: "2026-05-06T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [],
       accounts: []
@@ -124,7 +126,7 @@ test("working state helpers update organization records immutably", () => {
       arn: "arn:3",
       name: "C",
       email: "c@example.com",
-      status: "ACTIVE",
+      state: "ACTIVE",
       tags: [],
       parentId: "ou-c"
     }
@@ -284,14 +286,15 @@ function createSampleState() {
     version: "1",
     generatedAt: "2026-05-06T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [
         { id: "ou-a", parentId: "r-root", arn: "arn:1", name: "Alpha" },
         { id: "ou-b", parentId: "r-root", arn: "arn:2", name: "Beta" }
       ],
       accounts: [
-        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", status: "ACTIVE", tags: [], parentId: "ou-a" },
-        { id: "222222222222", arn: "arn:2", name: "B", email: "b@example.com", status: "ACTIVE", tags: [], parentId: "ou-b" }
+        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", state: "ACTIVE", tags: [], parentId: "ou-a" },
+        { id: "222222222222", arn: "arn:2", name: "B", email: "b@example.com", state: "ACTIVE", tags: [], parentId: "ou-b" }
       ],
       policies: [],
       policyAttachments: []

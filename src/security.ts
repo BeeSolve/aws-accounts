@@ -439,7 +439,7 @@ function toExtemptAccountsCondition(exemptAccounts: string[]): Record<string, un
   return { StringNotEquals: { "aws:PrincipalAccount": exemptAccounts } };
 }
 
-type SecurityBaselineOptions<T extends string, A extends string> = {
+export type SecurityBaselineOptions<T extends string, A extends string> = {
   cloudTrail?: {
     enabled: boolean;
     delegatedAdminAccount: A;
@@ -452,7 +452,12 @@ type SecurityBaselineOptions<T extends string, A extends string> = {
     targets: T[];
     recordAllResourceTypes?: boolean;
     includeGlobalResources?: boolean;
-    deliveryFrequency?: "One_Hour" | "Three_Hours" | "Six_Hours" | "Twelve_Hours" | "TwentyFour_Hours";
+    deliveryFrequency?:
+      | "One_Hour"
+      | "Three_Hours"
+      | "Six_Hours"
+      | "Twelve_Hours"
+      | "TwentyFour_Hours";
   };
   guardDuty?: {
     enabled: boolean;
@@ -476,11 +481,17 @@ type StackSetDeclaration = {
 type SecurityBaselineExtension = {
   securityBaseline?: {
     stackSets: StackSetDeclaration[];
+    configDeliveryBucket?: {
+      accountName: string;
+    };
   };
 };
 
-export function withSecurityBaseline<
-  C extends { organizationalUnits: Array<{ accounts: Array<{ name: string }> }>; delegatedAdministrators: Array<{ account: string; servicePrincipal: string }> },
+export function toSecurityBaseline<
+  C extends {
+    organizationalUnits: Array<{ name: string; accounts: Array<{ name: string }> }>;
+    delegatedAdministrators: Array<{ account: string; servicePrincipal: string }>;
+  },
   T extends string,
   A extends string,
 >(config: C, options: SecurityBaselineOptions<T, A>): C & SecurityBaselineExtension {
@@ -500,60 +511,151 @@ export function withSecurityBaseline<
   const stackSets: StackSetDeclaration[] = [];
 
   if (options.cloudTrail?.enabled) {
-    assertAccountExists(options.cloudTrail.delegatedAdminAccount);
-    assertAccountExists(options.cloudTrail.logArchiveAccount);
-    if (!delegatedAdmins.some((d) => d.account === options.cloudTrail!.delegatedAdminAccount && d.servicePrincipal === "cloudtrail.amazonaws.com")) {
-      delegatedAdmins.push({ account: options.cloudTrail.delegatedAdminAccount, servicePrincipal: "cloudtrail.amazonaws.com" });
+    const { cloudTrail } = options;
+    assertAccountExists(cloudTrail.delegatedAdminAccount);
+    assertAccountExists(cloudTrail.logArchiveAccount);
+    if (
+      !delegatedAdmins.some(
+        (d) =>
+          d.account === cloudTrail.delegatedAdminAccount &&
+          d.servicePrincipal === "cloudtrail.amazonaws.com",
+      )
+    ) {
+      delegatedAdmins.push({
+        account: cloudTrail.delegatedAdminAccount,
+        servicePrincipal: "cloudtrail.amazonaws.com",
+      });
     }
   }
 
   if (options.configRecorder?.enabled) {
-    assertAccountExists(options.configRecorder.delegatedAdminAccount);
-    assertAccountExists(options.configRecorder.deliveryBucketAccount);
-    if (!delegatedAdmins.some((d) => d.account === options.configRecorder!.delegatedAdminAccount && d.servicePrincipal === "config.amazonaws.com")) {
-      delegatedAdmins.push({ account: options.configRecorder.delegatedAdminAccount, servicePrincipal: "config.amazonaws.com" });
+    const { configRecorder } = options;
+    assertAccountExists(configRecorder.delegatedAdminAccount);
+    assertAccountExists(configRecorder.deliveryBucketAccount);
+    const delegatedAdminOu = config.organizationalUnits.find((ou) =>
+      ou.accounts.some((a) => a.name === configRecorder.delegatedAdminAccount),
+    );
+    const deliveryBucketOu = config.organizationalUnits.find((ou) =>
+      ou.accounts.some((a) => a.name === configRecorder.deliveryBucketAccount),
+    );
+    if (!delegatedAdminOu || !deliveryBucketOu) {
+      throw new Error("configRecorder accounts must belong to an organizational unit.");
     }
+    if (delegatedAdminOu.name !== deliveryBucketOu.name) {
+      throw new Error(
+        `configRecorder.delegatedAdminAccount ("${String(configRecorder.delegatedAdminAccount)}") is in OU "${delegatedAdminOu.name}" ` +
+        `but deliveryBucketAccount ("${String(configRecorder.deliveryBucketAccount)}") is in OU "${deliveryBucketOu.name}". ` +
+        `Both must be in the same security OU.`,
+      );
+    }
+    if (
+      !delegatedAdmins.some(
+        (d) =>
+          d.account === configRecorder.delegatedAdminAccount &&
+          d.servicePrincipal === "config.amazonaws.com",
+      )
+    ) {
+      delegatedAdmins.push({
+        account: configRecorder.delegatedAdminAccount,
+        servicePrincipal: "config.amazonaws.com",
+      });
+    }
+    const bucketAccountOu = config.organizationalUnits.find((ou) =>
+      ou.accounts.some((a) => a.name === configRecorder.deliveryBucketAccount),
+    );
+    if (!bucketAccountOu) {
+      throw new Error(`Could not find OU containing delivery bucket account "${configRecorder.deliveryBucketAccount}".`);
+    }
+    stackSets.push({
+      name: "SecurityBaseline-SecuritySetup",
+      templateKey: "security-setup",
+      targets: [String(bucketAccountOu.name)],
+      parameters: [
+        { key: "ManagementAccountId", value: "{{MANAGEMENT_ACCOUNT_ID}}" },
+        { key: "BucketName", value: "{{DELIVERY_BUCKET_NAME}}" },
+      ],
+    });
     stackSets.push({
       name: "SecurityBaseline-ConfigRecorder",
       templateKey: "config-recorder",
-      targets: options.configRecorder.targets as string[],
+      targets: configRecorder.targets.map(String),
       parameters: [
-        { key: "AllSupported", value: String(options.configRecorder.recordAllResourceTypes ?? true) },
-        { key: "IncludeGlobalResourceTypes", value: String(options.configRecorder.includeGlobalResources ?? true) },
-        { key: "DeliveryFrequency", value: options.configRecorder.deliveryFrequency ?? "TwentyFour_Hours" },
+        { key: "DeliveryBucketName", value: "{{DELIVERY_BUCKET_NAME}}" },
+        {
+          key: "AllSupported",
+          value: String(configRecorder.recordAllResourceTypes ?? true),
+        },
+        {
+          key: "IncludeGlobalResourceTypes",
+          value: String(configRecorder.includeGlobalResources ?? true),
+        },
+        {
+          key: "DeliveryFrequency",
+          value: configRecorder.deliveryFrequency ?? "TwentyFour_Hours",
+        },
       ],
     });
   }
 
   if (options.guardDuty?.enabled) {
-    assertAccountExists(options.guardDuty.delegatedAdminAccount);
-    if (!delegatedAdmins.some((d) => d.account === options.guardDuty!.delegatedAdminAccount && d.servicePrincipal === "guardduty.amazonaws.com")) {
-      delegatedAdmins.push({ account: options.guardDuty.delegatedAdminAccount, servicePrincipal: "guardduty.amazonaws.com" });
+    const { guardDuty } = options;
+    assertAccountExists(guardDuty.delegatedAdminAccount);
+    if (
+      !delegatedAdmins.some(
+        (d) =>
+          d.account === guardDuty.delegatedAdminAccount &&
+          d.servicePrincipal === "guardduty.amazonaws.com",
+      )
+    ) {
+      delegatedAdmins.push({
+        account: guardDuty.delegatedAdminAccount,
+        servicePrincipal: "guardduty.amazonaws.com",
+      });
     }
     stackSets.push({
       name: "SecurityBaseline-GuardDuty",
       templateKey: "guardduty-member",
-      targets: (options.guardDuty.targets ?? ["root"]) as string[],
+      targets: (guardDuty.targets ?? ["root"]).map(String),
       parameters: [
-        { key: "FindingPublishingFrequency", value: options.guardDuty.findingPublishingFrequency ?? "FIFTEEN_MINUTES" },
+        {
+          key: "FindingPublishingFrequency",
+          value: guardDuty.findingPublishingFrequency ?? "FIFTEEN_MINUTES",
+        },
       ],
     });
   }
 
   if (options.rootAccessManagement?.enabled) {
-    if (options.rootAccessManagement.delegatedAdminAccount != null) {
-      assertAccountExists(options.rootAccessManagement.delegatedAdminAccount);
-      if (!delegatedAdmins.some((d) => d.account === options.rootAccessManagement!.delegatedAdminAccount && d.servicePrincipal === "iam.amazonaws.com")) {
-        delegatedAdmins.push({ account: options.rootAccessManagement.delegatedAdminAccount, servicePrincipal: "iam.amazonaws.com" });
+    const { rootAccessManagement } = options;
+    if (rootAccessManagement.delegatedAdminAccount != null) {
+      assertAccountExists(rootAccessManagement.delegatedAdminAccount);
+      if (
+        !delegatedAdmins.some(
+          (d) =>
+            d.account === rootAccessManagement.delegatedAdminAccount &&
+            d.servicePrincipal === "iam.amazonaws.com",
+        )
+      ) {
+        delegatedAdmins.push({
+          account: rootAccessManagement.delegatedAdminAccount,
+          servicePrincipal: "iam.amazonaws.com",
+        });
       }
     }
   }
 
+  const configDeliveryBucket = options.configRecorder?.enabled
+    ? { accountName: String(options.configRecorder.deliveryBucketAccount) }
+    : undefined;
+
   return {
     ...config,
     delegatedAdministrators: delegatedAdmins,
-    ...(stackSets.length > 0 && {
-      securityBaseline: { stackSets },
+    ...((stackSets.length > 0 || configDeliveryBucket) && {
+      securityBaseline: {
+        stackSets,
+        ...(configDeliveryBucket && { configDeliveryBucket }),
+      },
     }),
   };
 }

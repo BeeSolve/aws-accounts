@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +29,14 @@ import {
   UpdateFunctionConfigurationCommand,
 } from "@aws-sdk/client-lambda";
 import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
+import {
+  CloudWatchLogsClient,
+  CreateLogGroupCommand,
+  PutRetentionPolicyCommand,
+  DeleteRetentionPolicyCommand,
+  ResourceAlreadyExistsException,
+  TagLogGroupCommand,
+} from "@aws-sdk/client-cloudwatch-logs";
 import {
   CreatePermissionSetCommand,
   DescribePermissionSetCommand,
@@ -97,10 +106,12 @@ export type RemoteCommandInput = v.InferOutput<typeof remoteCommandSchema> & {
 
 const contextFilePath = "aws.context.json";
 const configFilePath = "aws.config.ts";
+const generatedConfigFilePath = "aws.config.generated.ts";
 const typesFilePath = "aws.config.types.ts";
 const cachePath = ".remote-state-cache.json";
 const lambdaRoleName = "beesolve-aws-accounts-lambda-role";
 const lambdaFunctionName = "beesolve-aws-accounts";
+const lambdaLogGroupName = `/aws/lambda/${lambdaFunctionName}`;
 
 export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<void> {
   const lambdaZip = await readLambdaZip();
@@ -194,6 +205,7 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
           version: "1",
           generatedAt: new Date().toISOString(),
           organization: {
+            id: "pending",
             managementAccountId: accountId,
             rootId: "pending",
             graveyardOuId: "pending",
@@ -210,6 +222,13 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
     deployment: updatedContext.deployment,
   };
   await writeFile(contextFilePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf8");
+
+  await ensureLogGroup({
+    region: resolvedRegion,
+    profile: input.profile ?? "",
+    retentionDays: deployment.logsRetentionDays,
+    logger: input.logger,
+  });
 
   const instanceArn = updatedContext.identityCenter?.instanceArn;
 
@@ -293,6 +312,7 @@ async function applyLambdaRolePolicy(props: {
           "cloudformation:DeleteStackSet",
           "cloudformation:DescribeStackSet",
           "cloudformation:DescribeStackSetOperation",
+          "cloudformation:TagResource",
           "cloudformation:ListStackSets",
           "cloudformation:ListStackInstances",
           "cloudformation:CreateStackInstances",
@@ -300,6 +320,11 @@ async function applyLambdaRolePolicy(props: {
           "cloudformation:DeleteStackInstances",
         ],
         Resource: "*",
+      },
+      {
+        Effect: "Allow",
+        Action: "sts:AssumeRole",
+        Resource: "arn:aws:iam::*:role/BeesolveSecuritySetupRole",
       },
     ],
   });
@@ -575,7 +600,7 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   if (isUpdate) {
     try {
       existingConfig = await loadAwsConfigModelFromTsFile({
-        configPath: configFilePath,
+        configPath: generatedConfigFilePath,
         typesPath: typesFilePath,
       });
     } catch {
@@ -630,6 +655,7 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
     version: context.version,
     generatedAt: new Date().toISOString(),
     organization: {
+      id: response.state.organization.organizationId,
       managementAccountId: context.organization.managementAccountId,
       rootId: response.state.organization.rootId,
       graveyardOuId: graveyardOu?.id ?? context.organization.graveyardOuId,
@@ -645,12 +671,24 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   const configWriteResult = await writeAwsConfigFromState({
     state: response.state,
     contextPath: contextFilePath,
-    configPath: configFilePath,
+    configPath: generatedConfigFilePath,
     typesPath: typesFilePath,
     logger: input.logger,
     overwriteConfirmation: input.overwriteConfirmation,
     existingConfig,
   });
+
+  if (!existsSync(configFilePath)) {
+    await writeFile(
+      configFilePath,
+      `import config from "./aws.config.generated.js";
+
+export default config;
+`,
+      "utf8",
+    );
+    input.logger.log(`Created ${configFilePath} (edit this file to add withSecurityBaseline or other wrappers).`);
+  }
 
   const writtenFiles = configWriteResult.files.filter((f) => f.status === "written");
   if (writtenFiles.length > 0) {
@@ -669,6 +707,13 @@ export async function runRemotePlan(input: RemoteCommandInput): Promise<void> {
     deployment,
   });
 
+  await checkPendingStackSetOperations({
+    state: currentState,
+    lambdaClient: input.lambdaClient,
+    lambdaArn: deployment.lambdaArn,
+    logger: input.logger,
+  });
+
   const [context, config] = await Promise.all([
     readAwsContextFromFile(contextFilePath),
     loadAwsConfigModelFromTsFile({
@@ -693,7 +738,17 @@ export async function runRemotePlan(input: RemoteCommandInput): Promise<void> {
     context,
   });
 
-  const stackSetOperations = computeStackSetOperations(config);
+  const ouIdsByName = Object.fromEntries(
+    currentState.organization.organizationalUnits.map((ou) => [ou.name, ou.id]),
+  );
+  ouIdsByName["root"] = context.organization.rootId;
+  const stackSetOperations = computeStackSetOperations(config, {
+    managementAccountId: context.organization.managementAccountId,
+    organizationId: context.organization.id,
+    region: deployment.region,
+    ouIdsByName,
+    deployedStackSets: currentState.deployedStackSets,
+  });
 
   if (plan.operations.length === 0 && (stackSetOperations?.length ?? 0) === 0) {
     input.logger.log("No changes: aws.config.ts already matches the current remote state.");
@@ -710,6 +765,13 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     deployment,
   });
 
+  await checkPendingStackSetOperations({
+    state: currentState,
+    lambdaClient: input.lambdaClient,
+    lambdaArn: deployment.lambdaArn,
+    logger: input.logger,
+  });
+
   const [context, config] = await Promise.all([
     readAwsContextFromFile(contextFilePath),
     loadAwsConfigModelFromTsFile({
@@ -734,7 +796,17 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     context,
   });
 
-  const stackSetOperations = computeStackSetOperations(config);
+  const ouIdsByName = Object.fromEntries(
+    currentState.organization.organizationalUnits.map((ou) => [ou.name, ou.id]),
+  );
+  ouIdsByName["root"] = context.organization.rootId;
+  const stackSetOperations = computeStackSetOperations(config, {
+    managementAccountId: context.organization.managementAccountId,
+    organizationId: context.organization.id,
+    region: deployment.region,
+    ouIdsByName,
+    deployedStackSets: currentState.deployedStackSets,
+  });
 
   if (plan.operations.length === 0 && (stackSetOperations?.length ?? 0) === 0) {
     input.logger.log("No changes: aws.config.ts already matches the current remote state.");
@@ -830,12 +902,101 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
   }
 
   if (stackSetOperations != null && stackSetOperations.length > 0) {
-    await executeStackSetOperations({
-      stackSetOperations,
+    const securitySetupOps = stackSetOperations.filter((op) => op.stackSetName === "security-setup");
+    const remainingOps = stackSetOperations.filter((op) => op.stackSetName !== "security-setup");
+
+    let allPendingOps: Array<{ stackSetName: string; operationId: string; startedAt: string }> = [];
+
+    if (securitySetupOps.length > 0) {
+      const pending = await executeStackSetOperations({
+        stackSetOperations: securitySetupOps,
+        lambdaClient,
+        lambdaArn: deployment.lambdaArn,
+        logger: input.logger,
+      });
+      allPendingOps = allPendingOps.concat(pending);
+    }
+
+    const deliveryBucket = config.securityBaseline?.configDeliveryBucket;
+    if (deliveryBucket) {
+      const deliveryBucketName = `config-delivery-${context.organization.id!}-${deployment.region}`;
+      const deliveryAccountId = currentState.organization.accounts.find(
+        (a) => a.name === deliveryBucket.accountName,
+      )?.id;
+      if (deliveryAccountId) {
+        input.logger.log(`  [bucket] creating Config delivery bucket "${deliveryBucketName}" in account ${deliveryAccountId}...`);
+        const bucketResult = await invokeLambda({
+          lambdaClient,
+          lambdaArn: deployment.lambdaArn,
+          payload: {
+            action: "createConfigDeliveryBucket" as const,
+            targetAccountId: deliveryAccountId,
+            bucketName: deliveryBucketName,
+            region: deployment.region,
+          },
+        });
+        if (!bucketResult.ok) {
+          throw new Error(`Failed to create Config delivery bucket: ${formatLambdaError(bucketResult.error)}`);
+        }
+        input.logger.log(`  [bucket] Config delivery bucket ready.`);
+      }
+    }
+
+    // Create Config aggregator in the delegated admin account
+    const configDelegatedAdmin = config.delegatedAdministrators?.find(
+      (d) => d.servicePrincipal === "config.amazonaws.com",
+    );
+    if (configDelegatedAdmin) {
+      const adminAccountId = currentState.organization.accounts.find(
+        (a) => a.name === configDelegatedAdmin.account,
+      )?.id;
+      if (adminAccountId) {
+        input.logger.log(`  [aggregator] creating Config aggregator in account ${adminAccountId}...`);
+        const aggResult = await invokeLambda({
+          lambdaClient,
+          lambdaArn: deployment.lambdaArn,
+          payload: {
+            action: "createConfigAggregator" as const,
+            targetAccountId: adminAccountId,
+            region: deployment.region,
+          },
+        });
+        if (!aggResult.ok) {
+          input.logger.log(`  [aggregator] warning: ${formatLambdaError(aggResult.error)}`);
+        } else {
+          input.logger.log(`  [aggregator] Config aggregator ready.`);
+        }
+      }
+    }
+
+    if (remainingOps.length > 0) {
+      const pending = await executeStackSetOperations({
+        stackSetOperations: remainingOps,
+        lambdaClient,
+        lambdaArn: deployment.lambdaArn,
+        logger: input.logger,
+      });
+      allPendingOps = allPendingOps.concat(pending);
+    }
+
+    // Record deployed StackSets in state for idempotency
+    const allDeployed = stackSetOperations.map((op) => ({
+      name: op.stackSetName,
+      targets: op.targets,
+    }));
+    await invokeLambda({
       lambdaClient,
       lambdaArn: deployment.lambdaArn,
-      logger: input.logger,
+      payload: {
+        action: "recordDeployedStackSets" as const,
+        stackSets: allDeployed,
+        pendingOperations: allPendingOps,
+      },
     });
+
+    // Update local cache so next plan sees the deployed stacksets
+    const updatedState = { ...currentState, deployedStackSets: allDeployed, pendingStackSetOperations: allPendingOps.length > 0 ? allPendingOps : undefined };
+    await writeStateCache(cachePath, updatedState);
   }
 }
 
@@ -873,6 +1034,13 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
     bucketName: deployment.stateBucketName,
   });
   input.logger.log("IAM role policy updated.");
+
+  await ensureLogGroup({
+    region: deployment.region,
+    profile: deployment.profile,
+    retentionDays: deployment.logsRetentionDays,
+    logger: input.logger,
+  });
 
   const context = await readAwsContextFromFile(contextFilePath);
   const ordered: Record<string, unknown> = {
@@ -1485,6 +1653,71 @@ async function createNewPermissionSet(props: {
   return permissionSetArn;
 }
 
+async function checkPendingStackSetOperations(props: {
+  state: StateFile;
+  lambdaClient: LambdaClient;
+  lambdaArn: string;
+  logger: Logger;
+}): Promise<void> {
+  const pending = props.state.pendingStackSetOperations;
+  if (!pending || pending.length === 0) return;
+
+  const result = await invokeLambda({
+    lambdaClient: props.lambdaClient,
+    lambdaArn: props.lambdaArn,
+    payload: {
+      action: "checkPendingStackSets" as const,
+      operations: pending.map((op) => ({
+        stackSetName: op.stackSetName,
+        operationId: op.operationId,
+      })),
+    },
+  });
+  if (!result.ok) {
+    props.logger.log("Warning: could not check pending StackSet operations.");
+    return;
+  }
+  const response = result.response;
+  if (!("results" in response)) return;
+
+  const stillRunning = (response.results as Array<{ stackSetName: string; status: string }>).filter(
+    (r) => r.status === "RUNNING" || r.status === "QUEUED",
+  );
+  if (stillRunning.length > 0) {
+    const names = stillRunning.map((r) => r.stackSetName).join(", ");
+    throw new Error(
+      `StackSet operation(s) still in progress: ${names}. Please wait for them to complete before running plan/apply.`,
+    );
+  }
+}
+
+async function ensureLogGroup(props: {
+  region: string;
+  profile: string;
+  retentionDays: number | undefined;
+  logger: Logger;
+}): Promise<void> {
+  const logsClient = new CloudWatchLogsClient(buildAwsClientConfig({ profile: props.profile, region: props.region }));
+  try {
+    await logsClient.send(new CreateLogGroupCommand({ logGroupName: lambdaLogGroupName }));
+    props.logger.log(`Created log group: ${lambdaLogGroupName}`);
+  } catch (error: unknown) {
+    if (!(error instanceof ResourceAlreadyExistsException)) throw error;
+  }
+  await logsClient.send(new TagLogGroupCommand({
+    logGroupName: lambdaLogGroupName,
+    tags: Object.fromEntries(getStandardTags("lambda-logs").map((t) => [t.Key, t.Value])),
+  }));
+  if (props.retentionDays != null) {
+    await logsClient.send(new PutRetentionPolicyCommand({
+      logGroupName: lambdaLogGroupName,
+      retentionInDays: props.retentionDays,
+    }));
+  } else {
+    await logsClient.send(new DeleteRetentionPolicyCommand({ logGroupName: lambdaLogGroupName }));
+  }
+}
+
 async function readLambdaZip(): Promise<Buffer> {
   const thisFile = fileURLToPath(import.meta.url);
   // thisFile = <root>/dist/commands/remote.js → go up 3 levels to package root
@@ -1519,20 +1752,42 @@ async function waitForLambdaReady(lambdaClient: LambdaClient, functionName: stri
   throw new Error("Timed out waiting for Lambda function to become ready.");
 }
 
-const validStackSetNames = new Set(["config-recorder", "guardduty-member"]);
+const validStackSetNames = new Set(["security-setup", "config-recorder", "guardduty-member"]);
 
-function computeStackSetOperations(config: AwsConfigModel): StackSetOperation[] | undefined {
+function computeStackSetOperations(config: AwsConfigModel, context: { managementAccountId: string; organizationId: string | undefined; region: string; ouIdsByName: Record<string, string>; deployedStackSets?: Array<{ name: string; targets: string[] }> }): StackSetOperation[] | undefined {
   const baseline = config.securityBaseline;
   if (baseline == null || baseline.stackSets.length === 0) return undefined;
+  if (!context.organizationId) {
+    throw new Error("Organization ID not found in context. Run 'scan' to populate it.");
+  }
+  const deliveryBucketName = `config-delivery-${context.organizationId}-${context.region}`;
+  const deployed = context.deployedStackSets ?? [];
   return baseline.stackSets.flatMap((ss) => {
     if (!validStackSetNames.has(ss.templateKey)) return [];
+    const resolvedTargets = ss.targets.map((t) => {
+      const id = context.ouIdsByName[t];
+      if (!id) throw new Error(`Cannot resolve OU name "${t}" to an ID. Run 'scan' first.`);
+      return id;
+    });
+    const existing = deployed.find((d) => d.name === ss.templateKey);
+    if (existing && JSON.stringify(existing.targets.sort()) === JSON.stringify(resolvedTargets.sort())) {
+      return [];
+    }
     return [
       {
         action: "create" as const,
-        stackSetName: ss.templateKey as "config-recorder" | "guardduty-member",
-        targets: ss.targets,
-        parameters: ss.parameters,
-        regions: [process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "eu-central-1"],
+        stackSetName: ss.templateKey as "security-setup" | "config-recorder" | "guardduty-member",
+        targets: resolvedTargets,
+        parameters: ss.parameters.map((p) => ({
+          key: p.key,
+          value: p.value === "{{MANAGEMENT_ACCOUNT_ID}}"
+            ? context.managementAccountId
+            : p.value === "{{DELIVERY_BUCKET_NAME}}"
+              ? deliveryBucketName
+              : p.value,
+        })),
+        regions: [context.region],
+        ...(ss.templateKey === "security-setup" && { waitForCompletion: true }),
       },
     ];
   });
@@ -1543,7 +1798,8 @@ async function executeStackSetOperations(props: {
   lambdaClient: LambdaClient;
   lambdaArn: string;
   logger: Logger;
-}): Promise<void> {
+}): Promise<Array<{ stackSetName: string; operationId: string; startedAt: string }>> {
+  const pendingOps: Array<{ stackSetName: string; operationId: string; startedAt: string }> = [];
   for (const op of props.stackSetOperations) {
     props.logger.log(
       `  [stackset] deploying "${op.stackSetName}" targeting ${op.targets.join(", ")}...`,
@@ -1585,6 +1841,7 @@ async function executeStackSetOperations(props: {
         targets: op.targets,
         parameters: op.parameters,
         regions: op.regions,
+        ...(op.waitForCompletion && { waitForCompletion: true }),
       },
     });
     if (!deployResult.ok) {
@@ -1592,8 +1849,19 @@ async function executeStackSetOperations(props: {
         `Failed to deploy stackset "${op.stackSetName}": ${formatLambdaError(deployResult.error)}`,
       );
     }
+    if (!op.waitForCompletion) {
+      const response = deployResult.response;
+      if ("operationId" in response && typeof response.operationId === "string") {
+        pendingOps.push({
+          stackSetName: op.stackSetName,
+          operationId: response.operationId,
+          startedAt: new Date().toISOString(),
+        });
+      }
+    }
     props.logger.log(`  [stackset] "${op.stackSetName}" deployed.`);
   }
+  return pendingOps;
 }
 
 async function resolveTemplateContent(templateKey: string): Promise<string> {
@@ -1601,7 +1869,7 @@ async function resolveTemplateContent(templateKey: string): Promise<string> {
   try {
     return await readFile(userPath, "utf8");
   } catch {
-    const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
+    const packageDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
     const defaultPath = join(packageDir, "templates", `${templateKey}.yaml`);
     return await readFile(defaultPath, "utf8");
   }

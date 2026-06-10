@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Scoped IAM role for security baseline setup by beesolve-aws-accounts"
+Parameters:
+  ManagementAccountId:
+    Type: String
+    Description: AWS account ID of the management account where the Lambda runs
+  BucketName:
+    Type: String
+    Description: Exact S3 bucket name the role is allowed to create and configure
+Resources:
+  SecuritySetupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: BeesolveSecuritySetupRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${ManagementAccountId}:role/beesolve-aws-accounts-lambda-role"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: SecuritySetup
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ConfigBucket
+                Effect: Allow
+                Action:
+                  - "s3:CreateBucket"
+                  - "s3:PutBucketPolicy"
+                  - "s3:PutBucketPublicAccessBlock"
+                  - "s3:PutBucketTagging"
+                Resource: !Sub "arn:aws:s3:::${BucketName}"
+              - Sid: ConfigAggregator
+                Effect: Allow
+                Action:
+                  - "config:PutConfigurationAggregator"
+                  - "iam:CreateServiceLinkedRole"
+                Resource: "*"

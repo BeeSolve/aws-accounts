@@ -262,6 +262,17 @@ mock.module("@aws-sdk/credential-providers", {
   },
 });
 
+mock.module("@aws-sdk/client-cloudwatch-logs", {
+  namedExports: {
+    CloudWatchLogsClient: class { send = async () => ({}); },
+    CreateLogGroupCommand: class { constructor() {} },
+    PutRetentionPolicyCommand: class { constructor() {} },
+    DeleteRetentionPolicyCommand: class { constructor() {} },
+    ResourceAlreadyExistsException: class ResourceAlreadyExistsException extends Error { name = "ResourceAlreadyExistsException"; },
+    TagLogGroupCommand: class { constructor() {} },
+  },
+});
+
 // --- Import module under test AFTER mocks ---
 
 const { runRemoteBootstrap } = await import("./remote.js");
@@ -279,6 +290,7 @@ function createValidContextFile() {
     version: "1",
     generatedAt: "2026-01-01T00:00:00.000Z",
     organization: {
+      id: "o-test123",
       managementAccountId: "123456789012",
       rootId: "r-root",
       graveyardOuId: "ou-graveyard",

@@ -382,6 +382,313 @@ npx aws-accounts config reveal
 
 This copies templates to `./templates/` in your project. Local copies take precedence over package defaults. The tool won't overwrite existing files.
 
+## Viewing Centralized Config Data
+
+After deploying the security baseline, AWS Config delivers configuration snapshots from all accounts to a central S3 bucket in your log archive account. The delegated admin account can view Config data across the organization.
+
+### Access the Config console (delegated admin account)
+
+1. Sign in to the **delegated admin account** (the account specified as `delegatedAdminAccount` in your `configRecorder` options).
+2. Open the [AWS Config console](https://console.aws.amazon.com/config/).
+3. Use the **Aggregator** view to see resources across all accounts.
+
+The tool automatically creates an organization-wide Config aggregator named `OrganizationAggregator` in the delegated admin account during `apply`.
+
+### Querying resources across accounts
+
+Once the aggregator is set up, use **Advanced queries** (Config console → Advanced queries) to run SQL-like queries across all accounts:
+
+```sql
+-- Find all S3 buckets without encryption
+SELECT resourceId, accountId, awsRegion, configuration
+WHERE resourceType = 'AWS::S3::Bucket'
+AND configuration.serverSideEncryptionConfiguration IS NULL
+
+-- List all EC2 instances across the org
+SELECT resourceId, accountId, awsRegion, resourceName
+WHERE resourceType = 'AWS::EC2::Instance'
+
+-- Find public security groups
+SELECT resourceId, accountId, configuration.ipPermissions
+WHERE resourceType = 'AWS::EC2::SecurityGroup'
+AND configuration.ipPermissions.ipRanges LIKE '%0.0.0.0/0%'
+```
+
+### Viewing Config delivery data in S3
+
+Raw configuration snapshots are delivered to the central bucket:
+
+```bash
+# List recent deliveries (from delegated admin or log archive account)
+aws s3 ls s3://config-delivery-o-XXXXX-REGION/AWSLogs/ --recursive | tail -20
+```
+
+The bucket structure is: `AWSLogs/{AccountId}/Config/{Region}/{Year}/{Month}/{Day}/`
+
+### GuardDuty findings
+
+GuardDuty findings are accessible from the delegated admin account:
+
+1. Sign in to the **delegated admin account**.
+2. Open the [GuardDuty console](https://console.aws.amazon.com/guardduty/).
+3. Findings from all member accounts appear automatically.
+
+To query findings via CLI:
+
+```bash
+# List recent high-severity findings across all accounts
+aws guardduty list-findings \
+  --detector-id $(aws guardduty list-detectors --query 'DetectorIds[0]' --output text) \
+  --finding-criteria '{"Criterion":{"severity":{"Gte":7}}}'
+```
+
+## Recommended Permission Sets for Security Access
+
+After deploying the security baseline, you'll want team members to access Config and GuardDuty in the delegated admin account. Below are permission set definitions you can add to your `aws.config.ts` for read-only security access — similar to what Control Tower provides out of the box.
+
+### Security Auditor (read-only access to Config, GuardDuty, CloudTrail)
+
+```typescript
+{
+  name: "SecurityAuditor",
+  description: "Read-only access to security services (Config, GuardDuty, CloudTrail, Security Hub)",
+  sessionDuration: "PT4H",
+  customerManagedPolicies: [],
+  awsManagedPolicies: [
+    "arn:aws:iam::aws:policy/SecurityAudit",
+  ],
+  inlinePolicy: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "ConfigReadOnly",
+        Effect: "Allow",
+        Action: [
+          "config:Describe*",
+          "config:Get*",
+          "config:List*",
+          "config:SelectAggregateResourceConfig",
+          "config:BatchGetAggregateResourceConfig",
+        ],
+        Resource: "*",
+      },
+      {
+        Sid: "GuardDutyReadOnly",
+        Effect: "Allow",
+        Action: [
+          "guardduty:Get*",
+          "guardduty:List*",
+          "guardduty:Describe*",
+        ],
+        Resource: "*",
+      },
+      {
+        Sid: "CloudTrailReadOnly",
+        Effect: "Allow",
+        Action: [
+          "cloudtrail:Describe*",
+          "cloudtrail:Get*",
+          "cloudtrail:List*",
+          "cloudtrail:LookupEvents",
+        ],
+        Resource: "*",
+      },
+    ],
+  },
+}
+```
+
+### Security Investigator (read-only with ability to archive findings)
+
+```typescript
+{
+  name: "SecurityInvestigator",
+  description: "Security investigation access - read + archive/suppress findings",
+  sessionDuration: "PT8H",
+  customerManagedPolicies: [],
+  awsManagedPolicies: [
+    "arn:aws:iam::aws:policy/SecurityAudit",
+  ],
+  inlinePolicy: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "GuardDutyInvestigate",
+        Effect: "Allow",
+        Action: [
+          "guardduty:Get*",
+          "guardduty:List*",
+          "guardduty:Describe*",
+          "guardduty:ArchiveFindings",
+          "guardduty:UpdateFindingsFeedback",
+        ],
+        Resource: "*",
+      },
+      {
+        Sid: "ConfigQuery",
+        Effect: "Allow",
+        Action: [
+          "config:SelectAggregateResourceConfig",
+          "config:BatchGetAggregateResourceConfig",
+          "config:Get*",
+          "config:List*",
+          "config:Describe*",
+        ],
+        Resource: "*",
+      },
+    ],
+  },
+}
+```
+
+### Config Delivery Bucket Reader (for log archive access)
+
+```typescript
+{
+  name: "ConfigLogReader",
+  description: "Read-only access to the Config delivery S3 bucket for audit purposes",
+  sessionDuration: "PT4H",
+  customerManagedPolicies: [],
+  awsManagedPolicies: [],
+  inlinePolicy: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "ReadConfigBucket",
+        Effect: "Allow",
+        Action: [
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+        ],
+        Resource: [
+          "arn:aws:s3:::config-delivery-*",
+          "arn:aws:s3:::config-delivery-*/*",
+        ],
+      },
+    ],
+  },
+}
+```
+
+### Usage
+
+Add these to the `permissionSets` array in your `aws.config.ts`. If you don't have security group already add this to your `groups`.
+
+```typescript
+{
+  displayName: "Security",
+  description: "",
+  members: [], // add your user here
+},
+```
+
+After adding, run `plan` and `apply` to provision the permission sets and the group. After that you can set up the `assignments` like this:
+
+
+```typescript
+{
+  permissionSet: "SecurityAuditor",
+  group: "Security",
+  accounts: ["SecurityAudit"],
+},
+{
+  permissionSet: "SecurityInvestigator",
+  group: "Security",
+  accounts: ["SecurityAudit"],
+},
+{
+  permissionSet: "ConfigLogReader",
+  group: "Security",
+  accounts: ["LogArchive"],
+},
+```
+
+Again run `plan` and `apply` for the changes to take effect.
+
+## Manual Resource Cleanup
+
+All resources created by this tool are tagged with `ManagedBy = beesolve-aws-accounts`. Use this tag to discover and remove them if you want to decommission the tool.
+
+### Listing all managed resources
+
+```bash
+# Management account
+aws resourcegroupstaggingapi get-resources \
+  --tag-filters Key=ManagedBy,Values=beesolve-aws-accounts \
+  --region eu-central-1
+```
+
+### Deletion order
+
+Resources have dependencies — delete them in this order:
+
+1. **Delete StackSet instances** (removes Config/GuardDuty/IAM roles from member accounts):
+   ```bash
+   aws cloudformation delete-stack-instances \
+     --stack-set-name config-recorder \
+     --deployment-targets OrganizationalUnitIds=r-xxxx \
+     --regions eu-central-1 --no-retain-stacks
+   # Wait: aws cloudformation describe-stack-set-operation --stack-set-name config-recorder --operation-id <id>
+   # Repeat for: guardduty-member, security-setup
+   ```
+
+2. **Delete StackSets**:
+   ```bash
+   aws cloudformation delete-stack-set --stack-set-name config-recorder
+   aws cloudformation delete-stack-set --stack-set-name guardduty-member
+   aws cloudformation delete-stack-set --stack-set-name security-setup
+   ```
+
+3. **Empty and delete Config delivery bucket** (in LogArchive account):
+   ```bash
+   aws s3 rm s3://config-delivery-o-XXXXX-REGION --recursive
+   aws s3 rb s3://config-delivery-o-XXXXX-REGION
+   ```
+
+4. **Deregister delegated administrators**:
+   ```bash
+   aws organizations deregister-delegated-administrator \
+     --account-id SECURITY_ACCOUNT_ID --service-principal config.amazonaws.com
+   # Repeat for: guardduty.amazonaws.com, iam.amazonaws.com, cloudtrail.amazonaws.com
+   ```
+
+5. **Detach and delete SCPs** (find them via tag):
+   ```bash
+   aws organizations list-policies --filter SERVICE_CONTROL_POLICY
+   # For each tagged SCP: detach from all targets, then delete
+   ```
+
+6. **Empty and delete state bucket**:
+   ```bash
+   aws s3 rm s3://beesolve-aws-accounts-state-XXXXX --recursive
+   aws s3 rb s3://beesolve-aws-accounts-state-XXXXX
+   ```
+
+7. **Delete Lambda, role, and log group**:
+   ```bash
+   aws lambda delete-function --function-name beesolve-aws-accounts
+   aws iam delete-role-policy --role-name beesolve-aws-accounts-lambda-role --policy-name LambdaPolicy
+   aws iam delete-role --role-name beesolve-aws-accounts-lambda-role
+   aws logs delete-log-group --log-group-name /aws/lambda/beesolve-aws-accounts
+   ```
+
+8. **Delete local files**:
+   ```bash
+   rm aws.context.json aws.config.generated.ts
+   ```
+
+### Security implications
+
+| Resource | Impact of removal |
+|----------|------------------|
+| Config recorder | Stops recording resource configuration changes. Compliance rules stop evaluating. |
+| GuardDuty | Stops threat detection (compromised credentials, crypto mining, unusual API calls). Existing findings remain for 90 days. |
+| Config delivery bucket | Historical configuration snapshots are lost. Consider keeping for audit retention requirements. |
+| SCPs | Permission boundaries removed — accounts can perform previously denied actions. |
+
+> **Recommendation**: If you only want to stop using this tool but keep security monitoring active, skip steps 1–3 and leave Config/GuardDuty running independently. Only remove the tool infrastructure (steps 6–8).
+
 ## FAQ
 
 ### I moved an account manually in the AWS Console. How do I fix my config?

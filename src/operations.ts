@@ -384,10 +384,11 @@ export const unsupportedDiffSchema = v.strictObject({
 
 export const stackSetOperationSchema = v.strictObject({
   action: v.picklist(["create", "update"]),
-  stackSetName: v.picklist(["config-recorder", "guardduty-member"]),
+  stackSetName: v.picklist(["security-setup", "config-recorder", "guardduty-member"]),
   targets: v.array(v.string()),
   parameters: v.array(v.strictObject({ key: v.string(), value: v.string() })),
   regions: v.array(v.string()),
+  waitForCompletion: v.optional(v.boolean()),
 });
 
 export const planSchema = v.strictObject({

@@ -403,6 +403,7 @@ async function writeProfileFixture(props: {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [
         {
@@ -417,7 +418,7 @@ async function writeProfileFixture(props: {
         arn: `arn:aws:organizations:::account/${account.id}`,
         name: account.name,
         email: `${account.name.toLowerCase().replace(/\s+/g, "-")}@example.com`,
-        status: "ACTIVE",
+        state: "ACTIVE",
         parentId: "ou-active",
         tags: [],
       })),
@@ -458,6 +459,7 @@ async function writeProfileFixture(props: {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
+      id: "o-test123",
       managementAccountId: "999999999999",
       rootId: "r-root",
       graveyardOuId: "ou-graveyard",
@@ -487,6 +489,7 @@ async function writeContextFile(contextPath: string): Promise<void> {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
+      id: "o-test123",
       managementAccountId: "999999999999",
       rootId: "r-root",
       graveyardOuId: "ou-graveyard",

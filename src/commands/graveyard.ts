@@ -23,7 +23,7 @@ export async function runGraveyardCloseCommand(
 
   const graveyardOuId = context.organization.graveyardOuId;
   const eligible = cache.state.organization.accounts
-    .filter((a) => a.parentId === graveyardOuId && a.status === "ACTIVE")
+    .filter((a) => a.parentId === graveyardOuId && a.state === "ACTIVE")
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (eligible.length === 0) {
@@ -78,7 +78,7 @@ export async function runGraveyardCommand(
       id: account.id,
       name: account.name,
       email: account.email,
-      status: account.status,
+      status: account.state,
     }));
 
   props.logger.log(`Graveyard OU: ${graveyardOuId}`);
@@ -94,7 +94,7 @@ export async function runGraveyardCommand(
   props.logger.log("");
   for (const account of graveyardAccounts) {
     props.logger.log(
-      `- ${account.name} (${account.id}) [${account.status}] <${account.email}>`,
+      `- ${account.name} (${account.id}) [${account.state}] <${account.email}>`,
     );
     props.logger.log(
       `  aws organizations close-account --account-id ${account.id}`,

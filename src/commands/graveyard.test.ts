@@ -19,7 +19,7 @@ test("runGraveyardCommand lists graveyard accounts with close command hints", as
           id: "111111111111",
           name: "OldApp",
           email: "old-app@example.com",
-          status: "ACTIVE",
+          state: "ACTIVE",
         },
       ],
     });
@@ -78,6 +78,7 @@ test("runGraveyardCommand throws error when cache file does not exist", async ()
       version: "1",
       generatedAt: "2026-05-01T00:00:00.000Z",
       organization: {
+        id: "o-test123",
         managementAccountId: "999999999999",
         rootId: "r-root",
         graveyardOuId: "ou-graveyard",
@@ -119,8 +120,8 @@ test("runGraveyardCloseCommand outputs close commands for ACTIVE accounts only",
       cachePath,
       contextPath,
       graveyardAccounts: [
-        { id: "111111111111", name: "OldApp", email: "old@example.com", status: "ACTIVE" },
-        { id: "222222222222", name: "Archived", email: "arch@example.com", status: "SUSPENDED" },
+        { id: "111111111111", name: "OldApp", email: "old@example.com", state: "ACTIVE" },
+        { id: "222222222222", name: "Archived", email: "arch@example.com", state: "SUSPENDED" },
       ],
     });
     const logger = createCollectingLogger();
@@ -142,7 +143,7 @@ test("runGraveyardCloseCommand prints no-eligible message when all accounts are 
       cachePath,
       contextPath,
       graveyardAccounts: [
-        { id: "333333333333", name: "Gone", email: "gone@example.com", status: "SUSPENDED" },
+        { id: "333333333333", name: "Gone", email: "gone@example.com", state: "SUSPENDED" },
       ],
     });
     const logger = createCollectingLogger();
@@ -162,8 +163,8 @@ test("runGraveyardCloseCommand outputs accounts sorted alphabetically", async ()
       cachePath,
       contextPath,
       graveyardAccounts: [
-        { id: "222222222222", name: "Zeta", email: "z@example.com", status: "ACTIVE" },
-        { id: "111111111111", name: "Alpha", email: "a@example.com", status: "ACTIVE" },
+        { id: "222222222222", name: "Zeta", email: "z@example.com", state: "ACTIVE" },
+        { id: "111111111111", name: "Alpha", email: "a@example.com", state: "ACTIVE" },
       ],
     });
     const logger = createCollectingLogger();
@@ -184,7 +185,7 @@ test("runGraveyardCloseCommand throws error when cache file does not exist", asy
     const context = {
       version: "1",
       generatedAt: "2026-05-01T00:00:00.000Z",
-      organization: { managementAccountId: "999999999999", rootId: "r-root", graveyardOuId: "ou-graveyard" },
+      organization: { id: "o-test123", managementAccountId: "999999999999", rootId: "r-root", graveyardOuId: "ou-graveyard" },
       identityCenter: { instanceArn: "arn:aws:sso:::instance/ssoins-123", identityStoreId: "d-123" },
       deployment: { profile: "default", region: "eu-central-1", lambdaArn: "", stateBucketName: "", stateCacheTtlSeconds: 300, cliVersion: "0.0.0-test" },
     };
@@ -216,6 +217,7 @@ async function writeFixtureFiles(props: {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [
         {
@@ -236,7 +238,7 @@ async function writeFixtureFiles(props: {
         arn: `arn:aws:organizations:::account/${account.id}`,
         name: account.name,
         email: account.email,
-        status: account.status,
+        state: account.state,
         tags: [],
         parentId: "ou-graveyard",
       })),
@@ -261,6 +263,7 @@ async function writeFixtureFiles(props: {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
+      id: "o-test123",
       managementAccountId: "999999999999",
       rootId: "r-root",
       graveyardOuId: "ou-graveyard",

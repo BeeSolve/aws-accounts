@@ -12,12 +12,13 @@ function createSampleState(): StateFile {
     version: "1",
     generatedAt: "2026-05-06T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [
         { id: "ou-a", parentId: "r-root", arn: "arn:1", name: "Alpha" },
       ],
       accounts: [
-        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", status: "ACTIVE", tags: [], parentId: "ou-a" },
+        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", state: "ACTIVE", tags: [], parentId: "ou-a" },
       ],
     },
     identityCenter: {

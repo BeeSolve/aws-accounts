@@ -53,7 +53,7 @@ const accountSchema = v.strictObject({
   arn: nonEmptyString,
   name: nonEmptyString,
   email: nonEmptyString,
-  status: nonEmptyString,
+  state: nonEmptyString,
   parentId: nonEmptyString,
   tags: v.array(accountTagSchema),
   alternateContacts: v.optional(v.array(alternateContactSchema)),
@@ -131,6 +131,7 @@ export const stateSchema = v.strictObject({
   version: nonEmptyString,
   generatedAt: nonEmptyString,
   organization: v.strictObject({
+    organizationId: nonEmptyString,
     rootId: nonEmptyString,
     organizationalUnits: v.array(organizationalUnitSchema),
     accounts: v.array(accountSchema),
@@ -149,6 +150,15 @@ export const stateSchema = v.strictObject({
     accessRoles: v.array(accessRoleSchema),
     accessControlAttributes: v.array(accessControlAttributeSchema),
   }),
+  deployedStackSets: v.optional(v.array(v.strictObject({
+    name: nonEmptyString,
+    targets: v.array(nonEmptyString),
+  }))),
+  pendingStackSetOperations: v.optional(v.array(v.strictObject({
+    stackSetName: nonEmptyString,
+    operationId: nonEmptyString,
+    startedAt: nonEmptyString,
+  }))),
 });
 
 export type OrganizationalUnitState = v.InferOutput<
@@ -202,6 +212,7 @@ export type WorkingState = {
   version: StateFile["version"];
   generatedAt: StateFile["generatedAt"];
   organization: {
+    organizationId: StateFile["organization"]["organizationId"];
     rootId: StateFile["organization"]["rootId"];
     organizationalUnitsById: Record<string, OrganizationalUnitState>;
     accountsById: Record<string, AccountState>;
@@ -229,6 +240,7 @@ export function createWorkingState(props: { state: StateFile }): WorkingState {
     version: props.state.version,
     generatedAt: props.state.generatedAt,
     organization: {
+      organizationId: props.state.organization.organizationId,
       rootId: props.state.organization.rootId,
       organizationalUnitsById: toRecordByProperty(
         props.state.organization.organizationalUnits,
@@ -265,6 +277,7 @@ export function materializeWorkingState(props: {
     version: props.workingState.version,
     generatedAt: props.workingState.generatedAt,
     organization: {
+      organizationId: props.workingState.organization.organizationId,
       rootId: props.workingState.organization.rootId,
       organizationalUnits: Object.values(
         props.workingState.organization.organizationalUnitsById,
@@ -350,7 +363,7 @@ export function upsertAccountInWorkingState(props: {
     currentAccount.arn === props.account.arn &&
     currentAccount.name === props.account.name &&
     currentAccount.email === props.account.email &&
-    currentAccount.status === props.account.status &&
+    currentAccount.state === props.account.state &&
     currentAccount.parentId === props.account.parentId &&
     JSON.stringify(normalizeAccountTags(currentAccount.tags)) ===
       JSON.stringify(normalizeAccountTags(props.account.tags))

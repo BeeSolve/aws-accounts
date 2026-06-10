@@ -37,15 +37,16 @@ function createValidScanResponse() {
       version: "1",
       generatedAt: "2026-05-06T00:00:00.000Z",
       organization: {
+        organizationId: "o-test123",
         rootId: "r-root",
         organizationalUnits: [
           { id: "ou-a", parentId: "r-root", arn: "arn:ou:a", name: "Alpha" },
           { id: "ou-b", parentId: "r-root", arn: "arn:ou:b", name: "Beta" },
         ],
         accounts: [
-          { id: "111111111111", arn: "arn:acct:1", name: "Acct1", email: "a@x.com", status: "ACTIVE", parentId: "ou-a", tags: [] },
-          { id: "222222222222", arn: "arn:acct:2", name: "Acct2", email: "b@x.com", status: "ACTIVE", parentId: "ou-a", tags: [] },
-          { id: "333333333333", arn: "arn:acct:3", name: "Acct3", email: "c@x.com", status: "ACTIVE", parentId: "ou-b", tags: [] },
+          { id: "111111111111", arn: "arn:acct:1", name: "Acct1", email: "a@x.com", state: "ACTIVE", parentId: "ou-a", tags: [] },
+          { id: "222222222222", arn: "arn:acct:2", name: "Acct2", email: "b@x.com", state: "ACTIVE", parentId: "ou-a", tags: [] },
+          { id: "333333333333", arn: "arn:acct:3", name: "Acct3", email: "c@x.com", state: "ACTIVE", parentId: "ou-b", tags: [] },
         ],
         policies: [],
         policyAttachments: [],

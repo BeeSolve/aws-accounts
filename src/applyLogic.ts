@@ -12,6 +12,7 @@ import {
   DeleteOrganizationalUnitCommand,
   DeletePolicyCommand,
   DetachPolicyCommand,
+  EnableAWSServiceAccessCommand,
   ListAccountsForParentCommand,
   ListOrganizationalUnitsForParentCommand,
   MoveAccountCommand,
@@ -95,6 +96,7 @@ export type ExecuteOperationInput = {
   logger: Logger;
   context: {
     organization: {
+      organizationId: string;
       rootId: string;
     };
   };
@@ -235,7 +237,7 @@ export async function executeOperation(
         arn: result.account.arn,
         name: result.account.name,
         email: result.account.email,
-        status: result.account.status,
+        state: result.account.state,
         parentId: targetOuId,
         tags: [],
       },
@@ -1079,6 +1081,7 @@ export async function executeOperation(
           props.operation.description.length > 0 ? props.operation.description : undefined,
         Content: props.operation.content,
         Type: props.operation.policyType,
+        Tags: [{ Key: "ManagedBy", Value: "beesolve-aws-accounts" }],
       }),
     );
     const policy = response.Policy?.PolicySummary;
@@ -1305,6 +1308,11 @@ export async function executeOperation(
   if (props.operation.kind === "registerDelegatedAdministrator") {
     props.logger.log(
       `Registering delegated administrator "${props.operation.accountName}" (${props.operation.accountId}) for ${props.operation.servicePrincipal}...`,
+    );
+    await props.organizationsClient.send(
+      new EnableAWSServiceAccessCommand({
+        ServicePrincipal: props.operation.servicePrincipal,
+      }),
     );
     await props.organizationsClient.send(
       new RegisterDelegatedAdministratorCommand({

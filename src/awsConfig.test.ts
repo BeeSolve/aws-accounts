@@ -910,6 +910,7 @@ function getFixtureState() {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [
         {
@@ -931,7 +932,7 @@ function getFixtureState() {
           arn: "arn:aws:organizations:::account/111111111111",
           name: "AppAccount",
           email: "app@example.com",
-          status: "ACTIVE",
+          state: "ACTIVE",
           tags: [],
           parentId: "ou-pending",
         },
@@ -992,6 +993,7 @@ function getFixtureContext() {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
+      id: "o-test123",
       managementAccountId: "999999999999",
       rootId: "r-root",
       graveyardOuId: "ou-graveyard",

@@ -25,7 +25,7 @@ export type CreatedAccountRecord = {
   arn: string;
   name: string;
   email: string;
-  status: NonNullable<Account["Status"]>;
+  state: NonNullable<Account["State"]>;
   parentId: string;
 };
 
@@ -139,7 +139,7 @@ async function resolveCreatedAccountRecord(props: {
     arn: account.arn,
     name: account.name,
     email: account.email,
-    status: account.status,
+    state: account.state,
     parentId: props.destinationParentId,
   };
 }
@@ -153,7 +153,7 @@ async function findAccountById(props: {
       arn: string;
       name: string;
       email: string;
-      status: NonNullable<Account["Status"]>;
+      state: NonNullable<Account["State"]>;
     }
   | undefined
 > {
@@ -163,21 +163,21 @@ async function findAccountById(props: {
       new ListAccountsCommand({ NextToken: nextToken }),
     );
     const matched = (response.Accounts ?? []).find((account) =>
-      isCompleteAccountWithStatus(account, props.accountId),
+      isCompleteAccount(account, props.accountId),
     );
     if (
       matched?.Id != null &&
       matched.Arn != null &&
       matched.Name != null &&
       matched.Email != null &&
-      matched.Status != null
+      matched.State != null
     ) {
       return {
         id: matched.Id,
         arn: matched.Arn,
         name: matched.Name,
         email: matched.Email,
-        status: matched.Status,
+        state: matched.State,
       };
     }
     nextToken = response.NextToken;
@@ -185,7 +185,7 @@ async function findAccountById(props: {
   return undefined;
 }
 
-function isCompleteAccountWithStatus(
+function isCompleteAccount(
   account: Account,
   expectedAccountId?: string,
 ): boolean {
@@ -194,7 +194,7 @@ function isCompleteAccountWithStatus(
     account.Arn == null ||
     account.Name == null ||
     account.Email == null ||
-    account.Status == null
+    account.State == null
   ) {
     return false;
   }

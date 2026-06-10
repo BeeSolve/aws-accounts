@@ -60,6 +60,11 @@ export async function scanOrganization(props: {
   }
   const managementAccountId = orgResponse.Organization?.MasterAccountId;
 
+  const organizationId = orgResponse.Organization?.Id;
+  if (!organizationId) {
+    throw new Error("Could not determine organization ID.");
+  }
+
   const organizationalUnits = await collectOrganizationalUnits({
     organizationsClient: props.organizationsClient,
     parentId: root.Id,
@@ -77,7 +82,7 @@ export async function scanOrganization(props: {
         account.Arn == null ||
         account.Name == null ||
         account.Email == null ||
-        account.Status == null
+        account.State == null
       ) {
         continue;
       }
@@ -100,7 +105,7 @@ export async function scanOrganization(props: {
         arn: account.Arn,
         name: account.Name,
         email: account.Email,
-        status: account.Status,
+        state: account.State,
         parentId,
         tags: (tagsResponse.Tags ?? []).flatMap((tag) => {
           if (tag.Key == null) {
@@ -131,6 +136,7 @@ export async function scanOrganization(props: {
     ]);
 
   return {
+    organizationId,
     rootId: root.Id,
     organizationalUnits,
     accounts,

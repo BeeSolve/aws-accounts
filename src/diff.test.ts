@@ -73,7 +73,7 @@ test("diffStates emits createAccount operation for sentinel new account", () => 
     arn: "__pending_creation__",
     name: "app-c",
     email: "app-c@example.com",
-    status: "ACTIVE",
+    state: "ACTIVE",
     tags: [],
     parentId: "ou-eng",
   });
@@ -364,7 +364,7 @@ test("diffStates keeps OU delete unsupported when same-batch moves do not empty 
     arn: "arn:acct-app-c",
     name: "app-c",
     email: "app-c@example.com",
-    status: "ACTIVE",
+    state: "ACTIVE",
     tags: [],
     parentId: "ou-eng",
   });
@@ -483,7 +483,7 @@ test("diffStates keeps nested OU delete unsupported when a descendant is not saf
     arn: "arn:acct-app-c",
     name: "app-c",
     email: "app-c@example.com",
-    status: "ACTIVE",
+    state: "ACTIVE",
     tags: [],
     parentId: "ou-child",
   });
@@ -669,7 +669,7 @@ test("diffStates reports new account with unresolved target OU", () => {
     arn: "__pending_creation__",
     name: "app-d",
     email: "app-d@example.com",
-    status: "ACTIVE",
+    state: "ACTIVE",
     tags: [],
     parentId: "__pending_creation__",
   });
@@ -705,7 +705,7 @@ test("diffStates emits createOu and createAccount in same plan when new account 
     arn: "__pending_creation__",
     name: "kit-lambda-test",
     email: "kit-lambda-test@example.com",
-    status: "ACTIVE",
+    state: "ACTIVE",
     tags: [],
     parentId: "__pending_creation__",
   });
@@ -1300,7 +1300,7 @@ test("diffStates keeps deterministic mixed Organizations and IdC ordering", () =
     arn: "__pending_creation__",
     name: "app-c",
     email: "app-c@example.com",
-    status: "ACTIVE",
+    state: "ACTIVE",
     tags: [],
     parentId: "ou-eng",
   });
@@ -1348,6 +1348,7 @@ function createBaseState(): StateFile {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [
         {
@@ -1369,7 +1370,7 @@ function createBaseState(): StateFile {
           arn: "arn:acct-app-a",
           name: "app-a",
           email: "app-a@example.com",
-          status: "ACTIVE",
+          state: "ACTIVE",
           tags: [],
           parentId: "ou-eng",
         },
@@ -1378,7 +1379,7 @@ function createBaseState(): StateFile {
           arn: "arn:acct-app-b",
           name: "app-b",
           email: "app-b@example.com",
-          status: "ACTIVE",
+          state: "ACTIVE",
           tags: [],
           parentId: "ou-data",
         },

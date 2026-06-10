@@ -34,7 +34,7 @@ const accountArb = fc.record({
   arn: nonEmptyStringArb,
   name: nonEmptyStringArb,
   email: nonEmptyStringArb,
-  status: nonEmptyStringArb,
+  state: nonEmptyStringArb,
   parentId: nonEmptyStringArb,
   tags: fc.array(accountTagArb, { maxLength: 5 }),
 });
@@ -110,6 +110,7 @@ const stateFileArb: fc.Arbitrary<StateFile> = fc.record({
   version: nonEmptyStringArb,
   generatedAt: nonEmptyStringArb,
   organization: fc.record({
+    organizationId: nonEmptyStringArb,
     rootId: nonEmptyStringArb,
     organizationalUnits: fc.array(organizationalUnitArb, { maxLength: 5 }),
     accounts: fc.array(accountArb, { maxLength: 5 }),
@@ -144,6 +145,7 @@ test("Property 2: Cache freshness determination — isCacheFresh returns true if
     version: "1",
     generatedAt: "2026-01-01T00:00:00.000Z",
     organization: {
+      organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [],
       accounts: [],

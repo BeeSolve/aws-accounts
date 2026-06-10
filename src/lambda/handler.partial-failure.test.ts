@@ -10,6 +10,7 @@ const minimalState: StateFile = {
   version: "1",
   generatedAt: "2026-01-01T00:00:00.000Z",
   organization: {
+    organizationId: "o-test123",
     rootId: "r-root",
     organizationalUnits: [],
     accounts: [],
@@ -67,6 +68,22 @@ mock.module("@aws-sdk/client-s3", {
         this.input = input;
       }
     },
+    CreateBucketCommand: class CreateBucketCommand {
+      input: unknown;
+      constructor(input: unknown) { this.input = input; }
+    },
+    PutBucketPolicyCommand: class PutBucketPolicyCommand {
+      input: unknown;
+      constructor(input: unknown) { this.input = input; }
+    },
+    PutPublicAccessBlockCommand: class PutPublicAccessBlockCommand {
+      input: unknown;
+      constructor(input: unknown) { this.input = input; }
+    },
+    PutBucketTaggingCommand: class PutBucketTaggingCommand {
+      input: unknown;
+      constructor(input: unknown) { this.input = input; }
+    },
     S3ServiceException: class S3ServiceException extends Error {
       $metadata: { httpStatusCode?: number };
       $fault: string;
@@ -91,11 +108,19 @@ mock.module("@aws-sdk/s3-request-presigner", {
   },
 });
 
+mock.module("@aws-sdk/client-sts", {
+  namedExports: {
+    STSClient: class { send = async () => ({}); },
+    AssumeRoleCommand: class { constructor() {} },
+  },
+});
+
 mock.module("@aws-sdk/client-organizations", {
   namedExports: {
     OrganizationsClient: class {
       send = async () => ({});
     },
+    DescribeOrganizationCommand: class { constructor() {} },
   },
 });
 

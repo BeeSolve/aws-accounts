@@ -37,7 +37,7 @@ const accountArb = fc.record({
   arn: nonEmptyStringArb,
   name: nonEmptyStringArb,
   email: nonEmptyStringArb,
-  status: nonEmptyStringArb,
+  state: nonEmptyStringArb,
   parentId: nonEmptyStringArb,
   tags: fc.array(accountTagArb, { maxLength: 5 }),
 });
@@ -115,6 +115,7 @@ const stateFileArb: fc.Arbitrary<StateFile> = fc.record({
   version: nonEmptyStringArb,
   generatedAt: nonEmptyStringArb,
   organization: fc.record({
+    organizationId: nonEmptyStringArb,
     rootId: nonEmptyStringArb,
     organizationalUnits: fc.array(organizationalUnitArb, { maxLength: 10 }),
     accounts: fc.array(accountArb, { maxLength: 10 }),
