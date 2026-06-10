@@ -8,9 +8,7 @@ type GraveyardCloseCommandInput = {
   contextPath: string;
 };
 
-export async function runGraveyardCloseCommand(
-  props: GraveyardCloseCommandInput,
-): Promise<void> {
+export async function runGraveyardCloseCommand(props: GraveyardCloseCommandInput): Promise<void> {
   const [cache, context] = await Promise.all([
     readStateCache(props.cachePath),
     readAwsContextFromFile(props.contextPath),
@@ -34,9 +32,7 @@ export async function runGraveyardCloseCommand(
   props.logger.log(`${eligible.length} account(s) eligible for closure:\n`);
   for (const account of eligible) {
     props.logger.log(`# ${account.name} (${account.id})`);
-    props.logger.log(
-      `aws organizations close-account --account-id ${account.id}`,
-    );
+    props.logger.log(`aws organizations close-account --account-id ${account.id}`);
     props.logger.log("");
   }
 }
@@ -93,12 +89,8 @@ export async function runGraveyardCommand(
 
   props.logger.log("");
   for (const account of graveyardAccounts) {
-    props.logger.log(
-      `- ${account.name} (${account.id}) [${account.state}] <${account.email}>`,
-    );
-    props.logger.log(
-      `  aws organizations close-account --account-id ${account.id}`,
-    );
+    props.logger.log(`- ${account.name} (${account.id}) [${account.status}] <${account.email}>`);
+    props.logger.log(`  aws organizations close-account --account-id ${account.id}`);
   }
 
   return {

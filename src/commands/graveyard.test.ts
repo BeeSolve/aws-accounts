@@ -59,9 +59,7 @@ test("runGraveyardCommand prints empty state message", async () => {
     });
     assert.equal(result.accounts.length, 0);
     assert.ok(
-      logger.logs.some((line) =>
-        line.includes("No accounts currently parked in Graveyard."),
-      ),
+      logger.logs.some((line) => line.includes("No accounts currently parked in Graveyard.")),
     );
   } finally {
     await workspace.cleanup();
@@ -185,9 +183,24 @@ test("runGraveyardCloseCommand throws error when cache file does not exist", asy
     const context = {
       version: "1",
       generatedAt: "2026-05-01T00:00:00.000Z",
-      organization: { id: "o-test123", managementAccountId: "999999999999", rootId: "r-root", graveyardOuId: "ou-graveyard" },
-      identityCenter: { instanceArn: "arn:aws:sso:::instance/ssoins-123", identityStoreId: "d-123" },
-      deployment: { profile: "default", region: "eu-central-1", lambdaArn: "", stateBucketName: "", stateCacheTtlSeconds: 300, cliVersion: "0.0.0-test" },
+      organization: {
+        id: "o-test123",
+        managementAccountId: "999999999999",
+        rootId: "r-root",
+        graveyardOuId: "ou-graveyard",
+      },
+      identityCenter: {
+        instanceArn: "arn:aws:sso:::instance/ssoins-123",
+        identityStoreId: "d-123",
+      },
+      deployment: {
+        profile: "default",
+        region: "eu-central-1",
+        lambdaArn: "",
+        stateBucketName: "",
+        stateCacheTtlSeconds: 300,
+        cliVersion: "0.0.0-test",
+      },
     };
     await writeFile(contextPath, `${JSON.stringify(context, null, 2)}\n`, "utf8");
     const logger = createCollectingLogger();
@@ -210,7 +223,7 @@ async function writeFixtureFiles(props: {
     id: string;
     name: string;
     email: string;
-    status: string;
+    state: string;
   }>;
 }): Promise<void> {
   const state = {
