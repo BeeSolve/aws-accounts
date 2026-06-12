@@ -464,7 +464,7 @@ export async function regenerateAwsConfigTypes(
   };
 }
 
-function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
+export function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel {
   const organizationalUnits: AwsConfigModel["organizationalUnits"] = [
     {
       name: "root",
@@ -1337,7 +1337,7 @@ export default awsConfig;
 `;
 }
 
-function renderTsValue(
+export function renderTsValue(
   value: unknown,
   props: {
     indentLevel: number;
