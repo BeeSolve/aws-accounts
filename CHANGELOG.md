@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.7.2
+
+### Patch Changes
+
+- 38ad874: Fix false drift for permission sets with optional fields (inlinePolicy, sessionDuration, permissionsBoundary) by treating undefined values as absent keys.
+
 ## 1.7.1
 
 ### Patch Changes
