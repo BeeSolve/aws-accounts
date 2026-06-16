@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -592,6 +593,14 @@ export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
 }
 
 export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
+  if (existsSync(configFilePath)) {
+    input.logger.log("aws.config.ts already exists. Running drift check instead.");
+    input.logger.log("To regenerate from scratch, delete aws.config.ts first.");
+    input.logger.log("");
+    await runRemoteDrift(input);
+    return;
+  }
+
   const [deployment, cliVersion] = await Promise.all([
     readDeploymentFromContext(),
     readPackageVersion(),
