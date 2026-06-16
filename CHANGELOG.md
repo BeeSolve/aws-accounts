@@ -1,5 +1,12 @@
 # @beesolve/aws-accounts
 
+## 1.7.0
+
+### Minor Changes
+
+- 44fd680: Reworked `drift` command to compare your `aws.config.ts` against live AWS state and output ready-to-paste TypeScript snippets showing additions, removals, and modifications needed to bring your config in sync.
+- f854bcc: Remove `aws.config.generated.ts` intermediary — `init` now writes directly to `aws.config.ts`. The `--update` flag is removed since the `drift` command replaces that workflow.
+
 ## 1.6.0
 
 ### Minor Changes
