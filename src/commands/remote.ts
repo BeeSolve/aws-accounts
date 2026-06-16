@@ -798,6 +798,10 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
 
   const hasChanges = plan.operations.length > 0 || (stackSetOperations != null && stackSetOperations.length > 0);
 
+  if (!hasChanges) {
+    input.logger.log("No changes. Ensuring security baseline infrastructure...");
+  }
+
   if (hasChanges) {
     displayPlan({ plan, stackSetOperations, logger: input.logger });
 
