@@ -1,6 +1,6 @@
 {
   "name": "@beesolve/aws-accounts",
-  "version": "1.7.5",
+  "version": "1.7.6",
   "description": "AWS Organizations and IAM Identity Center management CLI",
   "keywords": [],
   "license": "MIT",
