@@ -92,6 +92,7 @@ const remoteCommandSchema = v.object({
     refresh: v.boolean(),
     allowDestructive: v.boolean(),
     ignoreUnsupported: v.boolean(),
+    redeployStacksets: v.boolean(),
   }),
 });
 
@@ -786,6 +787,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     region: deployment.region,
     ouIdsByName,
     deployedStackSets: currentState.deployedStackSets,
+    forceRedeploy: input.flags.redeployStacksets,
   });
 
   if (plan.operations.length === 0 && (stackSetOperations?.length ?? 0) === 0) {
@@ -2107,14 +2109,14 @@ async function waitForLambdaReady(lambdaClient: LambdaClient, functionName: stri
 
 const validStackSetNames = new Set(["security-setup", "config-recorder", "guardduty-member"]);
 
-function computeStackSetOperations(config: AwsConfigModel, context: { managementAccountId: string; organizationId: string | undefined; region: string; ouIdsByName: Record<string, string>; deployedStackSets?: Array<{ name: string; targets: string[] }> }): StackSetOperation[] | undefined {
+function computeStackSetOperations(config: AwsConfigModel, context: { managementAccountId: string; organizationId: string | undefined; region: string; ouIdsByName: Record<string, string>; deployedStackSets?: Array<{ name: string; targets: string[] }>; forceRedeploy?: boolean }): StackSetOperation[] | undefined {
   const baseline = config.securityBaseline;
   if (baseline == null || baseline.stackSets.length === 0) return undefined;
   if (!context.organizationId) {
     throw new Error("Organization ID not found in context. Run 'scan' to populate it.");
   }
   const deliveryBucketName = `config-delivery-${context.organizationId}-${context.region}`;
-  const deployed = context.deployedStackSets ?? [];
+  const deployed = context.forceRedeploy ? [] : (context.deployedStackSets ?? []);
   return baseline.stackSets.flatMap((ss) => {
     if (!validStackSetNames.has(ss.templateKey)) return [];
     const resolvedTargets = ss.targets.map((t) => {

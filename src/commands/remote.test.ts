@@ -41,6 +41,7 @@ function createBaseInput(overrides?: Partial<RemoteCommandInput>): RemoteCommand
       refresh: false,
       allowDestructive: false,
       ignoreUnsupported: false,
+      redeployStacksets: false,
       ...overrides?.flags,
     },
     logger: overrides?.logger ?? noopLogger,

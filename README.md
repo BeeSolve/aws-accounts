@@ -219,6 +219,7 @@ Options:
   --yes                     Skip interactive confirmations
   --json                    Output plan as JSON (plan command)
   --allow-destructive       Allow destructive operations (apply command)
+  --redeploy-stacksets      Force re-deployment of security baseline StackSets (apply command)
   --ignore-unsupported      Proceed with non-destructive unsupported diffs (apply command)
   --refresh                 Force state refresh before planning (plan command)
   --sso-start-url <url>     IAM Identity Center access portal URL (fallback: AWS_SSO_START_URL)
