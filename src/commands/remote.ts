@@ -911,10 +911,14 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     }
 
     // Record deployed StackSets in state for idempotency
-    const allDeployed = stackSetOperations.map((op) => ({
+    const newlyDeployed = stackSetOperations.map((op) => ({
       name: op.stackSetName,
       targets: op.targets,
     }));
+    const previouslyDeployed = (currentState.deployedStackSets ?? []).filter(
+      (d) => !newlyDeployed.some((n) => n.name === d.name),
+    );
+    const allDeployed = [...previouslyDeployed, ...newlyDeployed];
     await invokeLambda({
       lambdaClient: input.lambdaClient,
       lambdaArn: deployment.lambdaArn,
