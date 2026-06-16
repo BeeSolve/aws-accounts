@@ -463,8 +463,9 @@ Add the helpers to your `permissionSets` array:
 permissionSets: [
   // ...existing permission sets
   policies.permissionSet.readOnlyAuditor(),
-  policies.permissionSet.securityInvestigator(),
+  policies.permissionSet.cloudTrailAnalyst(),
   policies.permissionSet.configCompliance(),
+  policies.permissionSet.securityInvestigator(),
 ],
 ```
 
@@ -487,12 +488,22 @@ Then assign:
 assignments: [
   // ...existing assignments
   {
-    permissionSet: "SecurityInvestigator",
+    permissionSet: "ReadOnlyAuditor",
+    group: "Security",
+    accounts: ["SecurityAudit"],
+  },
+  {
+    permissionSet: "CloudTrailAnalyst",
     group: "Security",
     accounts: ["SecurityAudit"],
   },
   {
     permissionSet: "ConfigCompliance",
+    group: "Security",
+    accounts: ["SecurityAudit"],
+  },
+  {
+    permissionSet: "SecurityInvestigator",
     group: "Security",
     accounts: ["SecurityAudit"],
   },
