@@ -788,7 +788,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     deployedStackSets: currentState.deployedStackSets,
   });
 
-  if (plan.operations.length === 0 && (stackSetOperations?.length ?? 0) === 0 && config.securityBaseline == null) {
+  if (plan.operations.length === 0 && (stackSetOperations?.length ?? 0) === 0) {
     input.logger.log("No changes: aws.config.ts already matches the current remote state.");
     input.logger.log(
       "If you expected changes, verify your config with aws-accounts validate or run with --refresh to fetch fresh state.",
@@ -797,10 +797,6 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
   }
 
   const hasChanges = plan.operations.length > 0 || (stackSetOperations != null && stackSetOperations.length > 0);
-
-  if (!hasChanges) {
-    input.logger.log("No changes. Ensuring security baseline infrastructure...");
-  }
 
   if (hasChanges) {
     displayPlan({ plan, stackSetOperations, logger: input.logger });
@@ -935,9 +931,10 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
   }
   }
 
-  // Ensure Config delivery bucket exists (idempotent)
-  const deliveryBucket = config.securityBaseline?.configDeliveryBucket;
-  if (deliveryBucket) {
+  // Ensure Config delivery bucket and aggregator exist when deploying security baseline StackSets
+  if (stackSetOperations != null && stackSetOperations.length > 0) {
+    const deliveryBucket = config.securityBaseline?.configDeliveryBucket;
+    if (deliveryBucket) {
     const deliveryBucketName = `config-delivery-${context.organization.id!}-${deployment.region}`;
     const deliveryAccountId = currentState.organization.accounts.find(
       (a) => a.name === deliveryBucket.accountName,
@@ -986,6 +983,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
         input.logger.log(`  [aggregator] Config aggregator ready.`);
       }
     }
+  }
   }
 }
 

@@ -686,7 +686,7 @@ export default awsConfig;
 `;
 }
 
-test("runRemoteApply creates aggregator even when StackSets are already deployed", async () => {
+test("runRemoteApply creates aggregator when deploying security baseline StackSets", async () => {
   const workspace = await createTestWorkspace({ prefix: "remote-test-" });
   try {
     const contextPath = join(workspace.workspacePath, "aws.context.json");
@@ -700,7 +700,7 @@ test("runRemoteApply creates aggregator even when StackSets are already deployed
       "utf8",
     );
 
-    // State with StackSets already deployed + SecurityAudit account present
+    // State without deployedStackSets so StackSet operations are triggered
     const state = {
       ...createMinimalState(),
       organization: {
@@ -721,10 +721,6 @@ test("runRemoteApply creates aggregator even when StackSets are already deployed
           { accountId: "222222222222", servicePrincipal: "config.amazonaws.com" },
         ],
       },
-      deployedStackSets: [
-        { name: "security-setup", targets: ["r-root"] },
-        { name: "config-recorder", targets: ["r-root"] },
-      ],
     };
     await writeFile(cachePath, JSON.stringify({ fetchedAt: new Date().toISOString(), state }, null, 2), "utf8");
 
@@ -746,6 +742,28 @@ test("runRemoteApply creates aggregator even when StackSets are already deployed
               success: true,
               operationsCompleted: payload.operations.length,
               state,
+            })),
+          };
+        }
+        if (payload.action === "getUploadUrl") {
+          return {
+            StatusCode: 200,
+            Payload: new TextEncoder().encode(JSON.stringify({
+              action: "getUploadUrl",
+              success: true,
+              url: "http://localhost/fake-upload",
+              expiresInSeconds: 300,
+            })),
+          };
+        }
+        if (payload.action === "deployStackSet") {
+          return {
+            StatusCode: 200,
+            Payload: new TextEncoder().encode(JSON.stringify({
+              action: "deployStackSet",
+              success: true,
+              stackSetId: "fake-stack-set-id",
+              operationId: "fake-op-id",
             })),
           };
         }
@@ -779,6 +797,9 @@ test("runRemoteApply creates aggregator even when StackSets are already deployed
       },
     };
 
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response("", { status: 200 }) as any;
+
     const logger = createCollectingLogger();
     const input = createBaseInput({
       subcommand: "apply",
@@ -793,6 +814,7 @@ test("runRemoteApply creates aggregator even when StackSets are already deployed
       await runRemoteApply(input);
     } finally {
       process.chdir(originalCwd);
+      globalThis.fetch = originalFetch;
     }
 
     const aggregatorCall = lambdaPayloads.find(
