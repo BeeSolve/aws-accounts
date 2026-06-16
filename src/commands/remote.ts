@@ -1,5 +1,4 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,7 +91,6 @@ const remoteCommandSchema = v.object({
     refresh: v.boolean(),
     allowDestructive: v.boolean(),
     ignoreUnsupported: v.boolean(),
-    update: v.boolean(),
   }),
 });
 
@@ -108,7 +106,6 @@ export type RemoteCommandInput = v.InferOutput<typeof remoteCommandSchema> & {
 
 const contextFilePath = "aws.context.json";
 const configFilePath = "aws.config.ts";
-const generatedConfigFilePath = "aws.config.generated.ts";
 const typesFilePath = "aws.config.types.ts";
 const cachePath = ".remote-state-cache.json";
 const lambdaRoleName = "beesolve-aws-accounts-lambda-role";
@@ -595,21 +592,6 @@ export async function runRemoteScan(input: RemoteCommandInput): Promise<void> {
 }
 
 export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
-  const isUpdate = input.flags.update;
-
-  // In --update mode, load existing config before scan so we can merge additively
-  let existingConfig: Awaited<ReturnType<typeof loadAwsConfigModelFromTsFile>> | undefined;
-  if (isUpdate) {
-    try {
-      existingConfig = await loadAwsConfigModelFromTsFile({
-        configPath: generatedConfigFilePath,
-        typesPath: typesFilePath,
-      });
-    } catch {
-      // Config doesn't exist yet — fall through to full init behaviour
-    }
-  }
-
   const [deployment, cliVersion] = await Promise.all([
     readDeploymentFromContext(),
     readPackageVersion(),
@@ -673,29 +655,16 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
   const configWriteResult = await writeAwsConfigFromState({
     state: response.state,
     contextPath: contextFilePath,
-    configPath: generatedConfigFilePath,
+    configPath: configFilePath,
     typesPath: typesFilePath,
     logger: input.logger,
     overwriteConfirmation: input.overwriteConfirmation,
-    existingConfig,
   });
-
-  if (!existsSync(configFilePath)) {
-    await writeFile(
-      configFilePath,
-      `import config from "./aws.config.generated.js";
-
-export default config;
-`,
-      "utf8",
-    );
-    input.logger.log(`Created ${configFilePath} (edit this file to add withSecurityBaseline or other wrappers).`);
-  }
 
   const writtenFiles = configWriteResult.files.filter((f) => f.status === "written");
   if (writtenFiles.length > 0) {
     input.logger.log("");
-    input.logger.log(isUpdate ? "Init --update complete." : "Init complete.");
+    input.logger.log("Init complete.");
     for (const file of writtenFiles) {
       input.logger.log(`  ${file.path}: ${file.status}`);
     }

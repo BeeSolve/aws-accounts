@@ -675,7 +675,7 @@ Resources have dependencies — delete them in this order:
 
 8. **Delete local files**:
    ```bash
-   rm aws.context.json aws.config.generated.ts
+   rm aws.context.json
    ```
 
 ### Security implications

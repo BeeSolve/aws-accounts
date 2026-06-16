@@ -238,8 +238,6 @@ type WriteAwsConfigFromStateInput = {
   typesPath: string;
   logger: Logger;
   overwriteConfirmation: (props: { fileSummaries: string[] }) => Promise<boolean>;
-  /** When set, preserve all existing config sections and only add absent optional sections from state. */
-  existingConfig?: AwsConfigModel;
 };
 
 type WriteAwsConfigFromStateResult = {
@@ -303,10 +301,8 @@ export async function writeAwsConfigFromState(
   });
 
   const mappedConfig = mapStateToAwsConfig({ state });
-  const mergedConfig: AwsConfigModel =
-    props.existingConfig != null ? props.existingConfig : mappedConfig;
   const sortedConfig = sortAwsConfigModel({
-    config: mergedConfig,
+    config: mappedConfig,
   });
   const nextConfigContent = renderAwsConfigTs({
     config: sortedConfig,
