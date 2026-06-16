@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.7.3
+
+### Patch Changes
+
+- ce70474: Type-check config passed to `withSecurityBaseline` against `AwsConfig` so assignments get autocomplete for accounts, groups, and permissionSets.
+
 ## 1.7.2
 
 ### Patch Changes
