@@ -358,6 +358,7 @@ test("--refresh flag causes fetchCurrentState to skip cache check", async () => 
         refresh: true,
         allowDestructive: false,
         ignoreUnsupported: false,
+        redeployStacksets: false,
       },
       logger,
     });
@@ -421,6 +422,7 @@ test("without --refresh flag, fresh cache is used", async () => {
         refresh: false,
         allowDestructive: false,
         ignoreUnsupported: false,
+        redeployStacksets: false,
       },
       logger,
     });
@@ -489,6 +491,7 @@ test("runRemoteApply displays concurrency conflict message", async () => {
         refresh: false,
         allowDestructive: false,
         ignoreUnsupported: false,
+        redeployStacksets: false,
       },
       logger,
     });
@@ -804,7 +807,7 @@ test("runRemoteApply creates aggregator when deploying security baseline StackSe
     const logger = createCollectingLogger();
     const input = createBaseInput({
       subcommand: "apply",
-      flags: { yes: true, refresh: false, allowDestructive: false, ignoreUnsupported: false },
+      flags: { yes: true, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
       logger,
       lambdaClient: mockLambdaClient as any,
     });
