@@ -1,3 +1,5 @@
+import type { IamPolicyDocument } from "@beesolve/iam-policy-ts";
+
 export function toPolicies<T extends string, A extends string>() {
   return {
     scp: {
@@ -260,7 +262,7 @@ type PermissionSetEntry = {
   name: string;
   description: string;
   sessionDuration?: string;
-  inlinePolicy?: Record<string, unknown>;
+  inlinePolicy?: IamPolicyDocument;
   awsManagedPolicies: string[];
   customerManagedPolicies: { name: string; path: string }[];
 };
