@@ -1104,6 +1104,9 @@ function deepEqual(left: unknown, right: unknown): boolean {
   if (left === right) {
     return true;
   }
+  if (left == null && right == null) {
+    return true;
+  }
   if (left == null || right == null) {
     return false;
   }
@@ -1114,17 +1117,14 @@ function deepEqual(left: unknown, right: unknown): boolean {
     return left.every((item, i) => deepEqual(item, right[i]));
   }
   if (typeof left === "object" && typeof right === "object" && !Array.isArray(left) && !Array.isArray(right)) {
-    const leftKeys = Object.keys(left as Record<string, unknown>);
-    const rightKeys = Object.keys(right as Record<string, unknown>);
+    const leftObj = left as Record<string, unknown>;
+    const rightObj = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftObj).filter((k) => leftObj[k] !== undefined);
+    const rightKeys = Object.keys(rightObj).filter((k) => rightObj[k] !== undefined);
     if (leftKeys.length !== rightKeys.length) {
       return false;
     }
-    return leftKeys.every((key) =>
-      deepEqual(
-        (left as Record<string, unknown>)[key],
-        (right as Record<string, unknown>)[key],
-      ),
-    );
+    return leftKeys.every((key) => deepEqual(leftObj[key], rightObj[key]));
   }
   return false;
 }
