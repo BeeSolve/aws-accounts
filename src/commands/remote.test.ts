@@ -685,3 +685,281 @@ const awsConfig = {
 export default awsConfig;
 `;
 }
+
+test("runRemoteApply creates aggregator even when StackSets are already deployed", async () => {
+  const workspace = await createTestWorkspace({ prefix: "remote-test-" });
+  try {
+    const contextPath = join(workspace.workspacePath, "aws.context.json");
+    const cachePath = join(workspace.workspacePath, ".remote-state-cache.json");
+    const configPath = join(workspace.workspacePath, "aws.config.ts");
+    const typesPath = join(workspace.workspacePath, "aws.config.types.ts");
+
+    await writeFile(
+      contextPath,
+      JSON.stringify(createValidContextFile({ withDeployment: true }), null, 2),
+      "utf8",
+    );
+
+    // State with StackSets already deployed + SecurityAudit account present
+    const state = {
+      ...createMinimalState(),
+      organization: {
+        ...createMinimalState().organization,
+        accounts: [
+          ...createMinimalState().organization.accounts,
+          {
+            id: "222222222222",
+            arn: "arn:acct:2",
+            name: "SecurityAudit",
+            email: "security@example.com",
+            state: "ACTIVE",
+            parentId: "ou-pending",
+            tags: [],
+          },
+        ],
+        delegatedAdministrators: [
+          { accountId: "222222222222", servicePrincipal: "config.amazonaws.com" },
+        ],
+      },
+      deployedStackSets: [
+        { name: "security-setup", targets: ["r-root"] },
+        { name: "config-recorder", targets: ["r-root"] },
+      ],
+    };
+    await writeFile(cachePath, JSON.stringify({ fetchedAt: new Date().toISOString(), state }, null, 2), "utf8");
+
+    await writeFile(typesPath, createTypesFileWithSecurityBaseline(), "utf8");
+    await writeFile(configPath, createConfigWithSecurityBaseline(), "utf8");
+
+    const lambdaPayloads = new Array<unknown>();
+    const mockLambdaClient = {
+      send: async (command: any) => {
+        const payloadText = new TextDecoder().decode(command.input.Payload);
+        const payload = JSON.parse(payloadText);
+        lambdaPayloads.push(payload);
+
+        if (payload.action === "apply") {
+          return {
+            StatusCode: 200,
+            Payload: new TextEncoder().encode(JSON.stringify({
+              action: "apply",
+              success: true,
+              operationsCompleted: payload.operations.length,
+              state,
+            })),
+          };
+        }
+        if (payload.action === "createConfigDeliveryBucket") {
+          return {
+            StatusCode: 200,
+            Payload: new TextEncoder().encode(JSON.stringify({
+              action: "createConfigDeliveryBucket",
+              success: true,
+              bucketName: "config-delivery-o-test123-us-east-1",
+              created: false,
+            })),
+          };
+        }
+        if (payload.action === "createConfigAggregator") {
+          return {
+            StatusCode: 200,
+            Payload: new TextEncoder().encode(JSON.stringify({ action: "createConfigAggregator", success: true })),
+          };
+        }
+        if (payload.action === "recordDeployedStackSets") {
+          return {
+            StatusCode: 200,
+            Payload: new TextEncoder().encode(JSON.stringify({ action: "recordDeployedStackSets", success: true })),
+          };
+        }
+        return {
+          StatusCode: 200,
+          Payload: new TextEncoder().encode(JSON.stringify({ action: payload.action, success: true })),
+        };
+      },
+    };
+
+    const logger = createCollectingLogger();
+    const input = createBaseInput({
+      subcommand: "apply",
+      flags: { yes: true, refresh: false, allowDestructive: false, ignoreUnsupported: false },
+      logger,
+      lambdaClient: mockLambdaClient as any,
+    });
+
+    const originalCwd = process.cwd();
+    process.chdir(workspace.workspacePath);
+    try {
+      await runRemoteApply(input);
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    const aggregatorCall = lambdaPayloads.find(
+      (p: any) => p.action === "createConfigAggregator",
+    ) as any;
+    assert.ok(aggregatorCall, "Expected createConfigAggregator Lambda invocation");
+    assert.equal(aggregatorCall.targetAccountId, "222222222222");
+    assert.equal(aggregatorCall.region, "us-east-1");
+
+    assert.ok(
+      logger.logs.some((l) => l.includes("[aggregator] Config aggregator ready.")),
+      "Expected aggregator ready log message",
+    );
+  } finally {
+    await workspace.cleanup();
+  }
+});
+
+function createTypesFileWithSecurityBaseline(): string {
+  return `import * as v from "valibot";
+
+export const awsConfigSchema = v.strictObject({
+  organizationalUnits: v.array(
+    v.strictObject({
+      name: v.string(),
+      parentName: v.nullable(v.string()),
+      accounts: v.array(
+        v.strictObject({
+          name: v.string(),
+          email: v.string(),
+          tags: v.array(v.strictObject({ key: v.string(), value: v.string() })),
+        }),
+      ),
+    }),
+  ),
+  users: v.array(
+    v.strictObject({
+      userName: v.string(),
+      displayName: v.string(),
+      email: v.string(),
+    }),
+  ),
+  groups: v.array(
+    v.strictObject({
+      displayName: v.string(),
+      description: v.optional(v.string()),
+      members: v.array(v.string()),
+    }),
+  ),
+  permissionSets: v.array(
+    v.strictObject({
+      name: v.string(),
+      description: v.string(),
+      inlinePolicy: v.optional(v.any()),
+      awsManagedPolicies: v.array(v.string()),
+      customerManagedPolicies: v.array(
+        v.strictObject({ name: v.string(), path: v.string() }),
+      ),
+    }),
+  ),
+  assignments: v.array(
+    v.strictObject({
+      permissionSet: v.string(),
+      group: v.optional(v.string()),
+      user: v.optional(v.string()),
+      accounts: v.array(v.string()),
+    }),
+  ),
+  accessControlAttributes: v.array(
+    v.strictObject({
+      key: v.string(),
+      source: v.array(v.string()),
+    }),
+  ),
+  delegatedAdministrators: v.array(
+    v.strictObject({
+      account: v.string(),
+      servicePrincipal: v.string(),
+    }),
+  ),
+  policies: v.strictObject({
+    serviceControlPolicies: v.array(v.any()),
+    resourceControlPolicies: v.array(v.any()),
+    tagPolicies: v.array(v.any()),
+    aiServicesOptOutPolicies: v.array(v.any()),
+    backupPolicies: v.array(v.any()),
+  }),
+  securityBaseline: v.optional(
+    v.strictObject({
+      stackSets: v.array(
+        v.strictObject({
+          name: v.string(),
+          templateKey: v.string(),
+          targets: v.array(v.string()),
+          parameters: v.array(v.strictObject({ key: v.string(), value: v.string() })),
+        }),
+      ),
+      configDeliveryBucket: v.optional(
+        v.strictObject({
+          accountName: v.string(),
+        }),
+      ),
+    }),
+  ),
+});
+
+export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;
+`;
+}
+
+function createConfigWithSecurityBaseline(): string {
+  return `import { type AwsConfig } from "./aws.config.types.js";
+
+const awsConfig = {
+  organizationalUnits: [
+    {
+      name: "Pending",
+      parentName: null,
+      accounts: [
+        { name: "TestAccount", email: "test@example.com", tags: [] },
+        { name: "SecurityAudit", email: "security@example.com", tags: [] },
+      ],
+    },
+  ],
+  users: [],
+  groups: [],
+  permissionSets: [],
+  assignments: [],
+  accessControlAttributes: [],
+  delegatedAdministrators: [
+    { account: "SecurityAudit", servicePrincipal: "config.amazonaws.com" },
+  ],
+  policies: {
+    serviceControlPolicies: [],
+    resourceControlPolicies: [],
+    tagPolicies: [],
+    aiServicesOptOutPolicies: [],
+    backupPolicies: [],
+  },
+  securityBaseline: {
+    stackSets: [
+      {
+        name: "SecurityBaseline-SecuritySetup",
+        templateKey: "security-setup",
+        targets: ["root"],
+        parameters: [
+          { key: "ManagementAccountId", value: "123456789012" },
+          { key: "BucketName", value: "config-delivery-o-test123-us-east-1" },
+        ],
+      },
+      {
+        name: "SecurityBaseline-ConfigRecorder",
+        templateKey: "config-recorder",
+        targets: ["root"],
+        parameters: [
+          { key: "DeliveryBucketName", value: "config-delivery-o-test123-us-east-1" },
+          { key: "AllSupported", value: "true" },
+          { key: "IncludeGlobalResourceTypes", value: "true" },
+          { key: "DeliveryFrequency", value: "TwentyFour_Hours" },
+        ],
+      },
+    ],
+    configDeliveryBucket: {
+      accountName: "SecurityAudit",
+    },
+  },
+} satisfies AwsConfig;
+export default awsConfig;
+`;
+}
