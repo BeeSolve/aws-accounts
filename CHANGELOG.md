@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.7.1
+
+### Patch Changes
+
+- 6084fd6: Fix false drift detections caused by object key ordering differences between user config and AWS API responses.
+
 ## 1.7.0
 
 ### Minor Changes
