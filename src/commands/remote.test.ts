@@ -41,7 +41,6 @@ function createBaseInput(overrides?: Partial<RemoteCommandInput>): RemoteCommand
       refresh: false,
       allowDestructive: false,
       ignoreUnsupported: false,
-      update: false,
       ...overrides?.flags,
     },
     logger: overrides?.logger ?? noopLogger,
@@ -358,7 +357,6 @@ test("--refresh flag causes fetchCurrentState to skip cache check", async () => 
         refresh: true,
         allowDestructive: false,
         ignoreUnsupported: false,
-        update: false,
       },
       logger,
     });
@@ -422,7 +420,6 @@ test("without --refresh flag, fresh cache is used", async () => {
         refresh: false,
         allowDestructive: false,
         ignoreUnsupported: false,
-        update: false,
       },
       logger,
     });
@@ -491,7 +488,6 @@ test("runRemoteApply displays concurrency conflict message", async () => {
         refresh: false,
         allowDestructive: false,
         ignoreUnsupported: false,
-        update: false,
       },
       logger,
     });
