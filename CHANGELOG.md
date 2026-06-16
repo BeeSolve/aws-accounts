@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.7.4
+
+### Patch Changes
+
+- e71e0c5: Fix `policies.permissionSet.*` helpers to use `IamPolicyDocument` type instead of `Record<string, unknown>` so they're compatible with the `AwsConfig` schema.
+
 ## 1.7.3
 
 ### Patch Changes
