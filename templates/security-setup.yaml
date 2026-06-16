@@ -37,6 +37,7 @@ Resources:
                 Action:
                   - "config:PutConfigurationAggregator"
                   - "iam:CreateServiceLinkedRole"
+                  - "organizations:ListDelegatedAdministrators"
                 Resource: "*"
               - Sid: PassConfigServiceRole
                 Effect: Allow
