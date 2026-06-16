@@ -247,13 +247,13 @@ Commands that need no AWS permissions: `regenerate` (local codegen only), `valid
 
 ## SCP Patterns
 
-The package ships reusable Service Control Policy builders you can use directly in `aws.config.ts`. Import from the `@beesolve/aws-accounts/policies` sub-path:
+The generated `aws.config.types.ts` exports a `policies` object with reusable builders for SCPs, backup policies, and permission sets:
 
 ```ts
-import { scp } from "@beesolve/aws-accounts/policies";
+import { policies } from "./aws.config.types.js";
 ```
 
-### `scp.blockExpensiveResources(options)`
+### `policies.scp.blockExpensiveResources(options)`
 
 Generates a deny-by-default SCP that blocks expensive resource creation — designed to protect against account compromise (cryptomining, LLM API abuse).
 
@@ -278,7 +278,7 @@ Generates a deny-by-default SCP that blocks expensive resource creation — desi
 ```ts
 policies: {
   serviceControlPolicies: [
-    scp.blockExpensiveResources({
+    policies.scp.blockExpensiveResources({
       exemptAccounts: [],
       allowedEc2InstanceTypes: [
         "t3.nano", "t3.micro", "t3.small", "t3.medium",
@@ -294,7 +294,7 @@ policies: {
 To grant GPU/Bedrock access to a specific account, add its account ID to `exemptAccounts`:
 
 ```ts
-scp.blockExpensiveResources({
+policies.scp.blockExpensiveResources({
   exemptAccounts: ["123456789012"],
   allowedEc2InstanceTypes: ["t3.micro", "t3.small", "t4g.medium", "m8g.medium"],
 })
@@ -302,10 +302,10 @@ scp.blockExpensiveResources({
 
 ## Security Baseline
 
-The `withSecurityBaseline()` wrapper enables AWS security best practices — organization CloudTrail, AWS Config recorders, and GuardDuty — through a single config enhancement. Import from `@beesolve/aws-accounts/security`:
+The `withSecurityBaseline()` wrapper enables AWS security best practices — organization CloudTrail, AWS Config recorders, and GuardDuty — through a single config enhancement. Import from the generated types:
 
 ```ts
-import { withSecurityBaseline } from "@beesolve/aws-accounts/security";
+import { withSecurityBaseline } from "./aws.config.types.js";
 ```
 
 ### Recommended Security OU
@@ -444,167 +444,62 @@ aws guardduty list-findings \
 
 ## Recommended Permission Sets for Security Access
 
-After deploying the security baseline, you'll want team members to access Config and GuardDuty in the delegated admin account. Below are permission set definitions you can add to your `aws.config.ts` for read-only security access — similar to what Control Tower provides out of the box.
+After deploying the security baseline, you'll want team members to access Config and GuardDuty in the delegated admin account. The `policies.permissionSet` helpers generate ready-to-use permission set definitions:
 
-### Security Auditor (read-only access to Config, GuardDuty, CloudTrail)
+| Helper | Name | Description |
+|--------|------|-------------|
+| `policies.permissionSet.readOnlyAuditor()` | ReadOnlyAuditor | ViewOnlyAccess across all services |
+| `policies.permissionSet.cloudTrailAnalyst()` | CloudTrailAnalyst | CloudTrail logs + Athena queries |
+| `policies.permissionSet.configCompliance()` | ConfigCompliance | AWS Config read + resource inventory |
+| `policies.permissionSet.securityInvestigator()` | SecurityInvestigator | Combined CloudTrail, Config, GuardDuty, Security Hub |
 
-```typescript
-{
-  name: "SecurityAuditor",
-  description: "Read-only access to security services (Config, GuardDuty, CloudTrail, Security Hub)",
-  sessionDuration: "PT4H",
-  customerManagedPolicies: [],
-  awsManagedPolicies: [
-    "arn:aws:iam::aws:policy/SecurityAudit",
-  ],
-  inlinePolicy: {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Sid: "ConfigReadOnly",
-        Effect: "Allow",
-        Action: [
-          "config:Describe*",
-          "config:Get*",
-          "config:List*",
-          "config:SelectAggregateResourceConfig",
-          "config:BatchGetAggregateResourceConfig",
-        ],
-        Resource: "*",
-      },
-      {
-        Sid: "GuardDutyReadOnly",
-        Effect: "Allow",
-        Action: [
-          "guardduty:Get*",
-          "guardduty:List*",
-          "guardduty:Describe*",
-        ],
-        Resource: "*",
-      },
-      {
-        Sid: "CloudTrailReadOnly",
-        Effect: "Allow",
-        Action: [
-          "cloudtrail:Describe*",
-          "cloudtrail:Get*",
-          "cloudtrail:List*",
-          "cloudtrail:LookupEvents",
-        ],
-        Resource: "*",
-      },
-    ],
-  },
-}
-```
-
-### Security Investigator (read-only with ability to archive findings)
-
-```typescript
-{
-  name: "SecurityInvestigator",
-  description: "Security investigation access - read + archive/suppress findings",
-  sessionDuration: "PT8H",
-  customerManagedPolicies: [],
-  awsManagedPolicies: [
-    "arn:aws:iam::aws:policy/SecurityAudit",
-  ],
-  inlinePolicy: {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Sid: "GuardDutyInvestigate",
-        Effect: "Allow",
-        Action: [
-          "guardduty:Get*",
-          "guardduty:List*",
-          "guardduty:Describe*",
-          "guardduty:ArchiveFindings",
-          "guardduty:UpdateFindingsFeedback",
-        ],
-        Resource: "*",
-      },
-      {
-        Sid: "ConfigQuery",
-        Effect: "Allow",
-        Action: [
-          "config:SelectAggregateResourceConfig",
-          "config:BatchGetAggregateResourceConfig",
-          "config:Get*",
-          "config:List*",
-          "config:Describe*",
-        ],
-        Resource: "*",
-      },
-    ],
-  },
-}
-```
-
-### Config Delivery Bucket Reader (for log archive access)
-
-```typescript
-{
-  name: "ConfigLogReader",
-  description: "Read-only access to the Config delivery S3 bucket for audit purposes",
-  sessionDuration: "PT4H",
-  customerManagedPolicies: [],
-  awsManagedPolicies: [],
-  inlinePolicy: {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Sid: "ReadConfigBucket",
-        Effect: "Allow",
-        Action: [
-          "s3:GetObject",
-          "s3:ListBucket",
-          "s3:GetBucketLocation",
-        ],
-        Resource: [
-          "arn:aws:s3:::config-delivery-*",
-          "arn:aws:s3:::config-delivery-*/*",
-        ],
-      },
-    ],
-  },
-}
-```
+All helpers accept optional `{ name?, sessionDuration? }` to override defaults.
 
 ### Usage
 
-Add these to the `permissionSets` array in your `aws.config.ts`. If you don't have security group already add this to your `groups`.
+Add the helpers to your `permissionSets` array:
 
 ```typescript
-{
-  displayName: "Security",
-  description: "",
-  members: [], // add your user here
-},
+permissionSets: [
+  // ...existing permission sets
+  policies.permissionSet.readOnlyAuditor(),
+  policies.permissionSet.securityInvestigator(),
+  policies.permissionSet.configCompliance(),
+],
 ```
 
-After adding, run `plan` and `apply` to provision the permission sets and the group. After that you can set up the `assignments` like this:
-
+Add a security group if you don't have one:
 
 ```typescript
-{
-  permissionSet: "SecurityAuditor",
-  group: "Security",
-  accounts: ["SecurityAudit"],
-},
-{
-  permissionSet: "SecurityInvestigator",
-  group: "Security",
-  accounts: ["SecurityAudit"],
-},
-{
-  permissionSet: "ConfigLogReader",
-  group: "Security",
-  accounts: ["LogArchive"],
-},
+groups: [
+  // ...existing groups
+  {
+    displayName: "Security",
+    description: "",
+    members: ["your-user-here"],
+  },
+],
 ```
 
-Again run `plan` and `apply` for the changes to take effect.
+Then assign:
+
+```typescript
+assignments: [
+  // ...existing assignments
+  {
+    permissionSet: "SecurityInvestigator",
+    group: "Security",
+    accounts: ["SecurityAudit"],
+  },
+  {
+    permissionSet: "ConfigCompliance",
+    group: "Security",
+    accounts: ["SecurityAudit"],
+  },
+],
+```
+
+Run `plan` and `apply` for the changes to take effect.
 
 ## Manual Resource Cleanup
 

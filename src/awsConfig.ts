@@ -1695,7 +1695,7 @@ export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;
 type PolicyTarget = v.InferOutput<typeof organizationalUnitNameSchema> | v.InferOutput<typeof accountNameSchema>;
 type AccountName = v.InferOutput<typeof accountNameSchema>;
 export const policies = toPolicies<PolicyTarget, AccountName>();
-export function withSecurityBaseline<C extends Parameters<typeof toSecurityBaseline>[0]>(config: C, options: SecurityBaselineOptions<PolicyTarget, AccountName>) { return toSecurityBaseline(config, options); }
+export function withSecurityBaseline(config: AwsConfig, options: SecurityBaselineOptions<PolicyTarget, AccountName>) { return toSecurityBaseline(config, options); }
 `;
 }
 
