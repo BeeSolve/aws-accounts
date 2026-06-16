@@ -1100,6 +1100,35 @@ export async function runRemoteDrift(input: RemoteCommandInput): Promise<void> {
   }
 }
 
+function deepEqual(left: unknown, right: unknown): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left == null || right == null) {
+    return false;
+  }
+  if (Array.isArray(left) && Array.isArray(right)) {
+    if (left.length !== right.length) {
+      return false;
+    }
+    return left.every((item, i) => deepEqual(item, right[i]));
+  }
+  if (typeof left === "object" && typeof right === "object" && !Array.isArray(left) && !Array.isArray(right)) {
+    const leftKeys = Object.keys(left as Record<string, unknown>);
+    const rightKeys = Object.keys(right as Record<string, unknown>);
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+    return leftKeys.every((key) =>
+      deepEqual(
+        (left as Record<string, unknown>)[key],
+        (right as Record<string, unknown>)[key],
+      ),
+    );
+  }
+  return false;
+}
+
 type DriftEntry = {
   snippet: string;
   context?: string;
@@ -1274,7 +1303,7 @@ function computePermissionSetsDrift(props: {
       additions.push({ snippet: renderEntity(livePs), context: `permission set "${name}"` });
       continue;
     }
-    if (JSON.stringify(configPs) !== JSON.stringify(livePs)) {
+    if (!deepEqual(configPs, livePs)) {
       modifications.push({
         snippet: renderEntity(livePs),
         context: `permission set "${name}" differs — replace with`,
@@ -1411,7 +1440,7 @@ function computePoliciesDrift(props: {
         });
         continue;
       }
-      if (JSON.stringify(configPolicy) !== JSON.stringify(livePolicy)) {
+      if (!deepEqual(configPolicy, livePolicy)) {
         modifications.push({
           snippet: renderEntity(livePolicy),
           context: `policies.${category} "${name}" differs — replace with`,
