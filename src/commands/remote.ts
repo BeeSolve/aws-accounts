@@ -1025,7 +1025,7 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
 
   input.logger.log("");
   input.logger.log(
-    "Run init --update to sync your config with new remote features before using plan/apply.",
+    "Run drift to check for config differences before using plan/apply.",
   );
 }
 
@@ -1449,7 +1449,7 @@ function warnIfRemotePoliciesNotInConfig(props: {
     props.logger.log(
       "Warning: remote state contains SCPs/RCPs not present in your config. Proceeding could delete them.",
     );
-    props.logger.log("Run init --update to sync first.");
+    props.logger.log("Run drift to check for differences first.");
     props.logger.log("");
   }
 }

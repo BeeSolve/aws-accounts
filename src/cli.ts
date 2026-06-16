@@ -233,7 +233,6 @@ function printHelp(logger: Logger): void {
   logger.log(`  ${cmd} bootstrap [--profile <name>] [--region <region>] [--yes]`);
   logger.log(`  ${cmd} scan [--profile <name>] [--region <region>]`);
   logger.log(`  ${cmd} init [--profile <name>] [--region <region>] [--yes]`);
-  logger.log(`  ${cmd} init --update [--profile <name>] [--region <region>] [--yes]`);
   logger.log(`  ${cmd} regenerate [--yes]`);
   logger.log(`  ${cmd} validate`);
   logger.log(`  ${cmd} graveyard`);
@@ -294,7 +293,7 @@ async function printVersionBannerIfNeeded(logger: Logger): Promise<void> {
     if (remoteVersion != null && remoteVersion !== currentVersion) {
       logger.log("");
       logger.log(
-        `New version installed (local: ${currentVersion}, remote: ${remoteVersion}). Run upgrade then init --update to sync.`,
+        `New version installed (local: ${currentVersion}, remote: ${remoteVersion}). Run upgrade then drift to check for config differences.`,
       );
     }
   } catch {
