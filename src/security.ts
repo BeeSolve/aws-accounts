@@ -131,6 +131,11 @@ function protectSecurityServices<T extends string, A extends string>(
   const protectCloudTrail = options.protect?.cloudTrail ?? true;
   const protectConfig = options.protect?.config ?? true;
   const protectGuardDuty = options.protect?.guardDuty ?? true;
+  if (!protectCloudTrail && !protectConfig && !protectGuardDuty) {
+    throw new Error(
+      "protectSecurityServices: at least one service must be protected. Remove the SCP from your config instead of setting all to false.",
+    );
+  }
   const statements = new Array<Record<string, unknown>>();
   if (protectCloudTrail) {
     statements.push({

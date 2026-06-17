@@ -83,6 +83,13 @@ describe("scp.protectSecurityServices", () => {
     assert.equal(stmts.length, 1);
     assert.equal(stmts[0].Sid, "ProtectGuardDuty");
   });
+
+  it("throws when all services are set to false", () => {
+    assert.throws(
+      () => scp.protectSecurityServices({ protect: { cloudTrail: false, config: false, guardDuty: false } }),
+      (error: Error) => error.message.includes("at least one service must be protected"),
+    );
+  });
 });
 
 describe("backupPolicy.dailyWithRetention", () => {
