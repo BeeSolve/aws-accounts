@@ -741,7 +741,7 @@ export async function runRemotePlan(input: RemoteCommandInput): Promise<void> {
 
 export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
   const deployment = await readDeploymentFromContext();
-  const currentState = await fetchCurrentState({
+  let currentState = await fetchCurrentState({
     input,
     deployment,
   });
@@ -872,6 +872,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
 
     input.logger.log(`Applied ${response.operationsCompleted} operation(s).`);
     await writeStateCache(cachePath, response.state);
+    currentState = response.state;
 
     await regenerateTypesFromState({
       state: response.state,
