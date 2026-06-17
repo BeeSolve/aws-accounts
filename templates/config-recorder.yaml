@@ -26,8 +26,14 @@ Parameters:
       - Twelve_Hours
       - TwentyFour_Hours
 Resources:
+  ConfigServiceLinkedRole:
+    Type: AWS::IAM::ServiceLinkedRole
+    DeletionPolicy: Retain
+    Properties:
+      AWSServiceName: config.amazonaws.com
   ConfigRecorder:
     Type: AWS::Config::ConfigurationRecorder
+    DependsOn: ConfigServiceLinkedRole
     Properties:
       RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
       RecordingGroup:
