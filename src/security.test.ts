@@ -64,6 +64,25 @@ describe("scp.protectSecurityServices", () => {
     const stmt = (result.content as any).Statement[0];
     assert.deepEqual(stmt.Condition, { StringNotEquals: { "aws:PrincipalAccount": ["123"] } });
   });
+
+  it("protect excludes guardduty when guardDuty is false", () => {
+    const result = scp.protectSecurityServices({
+      protect: { cloudTrail: true, config: true, guardDuty: false },
+    });
+    const stmts = (result.content as any).Statement;
+    assert.equal(stmts.length, 2);
+    assert.equal(stmts[0].Sid, "ProtectCloudTrail");
+    assert.equal(stmts[1].Sid, "ProtectConfig");
+  });
+
+  it("protect includes only guardduty when others are false", () => {
+    const result = scp.protectSecurityServices({
+      protect: { guardDuty: true, cloudTrail: false, config: false },
+    });
+    const stmts = (result.content as any).Statement;
+    assert.equal(stmts.length, 1);
+    assert.equal(stmts[0].Sid, "ProtectGuardDuty");
+  });
 });
 
 describe("backupPolicy.dailyWithRetention", () => {
@@ -214,6 +233,16 @@ describe("toSecurityBaseline", () => {
     assert.deepEqual(result.delegatedAdministrators, []);
     assert.equal(result.securityBaseline, undefined);
   });
+
+  it("guardDuty enabled:false does not add delegated admin or stackSet", () => {
+    const result = toSecurityBaseline(baseConfig, {
+      guardDuty: { enabled: false },
+    });
+    assert.ok(
+      !result.delegatedAdministrators.some((d) => d.servicePrincipal === "guardduty.amazonaws.com"),
+    );
+    assert.equal(result.securityBaseline, undefined);
+  });
 });
 
 describe("securityBaseline stackSet declarations", () => {
@@ -287,9 +316,6 @@ describe("securityBaseline stackSet declarations", () => {
     const result = toSecurityBaseline(baseConfig, {
       configRecorder: {
         enabled: false,
-        delegatedAdminAccount: "SecurityAudit",
-        deliveryBucketAccount: "LogArchive",
-        targets: ["root"],
       },
     });
     assert.equal(result.securityBaseline, undefined);

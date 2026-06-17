@@ -116,6 +116,11 @@ type ProtectSecurityServicesOptions<T extends string, A extends string> = {
   exemptAccounts?: A[];
   targets?: T[];
   name?: string;
+  protect?: {
+    cloudTrail?: boolean;
+    config?: boolean;
+    guardDuty?: boolean;
+  };
 };
 
 function protectSecurityServices<T extends string, A extends string>(
@@ -123,8 +128,12 @@ function protectSecurityServices<T extends string, A extends string>(
 ): PolicyEntry<T> {
   const exempt = options.exemptAccounts ?? [];
   const condition = toExtemptAccountsCondition(exempt);
-  const statements: Record<string, unknown>[] = [
-    {
+  const protectCloudTrail = options.protect?.cloudTrail ?? true;
+  const protectConfig = options.protect?.config ?? true;
+  const protectGuardDuty = options.protect?.guardDuty ?? true;
+  const statements = new Array<Record<string, unknown>>();
+  if (protectCloudTrail) {
+    statements.push({
       Sid: "ProtectCloudTrail",
       Effect: "Deny",
       Action: [
@@ -135,8 +144,10 @@ function protectSecurityServices<T extends string, A extends string>(
       ],
       Resource: "*",
       ...(condition && { Condition: condition }),
-    },
-    {
+    });
+  }
+  if (protectConfig) {
+    statements.push({
       Sid: "ProtectConfig",
       Effect: "Deny",
       Action: [
@@ -147,8 +158,10 @@ function protectSecurityServices<T extends string, A extends string>(
       ],
       Resource: "*",
       ...(condition && { Condition: condition }),
-    },
-    {
+    });
+  }
+  if (protectGuardDuty) {
+    statements.push({
       Sid: "ProtectGuardDuty",
       Effect: "Deny",
       Action: [
@@ -159,8 +172,8 @@ function protectSecurityServices<T extends string, A extends string>(
       ],
       Resource: "*",
       ...(condition && { Condition: condition }),
-    },
-  ];
+    });
+  }
   return {
     name: options.name ?? "ProtectSecurityServices",
     description: "Prevents member accounts from disabling CloudTrail, AWS Config, and GuardDuty.",
@@ -443,35 +456,36 @@ function toExtemptAccountsCondition(exemptAccounts: string[]): Record<string, un
 }
 
 export type SecurityBaselineOptions<T extends string, A extends string> = {
-  cloudTrail?: {
-    enabled: boolean;
-    delegatedAdminAccount: A;
-    logArchiveAccount: A;
-  };
-  configRecorder?: {
-    enabled: boolean;
-    delegatedAdminAccount: A;
-    deliveryBucketAccount: A;
-    targets: T[];
-    recordAllResourceTypes?: boolean;
-    includeGlobalResources?: boolean;
-    deliveryFrequency?:
-      | "One_Hour"
-      | "Three_Hours"
-      | "Six_Hours"
-      | "Twelve_Hours"
-      | "TwentyFour_Hours";
-  };
-  guardDuty?: {
-    enabled: boolean;
-    delegatedAdminAccount: A;
-    targets?: T[];
-    findingPublishingFrequency?: "FIFTEEN_MINUTES" | "ONE_HOUR" | "SIX_HOURS";
-  };
-  rootAccessManagement?: {
-    enabled: boolean;
-    delegatedAdminAccount?: A;
-  };
+  cloudTrail?:
+    | { enabled: false }
+    | { enabled: true; delegatedAdminAccount: A; logArchiveAccount: A };
+  configRecorder?:
+    | { enabled: false }
+    | {
+        enabled: true;
+        delegatedAdminAccount: A;
+        deliveryBucketAccount: A;
+        targets: T[];
+        recordAllResourceTypes?: boolean;
+        includeGlobalResources?: boolean;
+        deliveryFrequency?:
+          | "One_Hour"
+          | "Three_Hours"
+          | "Six_Hours"
+          | "Twelve_Hours"
+          | "TwentyFour_Hours";
+      };
+  guardDuty?:
+    | { enabled: false }
+    | {
+        enabled: true;
+        delegatedAdminAccount: A;
+        targets?: T[];
+        findingPublishingFrequency?: "FIFTEEN_MINUTES" | "ONE_HOUR" | "SIX_HOURS";
+      };
+  rootAccessManagement?:
+    | { enabled: false }
+    | { enabled: true; delegatedAdminAccount?: A };
 };
 
 type StackSetDeclaration = {

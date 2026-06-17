@@ -383,6 +383,60 @@ npx aws-accounts config reveal
 
 This copies templates to `./templates/` in your project. Local copies take precedence over package defaults. The tool won't overwrite existing files.
 
+### Cost Estimate (~20 accounts, eu-central-1)
+
+| Service | What drives cost | Idle org (~$) | Active org (~$) |
+|---------|-----------------|---------------|------------------|
+| AWS Config | Configuration items recorded ($0.003/item) | $12/mo | $30–90/mo |
+| GuardDuty | CloudTrail events, VPC Flow Logs, DNS queries | $20–40/mo | $50–100/mo |
+| CloudTrail | S3 storage (org management trail is free) | $2–5/mo | $10–30/mo |
+| S3 storage | Config snapshots + CloudTrail logs | $1–3/mo | $3–10/mo |
+| **Total** | | **~$35–50/mo** | **~$100–230/mo** |
+
+Use the [AWS Pricing Calculator](https://calculator.aws/) for precise estimates. GuardDuty offers a 30-day free trial per account.
+
+### Disabling Individual Features
+
+Each security baseline feature is independently opt-in. Set `enabled: false` to skip a feature entirely — no other fields are required:
+
+```ts
+withSecurityBaseline(config, {
+  cloudTrail: { enabled: false },
+  configRecorder: { enabled: true, delegatedAdminAccount: "SecurityAudit", deliveryBucketAccount: "LogArchive", targets: ["root"] },
+  guardDuty: { enabled: false },
+});
+```
+
+After disabling a feature, existing StackSet infrastructure must be removed manually:
+
+1. Update the `protectSecurityServices` SCP to unprotect the service being removed:
+   ```ts
+   policies.scp.protectSecurityServices({ protect: { cloudTrail: true, config: true, guardDuty: false } })
+   ```
+2. Run `plan` and `apply --allow-destructive` to update the SCP and deregister delegated admins.
+3. Delete StackSet instances and the StackSet:
+   ```bash
+   aws cloudformation delete-stack-instances \
+     --stack-set-name guardduty-member \
+     --deployment-targets OrganizationalUnitIds=r-xxxx \
+     --regions eu-central-1 --no-retain-stacks \
+     --operation-preferences FailureTolerancePercentage=100
+   # Wait for completion, then:
+   aws cloudformation delete-stack-set --stack-set-name guardduty-member
+   ```
+
+### Selective SCP Protection
+
+The `protectSecurityServices` SCP helper accepts a `protect` option to control which services are protected:
+
+```ts
+policies.scp.protectSecurityServices({
+  protect: { cloudTrail: true, config: true, guardDuty: false },
+})
+```
+
+All services default to `true` (protected) when `protect` is omitted.
+
 ## Viewing Centralized Config Data
 
 After deploying the security baseline, AWS Config delivers configuration snapshots from all accounts to a central S3 bucket in your log archive account. The delegated admin account can view Config data across the organization.
