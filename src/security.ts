@@ -359,6 +359,7 @@ function configCompliance(options: PermissionSetOptions = {}): PermissionSetEntr
             "config:List*",
             "config:BatchGetResourceConfig",
             "config:SelectResourceConfig",
+            "config:SelectAggregateResourceConfig",
           ],
           Resource: "*",
         },
