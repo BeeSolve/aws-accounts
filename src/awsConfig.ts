@@ -225,6 +225,11 @@ export const awsConfigModelSchema = v.strictObject({
           accountName: v.string(),
         }),
       ),
+      cloudTrailBucket: v.optional(
+        v.strictObject({
+          accountName: v.string(),
+        }),
+      ),
     }),
   ),
 });
@@ -1682,6 +1687,11 @@ export const awsConfigSchema = v.strictObject({
         }),
       ),
       configDeliveryBucket: v.optional(
+        v.strictObject({
+          accountName: accountNameSchema,
+        }),
+      ),
+      cloudTrailBucket: v.optional(
         v.strictObject({
           accountName: accountNameSchema,
         }),

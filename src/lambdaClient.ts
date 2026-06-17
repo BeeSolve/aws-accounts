@@ -74,6 +74,20 @@ const checkPendingStackSetsRequestSchema = v.strictObject({
   })),
 });
 
+const createCloudTrailBucketRequestSchema = v.strictObject({
+  action: v.literal("createCloudTrailBucket"),
+  targetAccountId: v.string(),
+  bucketName: v.string(),
+  region: v.string(),
+  organizationId: v.string(),
+});
+
+const createOrgTrailRequestSchema = v.strictObject({
+  action: v.literal("createOrgTrail"),
+  bucketName: v.string(),
+  region: v.string(),
+});
+
 export const lambdaRequestSchema = v.variant("action", [
   scanRequestSchema,
   getStateUrlRequestSchema,
@@ -84,6 +98,8 @@ export const lambdaRequestSchema = v.variant("action", [
   recordDeployedStackSetsRequestSchema,
   createConfigAggregatorRequestSchema,
   checkPendingStackSetsRequestSchema,
+  createCloudTrailBucketRequestSchema,
+  createOrgTrailRequestSchema,
 ]);
 
 export type LambdaRequestPayload = v.InferOutput<typeof lambdaRequestSchema>;
@@ -180,6 +196,20 @@ const checkPendingStackSetsResponseSchema = v.strictObject({
   })),
 });
 
+const createCloudTrailBucketResponseSchema = v.strictObject({
+  action: v.literal("createCloudTrailBucket"),
+  success: v.literal(true),
+  bucketName: v.string(),
+  created: v.boolean(),
+});
+
+const createOrgTrailResponseSchema = v.strictObject({
+  action: v.literal("createOrgTrail"),
+  success: v.literal(true),
+  trailArn: v.string(),
+  created: v.boolean(),
+});
+
 export const lambdaResponseSchema = v.union([
   scanResponseSchema,
   getStateUrlResponseSchema,
@@ -190,6 +220,8 @@ export const lambdaResponseSchema = v.union([
   recordDeployedStackSetsResponseSchema,
   createConfigAggregatorResponseSchema,
   checkPendingStackSetsResponseSchema,
+  createCloudTrailBucketResponseSchema,
+  createOrgTrailResponseSchema,
   errorResponseSchema,
 ]);
 

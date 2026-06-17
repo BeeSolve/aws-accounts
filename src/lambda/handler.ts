@@ -11,6 +11,13 @@ import {
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import { ConfigServiceClient, PutConfigurationAggregatorCommand } from "@aws-sdk/client-config-service";
 import {
+  CloudTrailClient,
+  CreateTrailCommand,
+  GetTrailCommand,
+  StartLoggingCommand,
+  UpdateTrailCommand,
+} from "@aws-sdk/client-cloudtrail";
+import {
   CloudFormationClient,
   CreateStackSetCommand,
   UpdateStackSetCommand,
@@ -109,6 +116,20 @@ const checkPendingStackSetsRequestSchema = v.strictObject({
   })),
 });
 
+const createCloudTrailBucketRequestSchema = v.strictObject({
+  action: v.literal("createCloudTrailBucket"),
+  targetAccountId: v.string(),
+  bucketName: v.string(),
+  region: v.string(),
+  organizationId: v.string(),
+});
+
+const createOrgTrailRequestSchema = v.strictObject({
+  action: v.literal("createOrgTrail"),
+  bucketName: v.string(),
+  region: v.string(),
+});
+
 const lambdaRequestSchema = v.variant("action", [
   scanRequestSchema,
   getStateUrlRequestSchema,
@@ -119,6 +140,8 @@ const lambdaRequestSchema = v.variant("action", [
   recordDeployedStackSetsRequestSchema,
   createConfigAggregatorRequestSchema,
   checkPendingStackSetsRequestSchema,
+  createCloudTrailBucketRequestSchema,
+  createOrgTrailRequestSchema,
 ]);
 
 const scanResponseSchema = v.strictObject({
@@ -208,6 +231,20 @@ const checkPendingStackSetsResponseSchema = v.strictObject({
   })),
 });
 
+const createCloudTrailBucketResponseSchema = v.strictObject({
+  action: v.literal("createCloudTrailBucket"),
+  success: v.literal(true),
+  bucketName: v.string(),
+  created: v.boolean(),
+});
+
+const createOrgTrailResponseSchema = v.strictObject({
+  action: v.literal("createOrgTrail"),
+  success: v.literal(true),
+  trailArn: v.string(),
+  created: v.boolean(),
+});
+
 const lambdaResponseSchema = v.union([
   scanResponseSchema,
   getStateUrlResponseSchema,
@@ -218,6 +255,8 @@ const lambdaResponseSchema = v.union([
   recordDeployedStackSetsResponseSchema,
   createConfigAggregatorResponseSchema,
   checkPendingStackSetsResponseSchema,
+  createCloudTrailBucketResponseSchema,
+  createOrgTrailResponseSchema,
   errorResponseSchema,
 ]);
 
@@ -360,6 +399,22 @@ export async function handler(event: unknown): Promise<LambdaResponse> {
       const response = await handleCheckPendingStackSets({
         cloudFormationClient,
         operations: request.operations,
+      });
+      return validateResponse(response);
+    }
+    if (request.action === "createCloudTrailBucket") {
+      const response = await handleCreateCloudTrailBucket({
+        targetAccountId: request.targetAccountId,
+        bucketName: request.bucketName,
+        region: request.region,
+        organizationId: request.organizationId,
+      });
+      return validateResponse(response);
+    }
+    if (request.action === "createOrgTrail") {
+      const response = await handleCreateOrgTrail({
+        bucketName: request.bucketName,
+        region: request.region,
       });
       return validateResponse(response);
     }
@@ -673,6 +728,155 @@ async function handleCreateConfigAggregator(props: {
   }));
 
   return { action: "createConfigAggregator" as const, success: true };
+}
+
+async function handleCreateCloudTrailBucket(props: {
+  targetAccountId: string;
+  bucketName: string;
+  region: string;
+  organizationId: string;
+}): Promise<LambdaResponse> {
+  const assumeResult = await stsClient.send(
+    new AssumeRoleCommand({
+      RoleArn: `arn:aws:iam::${props.targetAccountId}:role/BeesolveSecuritySetupRole`,
+      RoleSessionName: "beesolve-aws-accounts-cloudtrail-bucket",
+    }),
+  );
+  const credentials = assumeResult.Credentials;
+  if (!credentials?.AccessKeyId || !credentials.SecretAccessKey || !credentials.SessionToken) {
+    throw new Error(`Failed to assume role in account ${props.targetAccountId}`);
+  }
+
+  const targetS3 = new S3Client({
+    region: props.region,
+    credentials: {
+      accessKeyId: credentials.AccessKeyId,
+      secretAccessKey: credentials.SecretAccessKey,
+      sessionToken: credentials.SessionToken,
+    },
+  });
+
+  let created = false;
+  try {
+    await targetS3.send(
+      new CreateBucketCommand({
+        Bucket: props.bucketName,
+        ...(props.region !== "us-east-1" && {
+          CreateBucketConfiguration: { LocationConstraint: props.region as any },
+        }),
+      }),
+    );
+    created = true;
+  } catch (error: unknown) {
+    const name = (error as { name?: string }).name;
+    if (name !== "BucketAlreadyOwnedByYou" && name !== "BucketAlreadyExists") {
+      throw error;
+    }
+  }
+
+  await targetS3.send(
+    new PutPublicAccessBlockCommand({
+      Bucket: props.bucketName,
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true,
+        BlockPublicPolicy: true,
+        IgnorePublicAcls: true,
+        RestrictPublicBuckets: true,
+      },
+    }),
+  );
+
+  await targetS3.send(new PutBucketTaggingCommand({
+    Bucket: props.bucketName,
+    Tagging: { TagSet: [MANAGED_BY_TAG, { Key: "Purpose", Value: "cloudtrail-logs" }] },
+  }));
+
+  const bucketPolicy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "AWSCloudTrailAclCheck",
+        Effect: "Allow",
+        Principal: { Service: "cloudtrail.amazonaws.com" },
+        Action: "s3:GetBucketAcl",
+        Resource: `arn:aws:s3:::${props.bucketName}`,
+        Condition: { StringEquals: { "aws:SourceOrgID": props.organizationId } },
+      },
+      {
+        Sid: "AWSCloudTrailWrite",
+        Effect: "Allow",
+        Principal: { Service: "cloudtrail.amazonaws.com" },
+        Action: "s3:PutObject",
+        Resource: `arn:aws:s3:::${props.bucketName}/AWSLogs/*`,
+        Condition: {
+          StringEquals: {
+            "s3:x-amz-acl": "bucket-owner-full-control",
+            "aws:SourceOrgID": props.organizationId,
+          },
+        },
+      },
+    ],
+  });
+
+  await targetS3.send(
+    new PutBucketPolicyCommand({
+      Bucket: props.bucketName,
+      Policy: bucketPolicy,
+    }),
+  );
+
+  return {
+    action: "createCloudTrailBucket" as const,
+    success: true,
+    bucketName: props.bucketName,
+    created,
+  };
+}
+
+async function handleCreateOrgTrail(props: {
+  bucketName: string;
+  region: string;
+}): Promise<LambdaResponse> {
+  const cloudTrailClient = new CloudTrailClient({ region: props.region });
+
+  try {
+    const existing = await cloudTrailClient.send(new GetTrailCommand({ Name: "organization-trail" }));
+    await cloudTrailClient.send(new UpdateTrailCommand({
+      Name: "organization-trail",
+      S3BucketName: props.bucketName,
+      IsOrganizationTrail: true,
+      IsMultiRegionTrail: true,
+      EnableLogFileValidation: true,
+    }));
+    return {
+      action: "createOrgTrail" as const,
+      success: true,
+      trailArn: existing.Trail?.TrailARN ?? "",
+      created: false,
+    };
+  } catch (error: unknown) {
+    const name = (error as { name?: string }).name;
+    if (name !== "TrailNotFoundException") {
+      throw error;
+    }
+  }
+
+  const createResult = await cloudTrailClient.send(new CreateTrailCommand({
+    Name: "organization-trail",
+    S3BucketName: props.bucketName,
+    IsOrganizationTrail: true,
+    IsMultiRegionTrail: true,
+    EnableLogFileValidation: true,
+  }));
+
+  await cloudTrailClient.send(new StartLoggingCommand({ Name: "organization-trail" }));
+
+  return {
+    action: "createOrgTrail" as const,
+    success: true,
+    trailArn: createResult.TrailARN ?? "",
+    created: true,
+  };
 }
 
 async function handleRecordDeployedStackSets(props: {

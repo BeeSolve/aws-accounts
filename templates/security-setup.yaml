@@ -7,6 +7,12 @@ Parameters:
   BucketName:
     Type: String
     Description: Exact S3 bucket name the role is allowed to create and configure
+  CloudTrailBucketName:
+    Type: String
+    Default: ""
+    Description: S3 bucket name for CloudTrail logs (empty if CloudTrail org trail not enabled)
+Conditions:
+  HasCloudTrailBucket: !Not [!Equals [!Ref CloudTrailBucketName, ""]]
 Resources:
   SecuritySetupRole:
     Type: AWS::IAM::Role
@@ -32,6 +38,17 @@ Resources:
                   - "s3:PutBucketPublicAccessBlock"
                   - "s3:PutBucketTagging"
                 Resource: !Sub "arn:aws:s3:::${BucketName}"
+              - !If
+                - HasCloudTrailBucket
+                - Sid: CloudTrailBucket
+                  Effect: Allow
+                  Action:
+                    - "s3:CreateBucket"
+                    - "s3:PutBucketPolicy"
+                    - "s3:PutBucketPublicAccessBlock"
+                    - "s3:PutBucketTagging"
+                  Resource: !Sub "arn:aws:s3:::${CloudTrailBucketName}"
+                - !Ref "AWS::NoValue"
               - Sid: ConfigAggregator
                 Effect: Allow
                 Action:

@@ -327,6 +327,17 @@ async function applyLambdaRolePolicy(props: {
         Action: "sts:AssumeRole",
         Resource: "arn:aws:iam::*:role/BeesolveSecuritySetupRole",
       },
+      {
+        Effect: "Allow",
+        Action: [
+          "cloudtrail:CreateTrail",
+          "cloudtrail:UpdateTrail",
+          "cloudtrail:StartLogging",
+          "cloudtrail:GetTrail",
+          "cloudtrail:GetTrailStatus",
+        ],
+        Resource: "*",
+      },
     ],
   });
 
@@ -984,6 +995,49 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
         input.logger.log(`  [aggregator] warning: ${formatLambdaError(aggResult.error)}`);
       } else {
         input.logger.log(`  [aggregator] Config aggregator ready.`);
+      }
+    }
+  }
+
+  // Ensure CloudTrail log bucket and org trail exist
+  const cloudTrailBucket = config.securityBaseline?.cloudTrailBucket;
+  if (cloudTrailBucket) {
+    const trailBucketName = `cloudtrail-logs-${context.organization.id!}-${deployment.region}`;
+    const trailBucketAccountId = currentState.organization.accounts.find(
+      (a) => a.name === cloudTrailBucket.accountName,
+    )?.id;
+    if (trailBucketAccountId) {
+      input.logger.log(`  [cloudtrail] creating CloudTrail log bucket "${trailBucketName}" in account ${trailBucketAccountId}...`);
+      const bucketResult = await invokeLambda({
+        lambdaClient: input.lambdaClient,
+        lambdaArn: deployment.lambdaArn,
+        payload: {
+          action: "createCloudTrailBucket" as const,
+          targetAccountId: trailBucketAccountId,
+          bucketName: trailBucketName,
+          region: deployment.region,
+          organizationId: context.organization.id!,
+        },
+      });
+      if (!bucketResult.ok) {
+        input.logger.log(`  [cloudtrail] warning: ${formatLambdaError(bucketResult.error)}`);
+      } else {
+        input.logger.log(`  [cloudtrail] CloudTrail log bucket ready.`);
+        input.logger.log(`  [cloudtrail] creating organization trail...`);
+        const trailResult = await invokeLambda({
+          lambdaClient: input.lambdaClient,
+          lambdaArn: deployment.lambdaArn,
+          payload: {
+            action: "createOrgTrail" as const,
+            bucketName: trailBucketName,
+            region: deployment.region,
+          },
+        });
+        if (!trailResult.ok) {
+          input.logger.log(`  [cloudtrail] warning: ${formatLambdaError(trailResult.error)}`);
+        } else {
+          input.logger.log(`  [cloudtrail] Organization trail ready.`);
+        }
       }
     }
   }
@@ -2140,7 +2194,9 @@ function computeStackSetOperations(config: AwsConfigModel, context: { management
             ? context.managementAccountId
             : p.value === "{{DELIVERY_BUCKET_NAME}}"
               ? deliveryBucketName
-              : p.value,
+              : p.value === "{{CLOUDTRAIL_BUCKET_NAME}}"
+                ? `cloudtrail-logs-${context.organizationId}-${context.region}`
+                : p.value,
         })),
         regions: [context.region],
         ...(ss.templateKey === "security-setup" && { waitForCompletion: true }),

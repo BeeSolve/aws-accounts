@@ -313,6 +313,8 @@ function cloudTrailAnalyst(options: PermissionSetOptions = {}): PermissionSetEnt
             "cloudtrail:ListTrails",
             "cloudtrail:DescribeTrails",
             "cloudtrail:GetEventSelectors",
+            "config:DescribeConfigurationRecorderStatus",
+            "config:DescribeConfigurationRecorders",
           ],
           Resource: "*",
         },
@@ -463,7 +465,7 @@ function toExtemptAccountsCondition(exemptAccounts: string[]): Record<string, un
 export type SecurityBaselineOptions<T extends string, A extends string> = {
   cloudTrail?:
     | { enabled: false }
-    | { enabled: true; delegatedAdminAccount: A; logArchiveAccount: A };
+    | { enabled: true; delegatedAdminAccount: A; logArchiveAccount: A; organizationTrail?: boolean };
   configRecorder?:
     | { enabled: false }
     | {
@@ -504,6 +506,9 @@ type SecurityBaselineExtension = {
   securityBaseline?: {
     stackSets: StackSetDeclaration[];
     configDeliveryBucket?: {
+      accountName: string;
+    };
+    cloudTrailBucket?: {
       accountName: string;
     };
   };
@@ -595,6 +600,9 @@ export function toSecurityBaseline<
       parameters: [
         { key: "ManagementAccountId", value: "{{MANAGEMENT_ACCOUNT_ID}}" },
         { key: "BucketName", value: "{{DELIVERY_BUCKET_NAME}}" },
+        ...(options.cloudTrail?.enabled && options.cloudTrail.organizationTrail
+          ? [{ key: "CloudTrailBucketName", value: "{{CLOUDTRAIL_BUCKET_NAME}}" }]
+          : []),
       ],
     });
     stackSets.push({
@@ -670,13 +678,18 @@ export function toSecurityBaseline<
     ? { accountName: String(options.configRecorder.deliveryBucketAccount) }
     : undefined;
 
+  const cloudTrailBucket = options.cloudTrail?.enabled && options.cloudTrail.organizationTrail
+    ? { accountName: String(options.cloudTrail.logArchiveAccount) }
+    : undefined;
+
   return {
     ...config,
     delegatedAdministrators: delegatedAdmins,
-    ...((stackSets.length > 0 || configDeliveryBucket) && {
+    ...((stackSets.length > 0 || configDeliveryBucket || cloudTrailBucket) && {
       securityBaseline: {
         stackSets,
         ...(configDeliveryBucket && { configDeliveryBucket }),
+        ...(cloudTrailBucket && { cloudTrailBucket }),
       },
     }),
   };
