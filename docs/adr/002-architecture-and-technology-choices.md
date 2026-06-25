@@ -57,7 +57,7 @@ Key requirements:
 
 - **Lambda-based remote execution** — CLI invokes Lambda for all AWS operations
 - Users need only `lambda:InvokeFunction` for routine operations
-- Lambda has reserved concurrency of 1 for built-in state protection
+- Lambda has reserved concurrency of 1 for built-in state protection (best-effort on new accounts with low concurrency quotas)
 - Local utility commands (`regenerate`, `graveyard`) operate on local files only
 
 ### Config-Driven Reconciliation

@@ -51,6 +51,7 @@ function createBaseInput(overrides?: Partial<RemoteCommandInput>): RemoteCommand
     iamClient: overrides?.iamClient ?? ({ send: async () => ({}) } as any),
     lambdaClient: overrides?.lambdaClient ?? ({ send: async () => ({}) } as any),
     ssoAdminClient: overrides?.ssoAdminClient ?? ({ send: async () => ({}) } as any),
+    organizationsClient: overrides?.organizationsClient ?? ({ send: async () => ({}) } as any),
   };
 }
 

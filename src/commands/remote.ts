@@ -30,6 +30,11 @@ import {
 } from "@aws-sdk/client-lambda";
 import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import {
+  CreateOrganizationCommand,
+  DescribeOrganizationCommand,
+  OrganizationsClient,
+} from "@aws-sdk/client-organizations";
+import {
   CloudWatchLogsClient,
   CreateLogGroupCommand,
   PutRetentionPolicyCommand,
@@ -40,6 +45,7 @@ import {
 import {
   CreatePermissionSetCommand,
   DescribePermissionSetCommand,
+  ListInstancesCommand,
   ListPermissionSetsCommand,
   PutInlinePolicyToPermissionSetCommand,
   SSOAdminClient,
@@ -104,6 +110,7 @@ export type RemoteCommandInput = v.InferOutput<typeof remoteCommandSchema> & {
   iamClient: IAMClient;
   lambdaClient: LambdaClient;
   ssoAdminClient: SSOAdminClient;
+  organizationsClient: OrganizationsClient;
 };
 
 const contextFilePath = "aws.context.json";
@@ -130,6 +137,9 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
   input.logger.log(`Account: ${accountId}`);
   input.logger.log(`Region: ${resolvedRegion}`);
   input.logger.log(`Bucket: ${bucketName}`);
+
+  await ensureOrganization({ input });
+  await ensureIdentityCenter({ input, region: resolvedRegion });
 
   try {
     await input.s3Client.send(
@@ -266,6 +276,11 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
   input.logger.log("Bootstrap complete.");
   input.logger.log(`  Lambda ARN: ${lambdaArn}`);
   input.logger.log(`  State bucket: ${bucketName}`);
+  input.logger.log("");
+  input.logger.log("Next steps:");
+  input.logger.log("  1. Run 'init' to scan your AWS org and generate aws.config.ts");
+  input.logger.log("  2. Edit aws.config.ts to define your desired state");
+  input.logger.log("  3. Run 'plan' to preview changes, then 'apply' to execute them");
 }
 
 async function applyLambdaRolePolicy(props: {
@@ -348,6 +363,124 @@ async function applyLambdaRolePolicy(props: {
       PolicyDocument: inlinePolicy,
     }),
   );
+}
+
+async function ensureOrganization(props: { input: RemoteCommandInput }): Promise<void> {
+  let orgExists = true;
+  let featureSet: string | undefined;
+
+  try {
+    const response = await props.input.organizationsClient.send(
+      new DescribeOrganizationCommand({}),
+    );
+    featureSet = response.Organization?.FeatureSet;
+  } catch (error: unknown) {
+    if ((error as { name?: string }).name === "AWSOrganizationsNotInUseException") {
+      orgExists = false;
+    } else {
+      throw error;
+    }
+  }
+
+  if (orgExists && featureSet === "CONSOLIDATED_BILLING") {
+    throw toPreconditionError(
+      'AWS Organization exists but only has "consolidated billing" enabled. ' +
+        '"All features" is required.\n' +
+        "Enable all features: https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_org_support-all-features.html",
+    );
+  }
+
+  if (orgExists) {
+    props.input.logger.log("AWS Organization: exists (all features enabled)");
+    return;
+  }
+
+  props.input.logger.log("");
+  props.input.logger.log("No AWS Organization detected.");
+  props.input.logger.log(
+    "An Organization with all features enabled is required for this tool to work.",
+  );
+  props.input.logger.log("");
+
+  if (!props.input.flags.yes) {
+    if (process.stdin.isTTY !== true) {
+      throw toPreconditionError(
+        "No AWS Organization found. Create one manually or re-run with --yes to create automatically.",
+      );
+    }
+    const readlineInterface = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    try {
+      const answer = await readlineInterface.question(
+        "Create an AWS Organization with all features enabled? [y/N] ",
+      );
+      const normalized = answer.trim().toLowerCase();
+      if (normalized !== "y" && normalized !== "yes") {
+        props.input.logger.log("Bootstrap cancelled.");
+        return;
+      }
+    } finally {
+      readlineInterface.close();
+    }
+  }
+
+  await props.input.organizationsClient.send(
+    new CreateOrganizationCommand({ FeatureSet: "ALL" }),
+  );
+  props.input.logger.log("Created AWS Organization with all features enabled.");
+}
+
+async function ensureIdentityCenter(props: {
+  input: RemoteCommandInput;
+  region: string;
+}): Promise<void> {
+  const response = await props.input.ssoAdminClient.send(new ListInstancesCommand({}));
+  if ((response.Instances ?? []).length > 0) {
+    props.input.logger.log("IAM Identity Center: enabled");
+    return;
+  }
+
+  const consoleUrl = `https://${props.region}.console.aws.amazon.com/singlesignon/home?region=${props.region}#/`;
+
+  props.input.logger.log("");
+  props.input.logger.log("IAM Identity Center is not enabled.");
+  props.input.logger.log(
+    "This must be done manually via the AWS Console (no API exists for organization-level instances).",
+  );
+  props.input.logger.log("");
+  props.input.logger.log("Steps:");
+  props.input.logger.log(`  1. Open: ${consoleUrl}`);
+  props.input.logger.log('  2. Click "Enable"');
+  props.input.logger.log(
+    '  3. Keep the default identity source ("Identity Center directory") unless you plan to use an external IdP',
+  );
+  props.input.logger.log("");
+
+  if (process.stdin.isTTY !== true) {
+    throw toPreconditionError(
+      "IAM Identity Center is not enabled. Enable it via the AWS Console and re-run bootstrap.",
+    );
+  }
+
+  const readlineInterface = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  try {
+    while (true) {
+      await readlineInterface.question("Press Enter after enabling Identity Center in the Console...");
+      const retryResponse = await props.input.ssoAdminClient.send(new ListInstancesCommand({}));
+      if ((retryResponse.Instances ?? []).length > 0) {
+        props.input.logger.log("IAM Identity Center: detected");
+        return;
+      }
+      props.input.logger.log("Identity Center not yet detected. Please ensure it is enabled and try again.");
+    }
+  } finally {
+    readlineInterface.close();
+  }
 }
 
 async function ensureIamRole(props: {
@@ -479,6 +612,27 @@ async function ensureLambdaFunction(props: {
     );
 
     props.logger.log(`Updated Lambda function code: ${lambdaFunctionName}`);
+
+    try {
+      await props.lambdaClient.send(
+        new PutFunctionConcurrencyCommand({
+          FunctionName: lambdaFunctionName,
+          ReservedConcurrentExecutions: 1,
+        }),
+      );
+      props.logger.log(`Reserved concurrency set to 1.`);
+    } catch (concurrencyError: unknown) {
+      if ((concurrencyError as { name?: string }).name !== "InvalidParameterValueException") {
+        throw concurrencyError;
+      }
+      props.logger.log(
+        "Reserved concurrency not set (account quota too low). Run 'upgrade' after quota is raised.",
+      );
+      props.logger.log(
+        "  https://console.aws.amazon.com/servicequotas/home/services/lambda/quotas/L-B99A9384",
+      );
+    }
+
     return existingArn;
   } catch (error: unknown) {
     if (error instanceof ResourceNotFoundException) {
@@ -492,15 +646,33 @@ async function ensureLambdaFunction(props: {
         logger: props.logger,
       });
 
-      await props.lambdaClient.send(
-        new PutFunctionConcurrencyCommand({
-          FunctionName: lambdaFunctionName,
-          ReservedConcurrentExecutions: 1,
-        }),
-      );
+      try {
+        await props.lambdaClient.send(
+          new PutFunctionConcurrencyCommand({
+            FunctionName: lambdaFunctionName,
+            ReservedConcurrentExecutions: 1,
+          }),
+        );
+        props.logger.log(`Set reserved concurrency to 1`);
+      } catch (concurrencyError: unknown) {
+        if ((concurrencyError as { name?: string }).name === "InvalidParameterValueException") {
+          props.logger.log(
+            "Could not set reserved concurrency (account concurrency quota too low for new accounts).",
+          );
+          props.logger.log(
+            "AWS will automatically raise your quota over time, or request an increase:");
+          props.logger.log(
+            "  https://console.aws.amazon.com/servicequotas/home/services/lambda/quotas/L-B99A9384",
+          );
+          props.logger.log(
+            "Run 'upgrade' after quota is raised to apply reserved concurrency.",
+          );
+        } else {
+          throw concurrencyError;
+        }
+      }
 
       props.logger.log(`Created Lambda function: ${lambdaFunctionName}`);
-      props.logger.log(`Set reserved concurrency to 1`);
       return lambdaArn;
     }
     throw error;
@@ -689,6 +861,11 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
     for (const file of writtenFiles) {
       input.logger.log(`  ${file.path}: ${file.status}`);
     }
+    input.logger.log("");
+    input.logger.log("Next steps:");
+    input.logger.log("  1. Edit aws.config.ts to add accounts, OUs, users, groups, and permission sets");
+    input.logger.log("  2. Run 'plan' to preview what will change");
+    input.logger.log("  3. Run 'apply' to execute the changes");
   }
 }
 
@@ -744,10 +921,14 @@ export async function runRemotePlan(input: RemoteCommandInput): Promise<void> {
 
   if (plan.operations.length === 0 && (stackSetOperations?.length ?? 0) === 0) {
     input.logger.log("No changes: aws.config.ts already matches the current remote state.");
+    input.logger.log("");
+    input.logger.log("Edit aws.config.ts to make changes, then run 'plan' again.");
     return;
   }
 
   displayPlan({ plan, stackSetOperations, logger: input.logger });
+  input.logger.log("");
+  input.logger.log("Run 'apply' to execute these changes.");
 }
 
 export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
@@ -1079,6 +1260,22 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
   });
   input.logger.log("IAM role policy updated.");
 
+  try {
+    await input.lambdaClient.send(
+      new PutFunctionConcurrencyCommand({
+        FunctionName: deployment.lambdaArn,
+        ReservedConcurrentExecutions: 1,
+      }),
+    );
+    input.logger.log("Reserved concurrency set to 1.");
+  } catch (concurrencyError: unknown) {
+    if ((concurrencyError as { name?: string }).name === "InvalidParameterValueException") {
+      input.logger.log("Reserved concurrency not set (account quota still too low).");
+    } else {
+      throw concurrencyError;
+    }
+  }
+
   await ensureLogGroup({
     region: deployment.region,
     profile: deployment.profile,
@@ -1120,6 +1317,8 @@ export async function runRemoteDrift(input: RemoteCommandInput): Promise<void> {
 
   if (sections.length === 0) {
     input.logger.log("No drift: aws.config.ts matches the current AWS state.");
+    input.logger.log("");
+    input.logger.log("Edit aws.config.ts to make changes, then run 'plan' to preview and 'apply' to execute.");
     return;
   }
 
@@ -1162,6 +1361,8 @@ export async function runRemoteDrift(input: RemoteCommandInput): Promise<void> {
       input.logger.log("");
     }
   }
+  input.logger.log("To accept AWS state as baseline: run 'init --yes' (delete aws.config.ts first).");
+  input.logger.log("To reconcile via config: edit aws.config.ts, then run 'plan' and 'apply'.");
 }
 
 function deepEqual(left: unknown, right: unknown): boolean {

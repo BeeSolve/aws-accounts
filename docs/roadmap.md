@@ -31,6 +31,12 @@ Post-v1 features organized by priority tier. See [feature-parity-research.md](./
 - **Same-plan OU dependency resolution** — new OUs and accounts/moves targeting them can now be planned and applied in a single cycle. See [ADR 005](./adr/005-same-plan-ou-dependency-resolution.md).
 - **npm version check** — TTL-gated check on every CLI start; prints a one-line upgrade notice when a newer version is available on npm. See [ADR 006](./adr/006-npm-version-check.md).
 
+### v1.4.0
+
+- **Bootstrap onboarding for fresh accounts** — `bootstrap` now auto-detects missing Organization and offers to create one. Guides users through enabling Identity Center via Console with region-specific URL and polling. Handles new-account Lambda concurrency quota limits gracefully.
+- **CLI next-steps guidance** — all commands (`bootstrap`, `init`, `plan`, `apply`, `drift`) now print actionable next steps on completion.
+- **Graveyard OU tolerance** — `init` works correctly on fresh orgs with no Graveyard OU (previously required a pre-existing Graveyard).
+
 ---
 
 ## Tier 3 — Solid additions (remaining)

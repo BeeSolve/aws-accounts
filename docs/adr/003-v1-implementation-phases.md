@@ -24,9 +24,12 @@ The v1 CLI was built incrementally across six phases, each adding a layer of fun
 
 ### Phase 2: Bootstrap
 
-- `bootstrap` ensures `Graveyard` OU exists under organization root
+- `bootstrap` detects whether an Organization exists and offers to create one (all features enabled)
+- `bootstrap` detects whether Identity Center is enabled and guides the user through Console setup
+- Deploys S3 state bucket, IAM execution role, and Lambda function
 - Idempotent — safe to re-run on already-bootstrapped organizations
-- Persists context to `aws.context.json` (root ID, graveyard OU ID, Identity Center metadata)
+- Persists context to `aws.context.json` (root ID, graveyard OU ID as "pending", Identity Center metadata)
+- Handles new-account Lambda concurrency quota gracefully (skips reservation, retries on upgrade)
 - No merging of ambiguous context — disagreement between file and live AWS fails fast
 - Identity Center metadata always required (instance ARN + identity store ID)
 

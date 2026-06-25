@@ -220,6 +220,9 @@ mock.module("@aws-sdk/client-sso-admin", {
     SSOAdminClient: class {
       send = async (command: unknown) => {
         const commandName = (command as { constructor: { name: string } }).constructor.name;
+        if (commandName === "ListInstancesCommand") {
+          return { Instances: [{ InstanceArn: "arn:aws:sso:::instance/ssoins-123", IdentityStoreId: "d-123" }] };
+        }
         if (commandName === "ListPermissionSetsCommand") {
           return { PermissionSets: [], NextToken: undefined };
         }
@@ -253,6 +256,10 @@ mock.module("@aws-sdk/client-sso-admin", {
       input: unknown;
       constructor(input: unknown) { this.input = input; }
     },
+    ListInstancesCommand: class ListInstancesCommand {
+      input: unknown;
+      constructor(input: unknown) { this.input = input; }
+    },
   },
 });
 
@@ -273,6 +280,14 @@ mock.module("@aws-sdk/client-cloudwatch-logs", {
   },
 });
 
+mock.module("@aws-sdk/client-organizations", {
+  namedExports: {
+    OrganizationsClient: class { send = async () => ({ Organization: { FeatureSet: "ALL" } }); },
+    CreateOrganizationCommand: class { constructor() {} },
+    DescribeOrganizationCommand: class { constructor() {} },
+  },
+});
+
 // --- Import module under test AFTER mocks ---
 
 const { runRemoteBootstrap } = await import("./remote.js");
@@ -282,6 +297,7 @@ const { S3Client } = await import("@aws-sdk/client-s3");
 const { IAMClient } = await import("@aws-sdk/client-iam");
 const { LambdaClient } = await import("@aws-sdk/client-lambda");
 const { SSOAdminClient } = await import("@aws-sdk/client-sso-admin");
+const { OrganizationsClient } = await import("@aws-sdk/client-organizations");
 
 // --- Helpers ---
 
@@ -332,6 +348,7 @@ test("runRemoteBootstrap applies PutBucketTagging with standard tags after bucke
         iamClient: new IAMClient({}),
         lambdaClient: new LambdaClient({}),
         ssoAdminClient: new SSOAdminClient({}),
+        organizationsClient: new OrganizationsClient({}),
       });
 
       // Verify PutBucketTaggingCommand was called
@@ -381,6 +398,7 @@ test("runRemoteBootstrap includes standard tags in CreateRoleCommand when role d
         iamClient: new IAMClient({}),
         lambdaClient: new LambdaClient({}),
         ssoAdminClient: new SSOAdminClient({}),
+        organizationsClient: new OrganizationsClient({}),
       });
 
       // Verify CreateRoleCommand was called with Tags
@@ -429,6 +447,7 @@ test("runRemoteBootstrap calls TagRoleCommand with standard tags when role alrea
         iamClient: new IAMClient({}),
         lambdaClient: new LambdaClient({}),
         ssoAdminClient: new SSOAdminClient({}),
+        organizationsClient: new OrganizationsClient({}),
       });
 
       // Verify TagRoleCommand was called (not CreateRoleCommand)
@@ -481,6 +500,7 @@ test("runRemoteBootstrap includes tags in CreateFunctionCommand when Lambda does
         iamClient: new IAMClient({}),
         lambdaClient: new LambdaClient({}),
         ssoAdminClient: new SSOAdminClient({}),
+        organizationsClient: new OrganizationsClient({}),
       });
 
       // Verify CreateFunctionCommand was called with Tags in Record<string, string> format
@@ -534,6 +554,7 @@ test("runRemoteBootstrap calls TagResourceCommand with standard tags when Lambda
         iamClient: new IAMClient({}),
         lambdaClient: new LambdaClient({}),
         ssoAdminClient: new SSOAdminClient({}),
+        organizationsClient: new OrganizationsClient({}),
       });
 
       // Verify TagResourceCommand was called (not CreateFunctionCommand)
@@ -599,6 +620,7 @@ test("runRemoteBootstrap applies PutBucketTagging even when bucket already exist
         iamClient: new IAMClient({}),
         lambdaClient: new LambdaClient({}),
         ssoAdminClient: new SSOAdminClient({}),
+        organizationsClient: new OrganizationsClient({}),
       });
 
       // Verify PutBucketTaggingCommand is always called regardless of bucket creation outcome

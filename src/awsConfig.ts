@@ -1719,7 +1719,10 @@ function assertStateMatchesContext(props: { state: StateFile; context: AwsContex
   const graveyardOrganizationalUnit = props.state.organization.organizationalUnits.find(
     (ou) => ou.name === "Graveyard",
   );
-  if (graveyardOrganizationalUnit?.id !== props.context.organization.graveyardOuId) {
+  if (
+    graveyardOrganizationalUnit?.id !== props.context.organization.graveyardOuId &&
+    !(graveyardOrganizationalUnit == null && props.context.organization.graveyardOuId === "pending")
+  ) {
     throw new Error(
       `state/context mismatch for Graveyard OU id: state has "${graveyardOrganizationalUnit?.id ?? "<missing>"}" but context has "${props.context.organization.graveyardOuId}".`,
     );

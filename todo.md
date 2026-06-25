@@ -3,6 +3,7 @@
 ## Done (can be removed)
 
 - [x] Lambda function memory and timeout configurable through `aws.context.json` — defaults are 1024MiB and 5m, written to deployment config on bootstrap. See `deploymentSchema` fields `lambdaMemoryMb`, `lambdaTimeoutSeconds`.
+- [x] Bootstrap onboarding for fresh AWS accounts — auto-creates Organization, guides Identity Center setup via Console, handles Lambda concurrency quota gracefully on new accounts. See `.kiro/plans/playground-and-onboarding.md`.
 
 ## In Progress (has plan)
 
@@ -22,8 +23,7 @@
   }
   // After: v.parse(assumedCredentialsSchema, assumeResult.Credentials)
   ```
-- [ ] Support settings for creating IAM Identity Center instance (currently requires pre-existing instance; tool could optionally create one during bootstrap)
-- [ ] Split `remote.ts` into subcommand files (76KB) — see `.kiro/plans/code-review-findings.md`
+- [ ] Split `remote.ts` into subcommand files (76KB+) — see `.kiro/plans/code-review-findings.md`
 - [ ] Unify Lambda request/response schemas in shared module
 - [ ] Add Biome config and lint step to CI
 - [ ] Add exponential backoff for transient AWS errors

@@ -201,6 +201,9 @@ mock.module("@aws-sdk/client-sso-admin", {
           if (remoteMgmtPermissionSetExists) arns.push("arn:aws:sso:::permissionSet/ssoins-123/ps-remote-mgmt");
           return { PermissionSets: arns, NextToken: undefined };
         }
+        if (commandName === "ListInstancesCommand") {
+          return { Instances: [{ InstanceArn: "arn:aws:sso:::instance/ssoins-123", IdentityStoreId: "d-123" }] };
+        }
         if (commandName === "DescribePermissionSetCommand") {
           const psArn = (input as any).PermissionSetArn;
           if (psArn === "arn:aws:sso:::permissionSet/ssoins-123/ps-org-mgmt") {
@@ -261,6 +264,10 @@ mock.module("@aws-sdk/client-sso-admin", {
       input: unknown;
       constructor(input: unknown) { this.input = input; }
     },
+    ListInstancesCommand: class ListInstancesCommand {
+      input: unknown;
+      constructor(input: unknown) { this.input = input; }
+    },
   },
 });
 
@@ -282,6 +289,14 @@ mock.module("@aws-sdk/client-cloudwatch-logs", {
   },
 });
 
+mock.module("@aws-sdk/client-organizations", {
+  namedExports: {
+    OrganizationsClient: class { send = async () => ({ Organization: { FeatureSet: "ALL" } }); },
+    CreateOrganizationCommand: class { constructor() {} },
+    DescribeOrganizationCommand: class { constructor() {} },
+  },
+});
+
 // --- Import module under test AFTER mocks ---
 
 const { runRemoteBootstrap } = await import("./remote.js");
@@ -291,6 +306,7 @@ const { S3Client } = await import("@aws-sdk/client-s3");
 const { IAMClient } = await import("@aws-sdk/client-iam");
 const { LambdaClient } = await import("@aws-sdk/client-lambda");
 const { SSOAdminClient } = await import("@aws-sdk/client-sso-admin");
+const { OrganizationsClient } = await import("@aws-sdk/client-organizations");
 
 // --- Helpers ---
 
@@ -377,6 +393,7 @@ test("runRemoteBootstrap skips permission set creation when Identity Center inst
         iamClient: new IAMClient({}),
         lambdaClient: new LambdaClient({}),
         ssoAdminClient: new SSOAdminClient({}),
+        organizationsClient: new OrganizationsClient({}),
       });
 
       // Verify SSO calls WERE made (permission sets created)
@@ -425,6 +442,7 @@ test("runRemoteBootstrap continues with second permission set when first fails",
         iamClient: new IAMClient({}),
         lambdaClient: new LambdaClient({}),
         ssoAdminClient: new SSOAdminClient({}),
+        organizationsClient: new OrganizationsClient({}),
       });
 
       // Verify error was logged for OrganizationManagement
@@ -478,6 +496,7 @@ test("runRemoteBootstrap continues with first permission set when second fails",
         iamClient: new IAMClient({}),
         lambdaClient: new LambdaClient({}),
         ssoAdminClient: new SSOAdminClient({}),
+        organizationsClient: new OrganizationsClient({}),
       });
 
       // Verify OrganizationManagement was created successfully

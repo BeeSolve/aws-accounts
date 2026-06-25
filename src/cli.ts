@@ -6,6 +6,7 @@ import { IAMClient } from "@aws-sdk/client-iam";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { STSClient } from "@aws-sdk/client-sts";
 import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
+import { OrganizationsClient } from "@aws-sdk/client-organizations";
 import { buildAwsClientConfig, resolveAwsProfile, resolveAwsRegion } from "./awsClientConfig.js";
 import { consoleLogger, type Logger } from "./logger.js";
 import { runGraveyardCloseCommand, runGraveyardCommand } from "./commands/graveyard.js";
@@ -192,6 +193,7 @@ async function main(): Promise<void> {
     iamClient: new IAMClient(clientConfig),
     lambdaClient: new LambdaClient(clientConfig),
     ssoAdminClient: new SSOAdminClient(clientConfig),
+    organizationsClient: new OrganizationsClient(clientConfig),
   };
 
   await printVersionBannerIfNeeded(logger);
