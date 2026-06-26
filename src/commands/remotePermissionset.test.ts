@@ -285,7 +285,8 @@ mock.module("@aws-sdk/client-cloudwatch-logs", {
     PutRetentionPolicyCommand: class { constructor() {} },
     DeleteRetentionPolicyCommand: class { constructor() {} },
     ResourceAlreadyExistsException: class ResourceAlreadyExistsException extends Error { name = "ResourceAlreadyExistsException"; },
-    TagLogGroupCommand: class { constructor() {} },
+    TagResourceCommand: class { constructor() {} },
+    DescribeLogGroupsCommand: class { constructor() {} },
   },
 });
 

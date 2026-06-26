@@ -1,16 +1,12 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { createInterface } from "node:readline/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import * as v from "valibot";
 import {
-  BucketLocationConstraint,
-  CreateBucketCommand,
-  PutBucketTaggingCommand,
-  S3Client,
-  type S3ServiceException,
-} from "@aws-sdk/client-s3";
+  CloudWatchLogsClient,
+  CreateLogGroupCommand,
+  DeleteRetentionPolicyCommand,
+  DescribeLogGroupsCommand,
+  PutRetentionPolicyCommand,
+  ResourceAlreadyExistsException,
+  TagResourceCommand as LogsTagResourceCommand,
+} from "@aws-sdk/client-cloudwatch-logs";
 import {
   CreateRoleCommand,
   GetRoleCommand,
@@ -28,20 +24,18 @@ import {
   UpdateFunctionCodeCommand,
   UpdateFunctionConfigurationCommand,
 } from "@aws-sdk/client-lambda";
-import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import {
   CreateOrganizationCommand,
   DescribeOrganizationCommand,
   OrganizationsClient,
 } from "@aws-sdk/client-organizations";
 import {
-  CloudWatchLogsClient,
-  CreateLogGroupCommand,
-  PutRetentionPolicyCommand,
-  DeleteRetentionPolicyCommand,
-  ResourceAlreadyExistsException,
-  TagLogGroupCommand,
-} from "@aws-sdk/client-cloudwatch-logs";
+  BucketLocationConstraint,
+  CreateBucketCommand,
+  PutBucketTaggingCommand,
+  S3Client,
+  type S3ServiceException,
+} from "@aws-sdk/client-s3";
 import {
   CreatePermissionSetCommand,
   DescribePermissionSetCommand,
@@ -52,10 +46,26 @@ import {
   TagResourceCommand as SsoTagResourceCommand,
   UpdatePermissionSetCommand,
 } from "@aws-sdk/client-sso-admin";
+import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import {
-  type AwsConfigModel,
-  type AwsContextFile,
-  type Deployment,
+  account,
+  iam,
+  identitystore,
+  lambda,
+  logs,
+  organizations,
+  s3,
+  sso,
+  sts,
+} from "@beesolve/iam-policy-ts";
+import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
+import * as v from "valibot";
+import { buildAwsClientConfig } from "../awsClientConfig.js";
+import {
   loadAwsConfigModelFromTsFile,
   mapAwsConfigToState,
   mapStateToAwsConfig,
@@ -64,30 +74,21 @@ import {
   regenerateTypesFromState,
   renderTsValue,
   writeAwsConfigFromState,
+  type AwsConfigModel,
+  type AwsContextFile,
+  type Deployment,
 } from "../awsConfig.js";
-import { buildAwsClientConfig } from "../awsClientConfig.js";
-import { getStandardTags } from "../tags.js";
-import type { AwsTag } from "../tags.js";
 import { diffStates } from "../diff.js";
+import { toPreconditionError } from "../error.js";
+import { assertUnreachable, delay, startProgressTimer } from "../helpers.js";
 import { invokeLambda } from "../lambdaClient.js";
 import type { Logger } from "../logger.js";
 import type { Operation, Plan, StackSetOperation } from "../operations.js";
 import { isCacheFresh, readStateCache, writeStateCache } from "../remoteStateCache.js";
 import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 import { validateState, type StateFile } from "../state.js";
-import { assertUnreachable, delay, startProgressTimer } from "../helpers.js";
-import { toPreconditionError } from "../error.js";
-import {
-  sts,
-  organizations,
-  sso,
-  identitystore,
-  s3,
-  logs,
-  account,
-  iam,
-  lambda,
-} from "@beesolve/iam-policy-ts";
+import type { AwsTag } from "../tags.js";
+import { getStandardTags } from "../tags.js";
 
 const remoteCommandSchema = v.object({
   subcommand: v.picklist(["bootstrap", "scan", "init", "plan", "apply", "upgrade", "drift"]),
@@ -426,9 +427,7 @@ async function ensureOrganization(props: { input: RemoteCommandInput }): Promise
     }
   }
 
-  await props.input.organizationsClient.send(
-    new CreateOrganizationCommand({ FeatureSet: "ALL" }),
-  );
+  await props.input.organizationsClient.send(new CreateOrganizationCommand({ FeatureSet: "ALL" }));
   props.input.logger.log("Created AWS Organization with all features enabled.");
 }
 
@@ -470,13 +469,17 @@ async function ensureIdentityCenter(props: {
   });
   try {
     while (true) {
-      await readlineInterface.question("Press Enter after enabling Identity Center in the Console...");
+      await readlineInterface.question(
+        "Press Enter after enabling Identity Center in the Console...",
+      );
       const retryResponse = await props.input.ssoAdminClient.send(new ListInstancesCommand({}));
       if ((retryResponse.Instances ?? []).length > 0) {
         props.input.logger.log("IAM Identity Center: detected");
         return;
       }
-      props.input.logger.log("Identity Center not yet detected. Please ensure it is enabled and try again.");
+      props.input.logger.log(
+        "Identity Center not yet detected. Please ensure it is enabled and try again.",
+      );
     }
   } finally {
     readlineInterface.close();
@@ -660,13 +663,12 @@ async function ensureLambdaFunction(props: {
             "Could not set reserved concurrency (account concurrency quota too low for new accounts).",
           );
           props.logger.log(
-            "AWS will automatically raise your quota over time, or request an increase:");
+            "AWS will automatically raise your quota over time, or request an increase:",
+          );
           props.logger.log(
             "  https://console.aws.amazon.com/servicequotas/home/services/lambda/quotas/L-B99A9384",
           );
-          props.logger.log(
-            "Run 'upgrade' after quota is raised to apply reserved concurrency.",
-          );
+          props.logger.log("Run 'upgrade' after quota is raised to apply reserved concurrency.");
         } else {
           throw concurrencyError;
         }
@@ -863,7 +865,9 @@ export async function runRemoteInit(input: RemoteCommandInput): Promise<void> {
     }
     input.logger.log("");
     input.logger.log("Next steps:");
-    input.logger.log("  1. Edit aws.config.ts to add accounts, OUs, users, groups, and permission sets");
+    input.logger.log(
+      "  1. Edit aws.config.ts to add accounts, OUs, users, groups, and permission sets",
+    );
     input.logger.log("  2. Run 'plan' to preview what will change");
     input.logger.log("  3. Run 'apply' to execute the changes");
   }
@@ -990,7 +994,8 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     return;
   }
 
-  const hasChanges = plan.operations.length > 0 || (stackSetOperations != null && stackSetOperations.length > 0);
+  const hasChanges =
+    plan.operations.length > 0 || (stackSetOperations != null && stackSetOperations.length > 0);
 
   if (hasChanges) {
     displayPlan({ plan, stackSetOperations, logger: input.logger });
@@ -1024,204 +1029,219 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
 
   if (hasChanges) {
     if (plan.operations.length > 0) {
-    input.logger.log("Applying changes remotely...");
-    const stopProgress = startProgressTimer((elapsed) => {
-      input.logger.log(`Still applying... (${elapsed}s)`);
-    });
-    const result = await invokeLambda({
-      lambdaClient: input.lambdaClient,
-      lambdaArn: deployment.lambdaArn,
-      payload: {
-        action: "apply",
-        operations: plan.operations,
-        allowDestructive: input.flags.allowDestructive,
-      },
-    });
-    stopProgress();
-
-    if (!result.ok) {
-      const error = result.error;
-      if (error.kind === "concurrencyConflict") {
-        input.logger.log("Another apply is in progress. Retry later.");
-        return;
-      }
-      if (error.kind === "operationFailed") {
-        input.logger.log(
-          `Apply failed at operation ${error.failedOperation + 1} of ${error.totalOperations}: ${error.error}`,
-        );
-        await writeStateCache(cachePath, error.partialState);
-        input.logger.log("State cache updated with partial state.");
-        input.logger.log("Run aws-accounts scan --refresh to refresh state before retrying.");
-        return;
-      }
-      throw new Error(formatLambdaError(error));
-    }
-
-    const response = result.response;
-    if (!("action" in response) || response.action !== "apply") {
-      throw new Error("Unexpected response from Lambda apply action.");
-    }
-
-    input.logger.log(`Applied ${response.operationsCompleted} operation(s).`);
-    await writeStateCache(cachePath, response.state);
-    currentState = response.state;
-
-    await regenerateTypesFromState({
-      state: response.state,
-      contextPath: contextFilePath,
-      configPath: configFilePath,
-      typesPath: typesFilePath,
-      logger: input.logger,
-    });
-  }
-
-  if (stackSetOperations != null && stackSetOperations.length > 0) {
-    const securitySetupOps = stackSetOperations.filter((op) => op.stackSetName === "security-setup");
-    const remainingOps = stackSetOperations.filter((op) => op.stackSetName !== "security-setup");
-
-    let allPendingOps: Array<{ stackSetName: string; operationId: string; startedAt: string }> = [];
-
-    if (securitySetupOps.length > 0) {
-      const pending = await executeStackSetOperations({
-        stackSetOperations: securitySetupOps,
+      input.logger.log("Applying changes remotely...");
+      const stopProgress = startProgressTimer((elapsed) => {
+        input.logger.log(`Still applying... (${elapsed}s)`);
+      });
+      const result = await invokeLambda({
         lambdaClient: input.lambdaClient,
         lambdaArn: deployment.lambdaArn,
+        payload: {
+          action: "apply",
+          operations: plan.operations,
+          allowDestructive: input.flags.allowDestructive,
+        },
+      });
+      stopProgress();
+
+      if (!result.ok) {
+        const error = result.error;
+        if (error.kind === "concurrencyConflict") {
+          input.logger.log("Another apply is in progress. Retry later.");
+          return;
+        }
+        if (error.kind === "operationFailed") {
+          input.logger.log(
+            `Apply failed at operation ${error.failedOperation + 1} of ${error.totalOperations}: ${error.error}`,
+          );
+          await writeStateCache(cachePath, error.partialState);
+          input.logger.log("State cache updated with partial state.");
+          input.logger.log("Run aws-accounts scan --refresh to refresh state before retrying.");
+          return;
+        }
+        throw new Error(formatLambdaError(error));
+      }
+
+      const response = result.response;
+      if (!("action" in response) || response.action !== "apply") {
+        throw new Error("Unexpected response from Lambda apply action.");
+      }
+
+      input.logger.log(`Applied ${response.operationsCompleted} operation(s).`);
+      await writeStateCache(cachePath, response.state);
+      currentState = response.state;
+
+      await regenerateTypesFromState({
+        state: response.state,
+        contextPath: contextFilePath,
+        configPath: configFilePath,
+        typesPath: typesFilePath,
         logger: input.logger,
       });
-      allPendingOps = allPendingOps.concat(pending);
     }
 
-    if (remainingOps.length > 0) {
-      const pending = await executeStackSetOperations({
-        stackSetOperations: remainingOps,
+    if (stackSetOperations != null && stackSetOperations.length > 0) {
+      const securitySetupOps = stackSetOperations.filter(
+        (op) => op.stackSetName === "security-setup",
+      );
+      const remainingOps = stackSetOperations.filter((op) => op.stackSetName !== "security-setup");
+
+      let allPendingOps: Array<{ stackSetName: string; operationId: string; startedAt: string }> =
+        [];
+
+      if (securitySetupOps.length > 0) {
+        const pending = await executeStackSetOperations({
+          stackSetOperations: securitySetupOps,
+          lambdaClient: input.lambdaClient,
+          lambdaArn: deployment.lambdaArn,
+          logger: input.logger,
+        });
+        allPendingOps = allPendingOps.concat(pending);
+      }
+
+      if (remainingOps.length > 0) {
+        const pending = await executeStackSetOperations({
+          stackSetOperations: remainingOps,
+          lambdaClient: input.lambdaClient,
+          lambdaArn: deployment.lambdaArn,
+          logger: input.logger,
+        });
+        allPendingOps = allPendingOps.concat(pending);
+      }
+
+      // Record deployed StackSets in state for idempotency
+      const newlyDeployed = stackSetOperations.map((op) => ({
+        name: op.stackSetName,
+        targets: op.targets,
+      }));
+      const previouslyDeployed = (currentState.deployedStackSets ?? []).filter(
+        (d) => !newlyDeployed.some((n) => n.name === d.name),
+      );
+      const allDeployed = [...previouslyDeployed, ...newlyDeployed];
+      await invokeLambda({
         lambdaClient: input.lambdaClient,
         lambdaArn: deployment.lambdaArn,
-        logger: input.logger,
+        payload: {
+          action: "recordDeployedStackSets" as const,
+          stackSets: allDeployed,
+          pendingOperations: allPendingOps,
+        },
       });
-      allPendingOps = allPendingOps.concat(pending);
+
+      // Update local cache so next plan sees the deployed stacksets
+      const updatedState = {
+        ...currentState,
+        deployedStackSets: allDeployed,
+        pendingStackSetOperations: allPendingOps.length > 0 ? allPendingOps : undefined,
+      };
+      await writeStateCache(cachePath, updatedState);
     }
-
-    // Record deployed StackSets in state for idempotency
-    const newlyDeployed = stackSetOperations.map((op) => ({
-      name: op.stackSetName,
-      targets: op.targets,
-    }));
-    const previouslyDeployed = (currentState.deployedStackSets ?? []).filter(
-      (d) => !newlyDeployed.some((n) => n.name === d.name),
-    );
-    const allDeployed = [...previouslyDeployed, ...newlyDeployed];
-    await invokeLambda({
-      lambdaClient: input.lambdaClient,
-      lambdaArn: deployment.lambdaArn,
-      payload: {
-        action: "recordDeployedStackSets" as const,
-        stackSets: allDeployed,
-        pendingOperations: allPendingOps,
-      },
-    });
-
-    // Update local cache so next plan sees the deployed stacksets
-    const updatedState = { ...currentState, deployedStackSets: allDeployed, pendingStackSetOperations: allPendingOps.length > 0 ? allPendingOps : undefined };
-    await writeStateCache(cachePath, updatedState);
-  }
   }
 
   // Ensure Config delivery bucket and aggregator exist when deploying security baseline StackSets
   if (stackSetOperations != null && stackSetOperations.length > 0) {
     const deliveryBucket = config.securityBaseline?.configDeliveryBucket;
     if (deliveryBucket) {
-    const deliveryBucketName = `config-delivery-${context.organization.id!}-${deployment.region}`;
-    const deliveryAccountId = currentState.organization.accounts.find(
-      (a) => a.name === deliveryBucket.accountName,
-    )?.id;
-    if (deliveryAccountId) {
-      input.logger.log(`  [bucket] creating Config delivery bucket "${deliveryBucketName}" in account ${deliveryAccountId}...`);
-      const bucketResult = await invokeLambda({
-        lambdaClient: input.lambdaClient,
-        lambdaArn: deployment.lambdaArn,
-        payload: {
-          action: "createConfigDeliveryBucket" as const,
-          targetAccountId: deliveryAccountId,
-          bucketName: deliveryBucketName,
-          region: deployment.region,
-        },
-      });
-      if (!bucketResult.ok) {
-        throw new Error(`Failed to create Config delivery bucket: ${formatLambdaError(bucketResult.error)}`);
-      }
-      input.logger.log(`  [bucket] Config delivery bucket ready.`);
-    }
-  }
-
-  // Ensure Config aggregator exists in the delegated admin account (idempotent)
-  const configDelegatedAdmin = config.delegatedAdministrators?.find(
-    (d) => d.servicePrincipal === "config.amazonaws.com",
-  );
-  if (configDelegatedAdmin) {
-    const adminAccountId = currentState.organization.accounts.find(
-      (a) => a.name === configDelegatedAdmin.account,
-    )?.id;
-    if (adminAccountId) {
-      input.logger.log(`  [aggregator] creating Config aggregator in account ${adminAccountId}...`);
-      const aggResult = await invokeLambda({
-        lambdaClient: input.lambdaClient,
-        lambdaArn: deployment.lambdaArn,
-        payload: {
-          action: "createConfigAggregator" as const,
-          targetAccountId: adminAccountId,
-          region: deployment.region,
-        },
-      });
-      if (!aggResult.ok) {
-        input.logger.log(`  [aggregator] warning: ${formatLambdaError(aggResult.error)}`);
-      } else {
-        input.logger.log(`  [aggregator] Config aggregator ready.`);
-      }
-    }
-  }
-
-  // Ensure CloudTrail log bucket and org trail exist
-  const cloudTrailBucket = config.securityBaseline?.cloudTrailBucket;
-  if (cloudTrailBucket) {
-    const trailBucketName = `cloudtrail-logs-${context.organization.id!}-${deployment.region}`;
-    const trailBucketAccountId = currentState.organization.accounts.find(
-      (a) => a.name === cloudTrailBucket.accountName,
-    )?.id;
-    if (trailBucketAccountId) {
-      input.logger.log(`  [cloudtrail] creating CloudTrail log bucket "${trailBucketName}" in account ${trailBucketAccountId}...`);
-      const bucketResult = await invokeLambda({
-        lambdaClient: input.lambdaClient,
-        lambdaArn: deployment.lambdaArn,
-        payload: {
-          action: "createCloudTrailBucket" as const,
-          targetAccountId: trailBucketAccountId,
-          bucketName: trailBucketName,
-          region: deployment.region,
-          organizationId: context.organization.id!,
-        },
-      });
-      if (!bucketResult.ok) {
-        input.logger.log(`  [cloudtrail] warning: ${formatLambdaError(bucketResult.error)}`);
-      } else {
-        input.logger.log(`  [cloudtrail] CloudTrail log bucket ready.`);
-        input.logger.log(`  [cloudtrail] creating organization trail...`);
-        const trailResult = await invokeLambda({
+      const deliveryBucketName = `config-delivery-${context.organization.id!}-${deployment.region}`;
+      const deliveryAccountId = currentState.organization.accounts.find(
+        (a) => a.name === deliveryBucket.accountName,
+      )?.id;
+      if (deliveryAccountId) {
+        input.logger.log(
+          `  [bucket] creating Config delivery bucket "${deliveryBucketName}" in account ${deliveryAccountId}...`,
+        );
+        const bucketResult = await invokeLambda({
           lambdaClient: input.lambdaClient,
           lambdaArn: deployment.lambdaArn,
           payload: {
-            action: "createOrgTrail" as const,
-            bucketName: trailBucketName,
+            action: "createConfigDeliveryBucket" as const,
+            targetAccountId: deliveryAccountId,
+            bucketName: deliveryBucketName,
             region: deployment.region,
           },
         });
-        if (!trailResult.ok) {
-          input.logger.log(`  [cloudtrail] warning: ${formatLambdaError(trailResult.error)}`);
+        if (!bucketResult.ok) {
+          throw new Error(
+            `Failed to create Config delivery bucket: ${formatLambdaError(bucketResult.error)}`,
+          );
+        }
+        input.logger.log(`  [bucket] Config delivery bucket ready.`);
+      }
+    }
+
+    // Ensure Config aggregator exists in the delegated admin account (idempotent)
+    const configDelegatedAdmin = config.delegatedAdministrators?.find(
+      (d) => d.servicePrincipal === "config.amazonaws.com",
+    );
+    if (configDelegatedAdmin) {
+      const adminAccountId = currentState.organization.accounts.find(
+        (a) => a.name === configDelegatedAdmin.account,
+      )?.id;
+      if (adminAccountId) {
+        input.logger.log(
+          `  [aggregator] creating Config aggregator in account ${adminAccountId}...`,
+        );
+        const aggResult = await invokeLambda({
+          lambdaClient: input.lambdaClient,
+          lambdaArn: deployment.lambdaArn,
+          payload: {
+            action: "createConfigAggregator" as const,
+            targetAccountId: adminAccountId,
+            region: deployment.region,
+          },
+        });
+        if (!aggResult.ok) {
+          input.logger.log(`  [aggregator] warning: ${formatLambdaError(aggResult.error)}`);
         } else {
-          input.logger.log(`  [cloudtrail] Organization trail ready.`);
+          input.logger.log(`  [aggregator] Config aggregator ready.`);
         }
       }
     }
-  }
+
+    // Ensure CloudTrail log bucket and org trail exist
+    const cloudTrailBucket = config.securityBaseline?.cloudTrailBucket;
+    if (cloudTrailBucket) {
+      const trailBucketName = `cloudtrail-logs-${context.organization.id!}-${deployment.region}`;
+      const trailBucketAccountId = currentState.organization.accounts.find(
+        (a) => a.name === cloudTrailBucket.accountName,
+      )?.id;
+      if (trailBucketAccountId) {
+        input.logger.log(
+          `  [cloudtrail] creating CloudTrail log bucket "${trailBucketName}" in account ${trailBucketAccountId}...`,
+        );
+        const bucketResult = await invokeLambda({
+          lambdaClient: input.lambdaClient,
+          lambdaArn: deployment.lambdaArn,
+          payload: {
+            action: "createCloudTrailBucket" as const,
+            targetAccountId: trailBucketAccountId,
+            bucketName: trailBucketName,
+            region: deployment.region,
+            organizationId: context.organization.id!,
+          },
+        });
+        if (!bucketResult.ok) {
+          input.logger.log(`  [cloudtrail] warning: ${formatLambdaError(bucketResult.error)}`);
+        } else {
+          input.logger.log(`  [cloudtrail] CloudTrail log bucket ready.`);
+          input.logger.log(`  [cloudtrail] creating organization trail...`);
+          const trailResult = await invokeLambda({
+            lambdaClient: input.lambdaClient,
+            lambdaArn: deployment.lambdaArn,
+            payload: {
+              action: "createOrgTrail" as const,
+              bucketName: trailBucketName,
+              region: deployment.region,
+            },
+          });
+          if (!trailResult.ok) {
+            input.logger.log(`  [cloudtrail] warning: ${formatLambdaError(trailResult.error)}`);
+          } else {
+            input.logger.log(`  [cloudtrail] Organization trail ready.`);
+          }
+        }
+      }
+    }
   }
 }
 
@@ -1294,9 +1314,7 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
   await writeFile(contextFilePath, `${JSON.stringify(ordered, null, 2)}\n`, "utf8");
 
   input.logger.log("");
-  input.logger.log(
-    "Run drift to check for config differences before using plan/apply.",
-  );
+  input.logger.log("Run drift to check for config differences before using plan/apply.");
 }
 
 export async function runRemoteDrift(input: RemoteCommandInput): Promise<void> {
@@ -1318,7 +1336,9 @@ export async function runRemoteDrift(input: RemoteCommandInput): Promise<void> {
   if (sections.length === 0) {
     input.logger.log("No drift: aws.config.ts matches the current AWS state.");
     input.logger.log("");
-    input.logger.log("Edit aws.config.ts to make changes, then run 'plan' to preview and 'apply' to execute.");
+    input.logger.log(
+      "Edit aws.config.ts to make changes, then run 'plan' to preview and 'apply' to execute.",
+    );
     return;
   }
 
@@ -1355,13 +1375,17 @@ export async function runRemoteDrift(input: RemoteCommandInput): Promise<void> {
     }
 
     for (const modification of section.modifications) {
-      input.logger.log(`Modify${modification.context != null ? ` (${modification.context})` : ""}:`);
+      input.logger.log(
+        `Modify${modification.context != null ? ` (${modification.context})` : ""}:`,
+      );
       input.logger.log("");
       input.logger.log(indentSnippet(modification.snippet, "  "));
       input.logger.log("");
     }
   }
-  input.logger.log("To accept AWS state as baseline: run 'init --yes' (delete aws.config.ts first).");
+  input.logger.log(
+    "To accept AWS state as baseline: run 'init --yes' (delete aws.config.ts first).",
+  );
   input.logger.log("To reconcile via config: edit aws.config.ts, then run 'plan' and 'apply'.");
 }
 
@@ -1381,7 +1405,12 @@ function deepEqual(left: unknown, right: unknown): boolean {
     }
     return left.every((item, i) => deepEqual(item, right[i]));
   }
-  if (typeof left === "object" && typeof right === "object" && !Array.isArray(left) && !Array.isArray(right)) {
+  if (
+    typeof left === "object" &&
+    typeof right === "object" &&
+    !Array.isArray(left) &&
+    !Array.isArray(right)
+  ) {
     const leftObj = left as Record<string, unknown>;
     const rightObj = right as Record<string, unknown>;
     const leftKeys = Object.keys(leftObj).filter((k) => leftObj[k] !== undefined);
@@ -1499,7 +1528,10 @@ function computeUsersDrift(props: {
 
   for (const [name] of configByName) {
     if (!liveByName.has(name)) {
-      removals.push({ snippet: `{ userName: "${name}", ... }`, context: `user "${name}" not in AWS` });
+      removals.push({
+        snippet: `{ userName: "${name}", ... }`,
+        context: `user "${name}" not in AWS`,
+      });
     }
   }
 
@@ -1544,7 +1576,10 @@ function computeGroupsDrift(props: {
 
   for (const [name] of configByName) {
     if (!liveByName.has(name)) {
-      removals.push({ snippet: `{ displayName: "${name}", ... }`, context: `group "${name}" not in AWS` });
+      removals.push({
+        snippet: `{ displayName: "${name}", ... }`,
+        context: `group "${name}" not in AWS`,
+      });
     }
   }
 
@@ -1689,12 +1724,8 @@ function computePoliciesDrift(props: {
   ] as const;
 
   for (const category of policyCategories) {
-    const configByName = new Map(
-      props.config.policies[category].map((p) => [p.name, p]),
-    );
-    const liveByName = new Map(
-      props.liveConfig.policies[category].map((p) => [p.name, p]),
-    );
+    const configByName = new Map(props.config.policies[category].map((p) => [p.name, p]));
+    const liveByName = new Map(props.liveConfig.policies[category].map((p) => [p.name, p]));
 
     for (const [name, livePolicy] of liveByName) {
       const configPolicy = configByName.get(name);
@@ -2308,22 +2339,34 @@ async function ensureLogGroup(props: {
   retentionDays: number | undefined;
   logger: Logger;
 }): Promise<void> {
-  const logsClient = new CloudWatchLogsClient(buildAwsClientConfig({ profile: props.profile, region: props.region }));
+  const logsClient = new CloudWatchLogsClient(
+    buildAwsClientConfig({ profile: props.profile, region: props.region }),
+  );
   try {
     await logsClient.send(new CreateLogGroupCommand({ logGroupName: lambdaLogGroupName }));
     props.logger.log(`Created log group: ${lambdaLogGroupName}`);
   } catch (error: unknown) {
     if (!(error instanceof ResourceAlreadyExistsException)) throw error;
   }
-  await logsClient.send(new TagLogGroupCommand({
-    logGroupName: lambdaLogGroupName,
-    tags: Object.fromEntries(getStandardTags("lambda-logs").map((t) => [t.Key, t.Value])),
-  }));
+  const describeResult = await logsClient.send(
+    new DescribeLogGroupsCommand({ logGroupNamePrefix: lambdaLogGroupName, limit: 1 }),
+  );
+  const logGroupArn = describeResult.logGroups?.[0]?.arn;
+  if (logGroupArn != null) {
+    await logsClient.send(
+      new LogsTagResourceCommand({
+        resourceArn: logGroupArn,
+        tags: Object.fromEntries(getStandardTags("lambda-logs").map((t) => [t.Key, t.Value])),
+      }),
+    );
+  }
   if (props.retentionDays != null) {
-    await logsClient.send(new PutRetentionPolicyCommand({
-      logGroupName: lambdaLogGroupName,
-      retentionInDays: props.retentionDays,
-    }));
+    await logsClient.send(
+      new PutRetentionPolicyCommand({
+        logGroupName: lambdaLogGroupName,
+        retentionInDays: props.retentionDays,
+      }),
+    );
   } else {
     await logsClient.send(new DeleteRetentionPolicyCommand({ logGroupName: lambdaLogGroupName }));
   }
@@ -2365,7 +2408,17 @@ async function waitForLambdaReady(lambdaClient: LambdaClient, functionName: stri
 
 const validStackSetNames = new Set(["security-setup", "config-recorder", "guardduty-member"]);
 
-function computeStackSetOperations(config: AwsConfigModel, context: { managementAccountId: string; organizationId: string | undefined; region: string; ouIdsByName: Record<string, string>; deployedStackSets?: Array<{ name: string; targets: string[] }>; forceRedeploy?: boolean }): StackSetOperation[] | undefined {
+function computeStackSetOperations(
+  config: AwsConfigModel,
+  context: {
+    managementAccountId: string;
+    organizationId: string | undefined;
+    region: string;
+    ouIdsByName: Record<string, string>;
+    deployedStackSets?: Array<{ name: string; targets: string[] }>;
+    forceRedeploy?: boolean;
+  },
+): StackSetOperation[] | undefined {
   const baseline = config.securityBaseline;
   if (baseline == null || baseline.stackSets.length === 0) return undefined;
   if (!context.organizationId) {
@@ -2381,7 +2434,10 @@ function computeStackSetOperations(config: AwsConfigModel, context: { management
       return id;
     });
     const existing = deployed.find((d) => d.name === ss.templateKey);
-    if (existing && JSON.stringify(existing.targets.sort()) === JSON.stringify(resolvedTargets.sort())) {
+    if (
+      existing &&
+      JSON.stringify(existing.targets.sort()) === JSON.stringify(resolvedTargets.sort())
+    ) {
       return [];
     }
     return [
@@ -2391,13 +2447,14 @@ function computeStackSetOperations(config: AwsConfigModel, context: { management
         targets: resolvedTargets,
         parameters: ss.parameters.map((p) => ({
           key: p.key,
-          value: p.value === "{{MANAGEMENT_ACCOUNT_ID}}"
-            ? context.managementAccountId
-            : p.value === "{{DELIVERY_BUCKET_NAME}}"
-              ? deliveryBucketName
-              : p.value === "{{CLOUDTRAIL_BUCKET_NAME}}"
-                ? `cloudtrail-logs-${context.organizationId}-${context.region}`
-                : p.value,
+          value:
+            p.value === "{{MANAGEMENT_ACCOUNT_ID}}"
+              ? context.managementAccountId
+              : p.value === "{{DELIVERY_BUCKET_NAME}}"
+                ? deliveryBucketName
+                : p.value === "{{CLOUDTRAIL_BUCKET_NAME}}"
+                  ? `cloudtrail-logs-${context.organizationId}-${context.region}`
+                  : p.value,
         })),
         regions: [context.region],
         ...(ss.templateKey === "security-setup" && { waitForCompletion: true }),
