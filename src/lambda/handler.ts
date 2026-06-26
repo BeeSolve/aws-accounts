@@ -130,6 +130,12 @@ const createOrgTrailRequestSchema = v.strictObject({
   region: v.string(),
 });
 
+const assumedCredentialsSchema = v.strictObject({
+  AccessKeyId: v.string(),
+  SecretAccessKey: v.string(),
+  SessionToken: v.string(),
+});
+
 const lambdaRequestSchema = v.variant("action", [
   scanRequestSchema,
   getStateUrlRequestSchema,
@@ -578,10 +584,7 @@ async function handleCreateConfigDeliveryBucket(props: {
       RoleSessionName: "beesolve-aws-accounts-config-bucket",
     }),
   );
-  const credentials = assumeResult.Credentials;
-  if (!credentials?.AccessKeyId || !credentials.SecretAccessKey || !credentials.SessionToken) {
-    throw new Error(`Failed to assume role in account ${props.targetAccountId}`);
-  }
+  const credentials = v.parse(assumedCredentialsSchema, assumeResult.Credentials);
 
   const targetS3 = new S3Client({
     region: props.region,
@@ -705,10 +708,7 @@ async function handleCreateConfigAggregator(props: {
       RoleSessionName: "beesolve-aws-accounts-config-aggregator",
     }),
   );
-  const credentials = assumeResult.Credentials;
-  if (!credentials?.AccessKeyId || !credentials.SecretAccessKey || !credentials.SessionToken) {
-    throw new Error(`Failed to assume role in account ${props.targetAccountId}`);
-  }
+  const credentials = v.parse(assumedCredentialsSchema, assumeResult.Credentials);
 
   const configClient = new ConfigServiceClient({
     region: props.region,
@@ -742,10 +742,7 @@ async function handleCreateCloudTrailBucket(props: {
       RoleSessionName: "beesolve-aws-accounts-cloudtrail-bucket",
     }),
   );
-  const credentials = assumeResult.Credentials;
-  if (!credentials?.AccessKeyId || !credentials.SecretAccessKey || !credentials.SessionToken) {
-    throw new Error(`Failed to assume role in account ${props.targetAccountId}`);
-  }
+  const credentials = v.parse(assumedCredentialsSchema, assumeResult.Credentials);
 
   const targetS3 = new S3Client({
     region: props.region,
