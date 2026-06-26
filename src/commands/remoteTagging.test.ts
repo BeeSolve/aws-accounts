@@ -1,7 +1,8 @@
-import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import test, { mock } from "node:test";
+
 import { createTestWorkspace } from "../helpers.test.js";
 import { getStandardTags } from "../tags.js";
 
@@ -48,11 +49,15 @@ mock.module("@aws-sdk/client-s3", {
     },
     CreateBucketCommand: class CreateBucketCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutBucketTaggingCommand: class PutBucketTaggingCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     BucketLocationConstraint: {},
   },
@@ -92,19 +97,27 @@ mock.module("@aws-sdk/client-iam", {
     },
     CreateRoleCommand: class CreateRoleCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     GetRoleCommand: class GetRoleCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutRolePolicyCommand: class PutRolePolicyCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     TagRoleCommand: class TagRoleCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
   },
 });
@@ -160,31 +173,45 @@ mock.module("@aws-sdk/client-lambda", {
     },
     CreateFunctionCommand: class CreateFunctionCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     GetFunctionCommand: class GetFunctionCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     UpdateFunctionCodeCommand: class UpdateFunctionCodeCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     UpdateFunctionConfigurationCommand: class UpdateFunctionConfigurationCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     TagResourceCommand: class TagResourceCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutFunctionConcurrencyCommand: class PutFunctionConcurrencyCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     InvokeCommand: class InvokeCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     TooManyRequestsException: class TooManyRequestsException extends Error {
       constructor(message?: string) {
@@ -210,7 +237,9 @@ mock.module("@aws-sdk/client-sts", {
     },
     GetCallerIdentityCommand: class GetCallerIdentityCommand {
       input: unknown;
-      constructor(input?: unknown) { this.input = input; }
+      constructor(input?: unknown) {
+        this.input = input;
+      }
     },
   },
 });
@@ -221,44 +250,64 @@ mock.module("@aws-sdk/client-sso-admin", {
       send = async (command: unknown) => {
         const commandName = (command as { constructor: { name: string } }).constructor.name;
         if (commandName === "ListInstancesCommand") {
-          return { Instances: [{ InstanceArn: "arn:aws:sso:::instance/ssoins-123", IdentityStoreId: "d-123" }] };
+          return {
+            Instances: [
+              { InstanceArn: "arn:aws:sso:::instance/ssoins-123", IdentityStoreId: "d-123" },
+            ],
+          };
         }
         if (commandName === "ListPermissionSetsCommand") {
           return { PermissionSets: [], NextToken: undefined };
         }
         if (commandName === "CreatePermissionSetCommand") {
-          return { PermissionSet: { PermissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-new" } };
+          return {
+            PermissionSet: { PermissionSetArn: "arn:aws:sso:::permissionSet/ssoins-123/ps-new" },
+          };
         }
         return {};
       };
     },
     CreatePermissionSetCommand: class CreatePermissionSetCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     DescribePermissionSetCommand: class DescribePermissionSetCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     ListPermissionSetsCommand: class ListPermissionSetsCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutInlinePolicyToPermissionSetCommand: class PutInlinePolicyToPermissionSetCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     UpdatePermissionSetCommand: class UpdatePermissionSetCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     TagResourceCommand: class TagResourceCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     ListInstancesCommand: class ListInstancesCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
   },
 });
@@ -271,21 +320,41 @@ mock.module("@aws-sdk/credential-providers", {
 
 mock.module("@aws-sdk/client-cloudwatch-logs", {
   namedExports: {
-    CloudWatchLogsClient: class { send = async () => ({}); },
-    CreateLogGroupCommand: class { constructor() {} },
-    PutRetentionPolicyCommand: class { constructor() {} },
-    DeleteRetentionPolicyCommand: class { constructor() {} },
-    ResourceAlreadyExistsException: class ResourceAlreadyExistsException extends Error { name = "ResourceAlreadyExistsException"; },
-    TagResourceCommand: class { constructor() {} },
-    DescribeLogGroupsCommand: class { constructor() {} },
+    CloudWatchLogsClient: class {
+      send = async () => ({});
+    },
+    CreateLogGroupCommand: class {
+      constructor() {}
+    },
+    PutRetentionPolicyCommand: class {
+      constructor() {}
+    },
+    DeleteRetentionPolicyCommand: class {
+      constructor() {}
+    },
+    ResourceAlreadyExistsException: class ResourceAlreadyExistsException extends Error {
+      name = "ResourceAlreadyExistsException";
+    },
+    TagResourceCommand: class {
+      constructor() {}
+    },
+    DescribeLogGroupsCommand: class {
+      constructor() {}
+    },
   },
 });
 
 mock.module("@aws-sdk/client-organizations", {
   namedExports: {
-    OrganizationsClient: class { send = async () => ({ Organization: { FeatureSet: "ALL" } }); },
-    CreateOrganizationCommand: class { constructor() {} },
-    DescribeOrganizationCommand: class { constructor() {} },
+    OrganizationsClient: class {
+      send = async () => ({ Organization: { FeatureSet: "ALL" } });
+    },
+    CreateOrganizationCommand: class {
+      constructor() {}
+    },
+    DescribeOrganizationCommand: class {
+      constructor() {}
+    },
   },
 });
 
@@ -332,7 +401,11 @@ test("runRemoteBootstrap applies PutBucketTagging with standard tags after bucke
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     await writeFile(contextPath, JSON.stringify(createValidContextFile(), null, 2), "utf8");
     await mkdir(join(workspace.workspacePath, "dist-lambda"), { recursive: true });
-    await writeFile(join(workspace.workspacePath, "dist-lambda/lambda.zip"), "fake-zip-content", "utf8");
+    await writeFile(
+      join(workspace.workspacePath, "dist-lambda/lambda.zip"),
+      "fake-zip-content",
+      "utf8",
+    );
 
     const originalCwd = process.cwd();
     process.chdir(workspace.workspacePath);
@@ -341,7 +414,13 @@ test("runRemoteBootstrap applies PutBucketTagging with standard tags after bucke
         subcommand: "bootstrap",
         profile: undefined,
         region: "us-east-1",
-        flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+        flags: {
+          yes: false,
+          refresh: false,
+          allowDestructive: false,
+          ignoreUnsupported: false,
+          redeployStacksets: false,
+        },
         logger: noopLogger,
         overwriteConfirmation: async () => true,
         stsClient: new STSClient({}),
@@ -353,7 +432,7 @@ test("runRemoteBootstrap applies PutBucketTagging with standard tags after bucke
       });
 
       // Verify PutBucketTaggingCommand was called
-      const putTaggingCalls = s3Calls.filter(c => c.commandName === "PutBucketTaggingCommand");
+      const putTaggingCalls = s3Calls.filter((c) => c.commandName === "PutBucketTaggingCommand");
       assert.equal(putTaggingCalls.length, 1, "Expected exactly one PutBucketTaggingCommand call");
 
       const taggingInput = putTaggingCalls[0].input as {
@@ -382,7 +461,11 @@ test("runRemoteBootstrap includes standard tags in CreateRoleCommand when role d
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     await writeFile(contextPath, JSON.stringify(createValidContextFile(), null, 2), "utf8");
     await mkdir(join(workspace.workspacePath, "dist-lambda"), { recursive: true });
-    await writeFile(join(workspace.workspacePath, "dist-lambda/lambda.zip"), "fake-zip-content", "utf8");
+    await writeFile(
+      join(workspace.workspacePath, "dist-lambda/lambda.zip"),
+      "fake-zip-content",
+      "utf8",
+    );
 
     const originalCwd = process.cwd();
     process.chdir(workspace.workspacePath);
@@ -391,7 +474,13 @@ test("runRemoteBootstrap includes standard tags in CreateRoleCommand when role d
         subcommand: "bootstrap",
         profile: undefined,
         region: "us-east-1",
-        flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+        flags: {
+          yes: false,
+          refresh: false,
+          allowDestructive: false,
+          ignoreUnsupported: false,
+          redeployStacksets: false,
+        },
         logger: noopLogger,
         overwriteConfirmation: async () => true,
         stsClient: new STSClient({}),
@@ -403,7 +492,7 @@ test("runRemoteBootstrap includes standard tags in CreateRoleCommand when role d
       });
 
       // Verify CreateRoleCommand was called with Tags
-      const createRoleCalls = iamCalls.filter(c => c.commandName === "CreateRoleCommand");
+      const createRoleCalls = iamCalls.filter((c) => c.commandName === "CreateRoleCommand");
       assert.equal(createRoleCalls.length, 1, "Expected exactly one CreateRoleCommand call");
 
       const createRoleInput = createRoleCalls[0].input as {
@@ -431,7 +520,11 @@ test("runRemoteBootstrap calls TagRoleCommand with standard tags when role alrea
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     await writeFile(contextPath, JSON.stringify(createValidContextFile(), null, 2), "utf8");
     await mkdir(join(workspace.workspacePath, "dist-lambda"), { recursive: true });
-    await writeFile(join(workspace.workspacePath, "dist-lambda/lambda.zip"), "fake-zip-content", "utf8");
+    await writeFile(
+      join(workspace.workspacePath, "dist-lambda/lambda.zip"),
+      "fake-zip-content",
+      "utf8",
+    );
 
     const originalCwd = process.cwd();
     process.chdir(workspace.workspacePath);
@@ -440,7 +533,13 @@ test("runRemoteBootstrap calls TagRoleCommand with standard tags when role alrea
         subcommand: "bootstrap",
         profile: undefined,
         region: "us-east-1",
-        flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+        flags: {
+          yes: false,
+          refresh: false,
+          allowDestructive: false,
+          ignoreUnsupported: false,
+          redeployStacksets: false,
+        },
         logger: noopLogger,
         overwriteConfirmation: async () => true,
         stsClient: new STSClient({}),
@@ -452,10 +551,10 @@ test("runRemoteBootstrap calls TagRoleCommand with standard tags when role alrea
       });
 
       // Verify TagRoleCommand was called (not CreateRoleCommand)
-      const createRoleCalls = iamCalls.filter(c => c.commandName === "CreateRoleCommand");
+      const createRoleCalls = iamCalls.filter((c) => c.commandName === "CreateRoleCommand");
       assert.equal(createRoleCalls.length, 0, "Should not call CreateRoleCommand when role exists");
 
-      const tagRoleCalls = iamCalls.filter(c => c.commandName === "TagRoleCommand");
+      const tagRoleCalls = iamCalls.filter((c) => c.commandName === "TagRoleCommand");
       assert.equal(tagRoleCalls.length, 1, "Expected exactly one TagRoleCommand call");
 
       const tagRoleInput = tagRoleCalls[0].input as {
@@ -484,7 +583,11 @@ test("runRemoteBootstrap includes tags in CreateFunctionCommand when Lambda does
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     await writeFile(contextPath, JSON.stringify(createValidContextFile(), null, 2), "utf8");
     await mkdir(join(workspace.workspacePath, "dist-lambda"), { recursive: true });
-    await writeFile(join(workspace.workspacePath, "dist-lambda/lambda.zip"), "fake-zip-content", "utf8");
+    await writeFile(
+      join(workspace.workspacePath, "dist-lambda/lambda.zip"),
+      "fake-zip-content",
+      "utf8",
+    );
 
     const originalCwd = process.cwd();
     process.chdir(workspace.workspacePath);
@@ -493,7 +596,13 @@ test("runRemoteBootstrap includes tags in CreateFunctionCommand when Lambda does
         subcommand: "bootstrap",
         profile: undefined,
         region: "us-east-1",
-        flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+        flags: {
+          yes: false,
+          refresh: false,
+          allowDestructive: false,
+          ignoreUnsupported: false,
+          redeployStacksets: false,
+        },
         logger: noopLogger,
         overwriteConfirmation: async () => true,
         stsClient: new STSClient({}),
@@ -505,7 +614,7 @@ test("runRemoteBootstrap includes tags in CreateFunctionCommand when Lambda does
       });
 
       // Verify CreateFunctionCommand was called with Tags in Record<string, string> format
-      const createFnCalls = lambdaCalls.filter(c => c.commandName === "CreateFunctionCommand");
+      const createFnCalls = lambdaCalls.filter((c) => c.commandName === "CreateFunctionCommand");
       assert.equal(createFnCalls.length, 1, "Expected exactly one CreateFunctionCommand call");
 
       const createFnInput = createFnCalls[0].input as {
@@ -515,7 +624,7 @@ test("runRemoteBootstrap includes tags in CreateFunctionCommand when Lambda does
 
       // Lambda Tags are in Record<string, string> format
       const expectedTags = Object.fromEntries(
-        getStandardTags("remote-execution").map(t => [t.Key, t.Value]),
+        getStandardTags("remote-execution").map((t) => [t.Key, t.Value]),
       );
       assert.deepEqual(createFnInput.Tags, expectedTags);
     } finally {
@@ -538,7 +647,11 @@ test("runRemoteBootstrap calls TagResourceCommand with standard tags when Lambda
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     await writeFile(contextPath, JSON.stringify(createValidContextFile(), null, 2), "utf8");
     await mkdir(join(workspace.workspacePath, "dist-lambda"), { recursive: true });
-    await writeFile(join(workspace.workspacePath, "dist-lambda/lambda.zip"), "fake-zip-content", "utf8");
+    await writeFile(
+      join(workspace.workspacePath, "dist-lambda/lambda.zip"),
+      "fake-zip-content",
+      "utf8",
+    );
 
     const originalCwd = process.cwd();
     process.chdir(workspace.workspacePath);
@@ -547,7 +660,13 @@ test("runRemoteBootstrap calls TagResourceCommand with standard tags when Lambda
         subcommand: "bootstrap",
         profile: undefined,
         region: "us-east-1",
-        flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+        flags: {
+          yes: false,
+          refresh: false,
+          allowDestructive: false,
+          ignoreUnsupported: false,
+          redeployStacksets: false,
+        },
         logger: noopLogger,
         overwriteConfirmation: async () => true,
         stsClient: new STSClient({}),
@@ -559,10 +678,14 @@ test("runRemoteBootstrap calls TagResourceCommand with standard tags when Lambda
       });
 
       // Verify TagResourceCommand was called (not CreateFunctionCommand)
-      const createFnCalls = lambdaCalls.filter(c => c.commandName === "CreateFunctionCommand");
-      assert.equal(createFnCalls.length, 0, "Should not call CreateFunctionCommand when Lambda exists");
+      const createFnCalls = lambdaCalls.filter((c) => c.commandName === "CreateFunctionCommand");
+      assert.equal(
+        createFnCalls.length,
+        0,
+        "Should not call CreateFunctionCommand when Lambda exists",
+      );
 
-      const tagResourceCalls = lambdaCalls.filter(c => c.commandName === "TagResourceCommand");
+      const tagResourceCalls = lambdaCalls.filter((c) => c.commandName === "TagResourceCommand");
       assert.equal(tagResourceCalls.length, 1, "Expected exactly one TagResourceCommand call");
 
       const tagResourceInput = tagResourceCalls[0].input as {
@@ -575,7 +698,7 @@ test("runRemoteBootstrap calls TagResourceCommand with standard tags when Lambda
       );
 
       const expectedTags = Object.fromEntries(
-        getStandardTags("remote-execution").map(t => [t.Key, t.Value]),
+        getStandardTags("remote-execution").map((t) => [t.Key, t.Value]),
       );
       assert.deepEqual(tagResourceInput.Tags, expectedTags);
     } finally {
@@ -602,7 +725,11 @@ test("runRemoteBootstrap applies PutBucketTagging even when bucket already exist
     const contextPath = join(workspace.workspacePath, "aws.context.json");
     await writeFile(contextPath, JSON.stringify(createValidContextFile(), null, 2), "utf8");
     await mkdir(join(workspace.workspacePath, "dist-lambda"), { recursive: true });
-    await writeFile(join(workspace.workspacePath, "dist-lambda/lambda.zip"), "fake-zip-content", "utf8");
+    await writeFile(
+      join(workspace.workspacePath, "dist-lambda/lambda.zip"),
+      "fake-zip-content",
+      "utf8",
+    );
 
     const originalCwd = process.cwd();
     process.chdir(workspace.workspacePath);
@@ -613,7 +740,13 @@ test("runRemoteBootstrap applies PutBucketTagging even when bucket already exist
         subcommand: "bootstrap",
         profile: undefined,
         region: "us-east-1",
-        flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+        flags: {
+          yes: false,
+          refresh: false,
+          allowDestructive: false,
+          ignoreUnsupported: false,
+          redeployStacksets: false,
+        },
         logger: noopLogger,
         overwriteConfirmation: async () => true,
         stsClient: new STSClient({}),
@@ -625,8 +758,12 @@ test("runRemoteBootstrap applies PutBucketTagging even when bucket already exist
       });
 
       // Verify PutBucketTaggingCommand is always called regardless of bucket creation outcome
-      const putTaggingCalls = s3Calls.filter(c => c.commandName === "PutBucketTaggingCommand");
-      assert.equal(putTaggingCalls.length, 1, "PutBucketTaggingCommand should be called even for existing buckets");
+      const putTaggingCalls = s3Calls.filter((c) => c.commandName === "PutBucketTaggingCommand");
+      assert.equal(
+        putTaggingCalls.length,
+        1,
+        "PutBucketTaggingCommand should be called even for existing buckets",
+      );
 
       const taggingInput = putTaggingCalls[0].input as {
         Bucket: string;

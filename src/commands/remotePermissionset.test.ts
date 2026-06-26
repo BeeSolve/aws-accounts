@@ -1,7 +1,8 @@
-import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import test, { mock } from "node:test";
+
 import { createTestWorkspace } from "../helpers.test.js";
 import { getStandardTags } from "../tags.js";
 
@@ -46,16 +47,19 @@ mock.module("@aws-sdk/client-s3", {
     },
     CreateBucketCommand: class CreateBucketCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutBucketTaggingCommand: class PutBucketTaggingCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     BucketLocationConstraint: {},
   },
 });
-
 
 mock.module("@aws-sdk/client-iam", {
   namedExports: {
@@ -67,33 +71,45 @@ mock.module("@aws-sdk/client-iam", {
 
         if (commandName === "GetRoleCommand") {
           if (iamRoleExists) {
-            return { Role: { Arn: "arn:aws:iam::123456789012:role/beesolve-aws-accounts-lambda-role" } };
+            return {
+              Role: { Arn: "arn:aws:iam::123456789012:role/beesolve-aws-accounts-lambda-role" },
+            };
           }
           const error = new Error("NoSuchEntity");
           (error as any).name = "NoSuchEntityException";
           throw error;
         }
         if (commandName === "CreateRoleCommand") {
-          return { Role: { Arn: "arn:aws:iam::123456789012:role/beesolve-aws-accounts-lambda-role" } };
+          return {
+            Role: { Arn: "arn:aws:iam::123456789012:role/beesolve-aws-accounts-lambda-role" },
+          };
         }
         return {};
       };
     },
     CreateRoleCommand: class CreateRoleCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     GetRoleCommand: class GetRoleCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutRolePolicyCommand: class PutRolePolicyCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     TagRoleCommand: class TagRoleCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
   },
 });
@@ -124,38 +140,54 @@ mock.module("@aws-sdk/client-lambda", {
           throw new MockResourceNotFoundException();
         }
         if (commandName === "CreateFunctionCommand") {
-          return { FunctionArn: "arn:aws:lambda:us-east-1:123456789012:function:beesolve-aws-accounts" };
+          return {
+            FunctionArn: "arn:aws:lambda:us-east-1:123456789012:function:beesolve-aws-accounts",
+          };
         }
         return {};
       };
     },
     CreateFunctionCommand: class CreateFunctionCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     GetFunctionCommand: class GetFunctionCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     UpdateFunctionCodeCommand: class UpdateFunctionCodeCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     UpdateFunctionConfigurationCommand: class UpdateFunctionConfigurationCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     TagResourceCommand: class LambdaTagResourceCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutFunctionConcurrencyCommand: class PutFunctionConcurrencyCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     InvokeCommand: class InvokeCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     TooManyRequestsException: class TooManyRequestsException extends Error {
       constructor(message?: string) {
@@ -166,7 +198,6 @@ mock.module("@aws-sdk/client-lambda", {
     ResourceNotFoundException: MockResourceNotFoundException,
   },
 });
-
 
 mock.module("@aws-sdk/client-sts", {
   namedExports: {
@@ -182,7 +213,9 @@ mock.module("@aws-sdk/client-sts", {
     },
     GetCallerIdentityCommand: class GetCallerIdentityCommand {
       input: unknown;
-      constructor(input?: unknown) { this.input = input; }
+      constructor(input?: unknown) {
+        this.input = input;
+      }
     },
   },
 });
@@ -197,12 +230,18 @@ mock.module("@aws-sdk/client-sso-admin", {
 
         if (commandName === "ListPermissionSetsCommand") {
           const arns: string[] = [];
-          if (orgMgmtPermissionSetExists) arns.push("arn:aws:sso:::permissionSet/ssoins-123/ps-org-mgmt");
-          if (remoteMgmtPermissionSetExists) arns.push("arn:aws:sso:::permissionSet/ssoins-123/ps-remote-mgmt");
+          if (orgMgmtPermissionSetExists)
+            arns.push("arn:aws:sso:::permissionSet/ssoins-123/ps-org-mgmt");
+          if (remoteMgmtPermissionSetExists)
+            arns.push("arn:aws:sso:::permissionSet/ssoins-123/ps-remote-mgmt");
           return { PermissionSets: arns, NextToken: undefined };
         }
         if (commandName === "ListInstancesCommand") {
-          return { Instances: [{ InstanceArn: "arn:aws:sso:::instance/ssoins-123", IdentityStoreId: "d-123" }] };
+          return {
+            Instances: [
+              { InstanceArn: "arn:aws:sso:::instance/ssoins-123", IdentityStoreId: "d-123" },
+            ],
+          };
         }
         if (commandName === "DescribePermissionSetCommand") {
           const psArn = (input as any).PermissionSetArn;
@@ -210,7 +249,9 @@ mock.module("@aws-sdk/client-sso-admin", {
             return { PermissionSet: { Name: "OrganizationManagement", PermissionSetArn: psArn } };
           }
           if (psArn === "arn:aws:sso:::permissionSet/ssoins-123/ps-remote-mgmt") {
-            return { PermissionSet: { Name: "OrganizationRemoteManagement", PermissionSetArn: psArn } };
+            return {
+              PermissionSet: { Name: "OrganizationRemoteManagement", PermissionSetArn: psArn },
+            };
           }
           return { PermissionSet: { Name: "Unknown", PermissionSetArn: psArn } };
         }
@@ -242,35 +283,48 @@ mock.module("@aws-sdk/client-sso-admin", {
     },
     CreatePermissionSetCommand: class CreatePermissionSetCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     DescribePermissionSetCommand: class DescribePermissionSetCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     ListPermissionSetsCommand: class ListPermissionSetsCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutInlinePolicyToPermissionSetCommand: class PutInlinePolicyToPermissionSetCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     UpdatePermissionSetCommand: class UpdatePermissionSetCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     TagResourceCommand: class TagResourceCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     ListInstancesCommand: class ListInstancesCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
   },
 });
-
 
 mock.module("@aws-sdk/credential-providers", {
   namedExports: {
@@ -280,21 +334,41 @@ mock.module("@aws-sdk/credential-providers", {
 
 mock.module("@aws-sdk/client-cloudwatch-logs", {
   namedExports: {
-    CloudWatchLogsClient: class { send = async () => ({}); },
-    CreateLogGroupCommand: class { constructor() {} },
-    PutRetentionPolicyCommand: class { constructor() {} },
-    DeleteRetentionPolicyCommand: class { constructor() {} },
-    ResourceAlreadyExistsException: class ResourceAlreadyExistsException extends Error { name = "ResourceAlreadyExistsException"; },
-    TagResourceCommand: class { constructor() {} },
-    DescribeLogGroupsCommand: class { constructor() {} },
+    CloudWatchLogsClient: class {
+      send = async () => ({});
+    },
+    CreateLogGroupCommand: class {
+      constructor() {}
+    },
+    PutRetentionPolicyCommand: class {
+      constructor() {}
+    },
+    DeleteRetentionPolicyCommand: class {
+      constructor() {}
+    },
+    ResourceAlreadyExistsException: class ResourceAlreadyExistsException extends Error {
+      name = "ResourceAlreadyExistsException";
+    },
+    TagResourceCommand: class {
+      constructor() {}
+    },
+    DescribeLogGroupsCommand: class {
+      constructor() {}
+    },
   },
 });
 
 mock.module("@aws-sdk/client-organizations", {
   namedExports: {
-    OrganizationsClient: class { send = async () => ({ Organization: { FeatureSet: "ALL" } }); },
-    CreateOrganizationCommand: class { constructor() {} },
-    DescribeOrganizationCommand: class { constructor() {} },
+    OrganizationsClient: class {
+      send = async () => ({ Organization: { FeatureSet: "ALL" } });
+    },
+    CreateOrganizationCommand: class {
+      constructor() {}
+    },
+    DescribeOrganizationCommand: class {
+      constructor() {}
+    },
   },
 });
 
@@ -349,14 +423,16 @@ async function setupWorkspace(workspace: { workspacePath: string }) {
   const contextPath = join(workspace.workspacePath, "aws.context.json");
   await writeFile(contextPath, JSON.stringify(createValidContextFile(), null, 2), "utf8");
   await mkdir(join(workspace.workspacePath, "dist-lambda"), { recursive: true });
-  await writeFile(join(workspace.workspacePath, "dist-lambda/lambda.zip"), "fake-zip-content", "utf8");
+  await writeFile(
+    join(workspace.workspacePath, "dist-lambda/lambda.zip"),
+    "fake-zip-content",
+    "utf8",
+  );
 }
-
 
 // --- Tests: Permission set creation through runRemoteBootstrap ---
 // (ensureOrganizationManagementPermissionSet and ensureOrganizationRemoteManagementPermissionSet
 // are private functions tested through the public runRemoteBootstrap API)
-
 
 // --- Tests: Graceful skip when Identity Center is not configured ---
 
@@ -386,7 +462,13 @@ test("runRemoteBootstrap skips permission set creation when Identity Center inst
         subcommand: "bootstrap",
         profile: undefined,
         region: "us-east-1",
-        flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+        flags: {
+          yes: false,
+          refresh: false,
+          allowDestructive: false,
+          ignoreUnsupported: false,
+          redeployStacksets: false,
+        },
         logger,
         overwriteConfirmation: async () => true,
         stsClient: new STSClient({}),
@@ -398,12 +480,20 @@ test("runRemoteBootstrap skips permission set creation when Identity Center inst
       });
 
       // Verify SSO calls WERE made (permission sets created)
-      const createCalls = ssoCalls.filter(c => c.commandName === "CreatePermissionSetCommand");
-      assert.equal(createCalls.length, 2, "Both permission sets should be created when Identity Center is configured");
+      const createCalls = ssoCalls.filter((c) => c.commandName === "CreatePermissionSetCommand");
+      assert.equal(
+        createCalls.length,
+        2,
+        "Both permission sets should be created when Identity Center is configured",
+      );
 
       // Verify no skip message was logged
-      const skipLog = logger.logs.find(l => l.includes("Identity Center not configured"));
-      assert.equal(skipLog, undefined, "Should not log skip message when Identity Center is configured");
+      const skipLog = logger.logs.find((l) => l.includes("Identity Center not configured"));
+      assert.equal(
+        skipLog,
+        undefined,
+        "Should not log skip message when Identity Center is configured",
+      );
     } finally {
       process.chdir(originalCwd);
     }
@@ -435,7 +525,13 @@ test("runRemoteBootstrap continues with second permission set when first fails",
         subcommand: "bootstrap",
         profile: undefined,
         region: "us-east-1",
-        flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+        flags: {
+          yes: false,
+          refresh: false,
+          allowDestructive: false,
+          ignoreUnsupported: false,
+          redeployStacksets: false,
+        },
         logger,
         overwriteConfirmation: async () => true,
         stsClient: new STSClient({}),
@@ -447,17 +543,25 @@ test("runRemoteBootstrap continues with second permission set when first fails",
       });
 
       // Verify error was logged for OrganizationManagement
-      const errorLog = logger.logs.find(l => l.includes("Error creating OrganizationManagement permission set"));
+      const errorLog = logger.logs.find((l) =>
+        l.includes("Error creating OrganizationManagement permission set"),
+      );
       assert.ok(errorLog, "Expected error log for OrganizationManagement failure");
 
       // Verify OrganizationRemoteManagement was still attempted and succeeded
       const remoteMgmtCreateCalls = ssoCalls.filter(
-        c => c.commandName === "CreatePermissionSetCommand" && (c.input as any).Name === "OrganizationRemoteManagement",
+        (c) =>
+          c.commandName === "CreatePermissionSetCommand" &&
+          (c.input as any).Name === "OrganizationRemoteManagement",
       );
-      assert.equal(remoteMgmtCreateCalls.length, 1, "OrganizationRemoteManagement should still be attempted");
+      assert.equal(
+        remoteMgmtCreateCalls.length,
+        1,
+        "OrganizationRemoteManagement should still be attempted",
+      );
 
       // Verify bootstrap completed
-      const completeLog = logger.logs.find(l => l.includes("Bootstrap complete"));
+      const completeLog = logger.logs.find((l) => l.includes("Bootstrap complete"));
       assert.ok(completeLog, "Bootstrap should complete despite partial permission set failure");
     } finally {
       process.chdir(originalCwd);
@@ -489,7 +593,13 @@ test("runRemoteBootstrap continues with first permission set when second fails",
         subcommand: "bootstrap",
         profile: undefined,
         region: "us-east-1",
-        flags: { yes: false, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+        flags: {
+          yes: false,
+          refresh: false,
+          allowDestructive: false,
+          ignoreUnsupported: false,
+          redeployStacksets: false,
+        },
         logger,
         overwriteConfirmation: async () => true,
         stsClient: new STSClient({}),
@@ -502,16 +612,20 @@ test("runRemoteBootstrap continues with first permission set when second fails",
 
       // Verify OrganizationManagement was created successfully
       const orgMgmtCreateCalls = ssoCalls.filter(
-        c => c.commandName === "CreatePermissionSetCommand" && (c.input as any).Name === "OrganizationManagement",
+        (c) =>
+          c.commandName === "CreatePermissionSetCommand" &&
+          (c.input as any).Name === "OrganizationManagement",
       );
       assert.equal(orgMgmtCreateCalls.length, 1, "OrganizationManagement should be created");
 
       // Verify error was logged for OrganizationRemoteManagement
-      const errorLog = logger.logs.find(l => l.includes("Error creating OrganizationRemoteManagement permission set"));
+      const errorLog = logger.logs.find((l) =>
+        l.includes("Error creating OrganizationRemoteManagement permission set"),
+      );
       assert.ok(errorLog, "Expected error log for OrganizationRemoteManagement failure");
 
       // Verify bootstrap completed
-      const completeLog = logger.logs.find(l => l.includes("Bootstrap complete"));
+      const completeLog = logger.logs.find((l) => l.includes("Bootstrap complete"));
       assert.ok(completeLog, "Bootstrap should complete despite partial permission set failure");
     } finally {
       process.chdir(originalCwd);

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { Readable } from "node:stream";
-import test from "node:test";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Readable } from "node:stream";
+import test from "node:test";
+
 import { createTestWorkspace } from "../helpers.test.js";
 import type { Logger } from "../logger.js";
 import { runProfileCommand } from "./profile.js";
@@ -298,8 +299,14 @@ test("runProfileCommand lists entries sorted alphabetically by account then perm
     });
     const listLines = logger.logs.filter((line) => /^\s+\d+\./.test(line));
     assert.equal(listLines.length, 3);
-    assert.ok(listLines[0]?.includes("Alpha") && listLines[0].includes("Admin"), "first: Alpha/Admin");
-    assert.ok(listLines[1]?.includes("Alpha") && listLines[1].includes("ReadOnly"), "second: Alpha/ReadOnly");
+    assert.ok(
+      listLines[0]?.includes("Alpha") && listLines[0].includes("Admin"),
+      "first: Alpha/Admin",
+    );
+    assert.ok(
+      listLines[1]?.includes("Alpha") && listLines[1].includes("ReadOnly"),
+      "second: Alpha/ReadOnly",
+    );
     assert.ok(listLines[2]?.includes("Zeta"), "third: Zeta");
   } finally {
     await workspace.cleanup();
@@ -349,7 +356,6 @@ test("runProfileCommand deduplicates entries with the same account and permissio
   }
 });
 
-
 async function withFakeStdin<T>(lines: string | string[], fn: () => Promise<T>): Promise<T> {
   const lineQueue = typeof lines === "string" ? [lines] : [...lines];
   let index = 0;
@@ -368,7 +374,11 @@ async function withFakeStdin<T>(lines: string | string[], fn: () => Promise<T>):
   try {
     return await fn();
   } finally {
-    Object.defineProperty(process, "stdin", { value: originalStdin, configurable: true, writable: true });
+    Object.defineProperty(process, "stdin", {
+      value: originalStdin,
+      configurable: true,
+      writable: true,
+    });
   }
 }
 

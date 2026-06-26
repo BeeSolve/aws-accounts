@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   CloudWatchLogsClient,
   CreateLogGroupCommand,
@@ -7,17 +11,16 @@ import {
   PutRetentionPolicyCommand,
   ResourceAlreadyExistsException,
 } from "@aws-sdk/client-cloudwatch-logs";
-import { IAMClient, PutRolePolicyCommand } from "@aws-sdk/client-iam";
+import type { IAMClient } from "@aws-sdk/client-iam";
+import { PutRolePolicyCommand } from "@aws-sdk/client-iam";
 import { GetFunctionCommand, LambdaClient } from "@aws-sdk/client-lambda";
-import { OrganizationsClient } from "@aws-sdk/client-organizations";
-import { S3Client } from "@aws-sdk/client-s3";
-import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
-import { STSClient } from "@aws-sdk/client-sts";
+import type { OrganizationsClient } from "@aws-sdk/client-organizations";
+import type { S3Client } from "@aws-sdk/client-s3";
+import type { SSOAdminClient } from "@aws-sdk/client-sso-admin";
+import type { STSClient } from "@aws-sdk/client-sts";
 import { account, identitystore, logs, organizations, s3, sso } from "@beesolve/iam-policy-ts";
-import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import * as v from "valibot";
+
 import { buildAwsClientConfig } from "../awsClientConfig.js";
 import type { AwsConfigModel, AwsContextFile, Deployment } from "../awsConfig.js";
 import { readAwsContextFromFile } from "../awsConfig.js";

@@ -1,7 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+
 import { TooManyRequestsException } from "@aws-sdk/client-lambda";
 import type { LambdaClient } from "@aws-sdk/client-lambda";
+
 import { invokeLambda, type LambdaRequestPayload } from "./lambdaClient.js";
 
 // --- Helpers ---
@@ -44,9 +46,33 @@ function createValidScanResponse() {
           { id: "ou-b", parentId: "r-root", arn: "arn:ou:b", name: "Beta" },
         ],
         accounts: [
-          { id: "111111111111", arn: "arn:acct:1", name: "Acct1", email: "a@x.com", state: "ACTIVE", parentId: "ou-a", tags: [] },
-          { id: "222222222222", arn: "arn:acct:2", name: "Acct2", email: "b@x.com", state: "ACTIVE", parentId: "ou-a", tags: [] },
-          { id: "333333333333", arn: "arn:acct:3", name: "Acct3", email: "c@x.com", state: "ACTIVE", parentId: "ou-b", tags: [] },
+          {
+            id: "111111111111",
+            arn: "arn:acct:1",
+            name: "Acct1",
+            email: "a@x.com",
+            state: "ACTIVE",
+            parentId: "ou-a",
+            tags: [],
+          },
+          {
+            id: "222222222222",
+            arn: "arn:acct:2",
+            name: "Acct2",
+            email: "b@x.com",
+            state: "ACTIVE",
+            parentId: "ou-a",
+            tags: [],
+          },
+          {
+            id: "333333333333",
+            arn: "arn:acct:3",
+            name: "Acct3",
+            email: "c@x.com",
+            state: "ACTIVE",
+            parentId: "ou-b",
+            tags: [],
+          },
         ],
         policies: [],
         policyAttachments: [],
@@ -57,10 +83,31 @@ function createValidScanResponse() {
         users: [{ userId: "u-1", userName: "alice", displayName: "Alice", email: "alice@x.com" }],
         groups: [{ groupId: "g-1", displayName: "Admins" }],
         groupMemberships: [],
-        permissionSets: [{ permissionSetArn: "arn:ps:1", name: "Admin", description: "Full access", sessionDuration: null, inlinePolicy: null, awsManagedPolicies: ["arn:aws:iam::aws:policy/AdministratorAccess"], customerManagedPolicies: [], permissionsBoundary: null }],
+        permissionSets: [
+          {
+            permissionSetArn: "arn:ps:1",
+            name: "Admin",
+            description: "Full access",
+            sessionDuration: null,
+            inlinePolicy: null,
+            awsManagedPolicies: ["arn:aws:iam::aws:policy/AdministratorAccess"],
+            customerManagedPolicies: [],
+            permissionsBoundary: null,
+          },
+        ],
         accountAssignments: [
-          { accountId: "111111111111", permissionSetArn: "arn:ps:1", principalId: "g-1", principalType: "GROUP" },
-          { accountId: "222222222222", permissionSetArn: "arn:ps:1", principalId: "g-1", principalType: "GROUP" },
+          {
+            accountId: "111111111111",
+            permissionSetArn: "arn:ps:1",
+            principalId: "g-1",
+            principalType: "GROUP",
+          },
+          {
+            accountId: "222222222222",
+            permissionSetArn: "arn:ps:1",
+            principalId: "g-1",
+            principalType: "GROUP",
+          },
         ],
         accessRoles: [],
         accessControlAttributes: [],

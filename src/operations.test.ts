@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+
 import * as v from "valibot";
+
 import { operationSchema, unsupportedDiffSchema } from "./operations.js";
 
 test("operationSchema accepts supported organization and IdC operations", () => {
@@ -167,14 +169,12 @@ test("unsupportedDiffSchema accepts remaining unsupported diff kinds", () => {
     {
       kind: "accountEmailChange",
       category: "unsupportedMutation",
-      description: 'account "Prod" email cannot be changed via API (from "old@example.com" to "new@example.com"); update it directly in the AWS account\'s root user settings',
+      description:
+        'account "Prod" email cannot be changed via API (from "old@example.com" to "new@example.com"); update it directly in the AWS account\'s root user settings',
     },
   ];
 
   for (const unsupportedDiff of unsupportedDiffs) {
-    assert.deepEqual(
-      v.parse(unsupportedDiffSchema, unsupportedDiff),
-      unsupportedDiff,
-    );
+    assert.deepEqual(v.parse(unsupportedDiffSchema, unsupportedDiff), unsupportedDiff);
   }
 });

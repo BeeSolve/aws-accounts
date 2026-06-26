@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+
 import { readAwsContextFromFile } from "../awsConfig.js";
 import type { Logger } from "../logger.js";
 import { readStateCache } from "../remoteStateCache.js";
@@ -22,9 +23,7 @@ type ProfileEntry = {
 export async function runProfileCommand(input: ProfileCommandInput): Promise<void> {
   const cache = await readStateCache(input.cachePath);
   if (cache == null) {
-    throw new Error(
-      `No remote state cache found at "${input.cachePath}". Run scan or plan first.`,
-    );
+    throw new Error(`No remote state cache found at "${input.cachePath}". Run scan or plan first.`);
   }
 
   const context = await readAwsContextFromFile(input.contextPath);
@@ -101,12 +100,8 @@ async function selectEntry(props: {
 function buildProfileEntries(state: StateFile): ProfileEntry[] {
   const accountById: Record<string, StateFile["organization"]["accounts"][number]> =
     Object.fromEntries(state.organization.accounts.map((a) => [a.id, a]));
-  const permissionSetByArn: Record<
-    string,
-    StateFile["identityCenter"]["permissionSets"][number]
-  > = Object.fromEntries(
-    state.identityCenter.permissionSets.map((ps) => [ps.permissionSetArn, ps]),
-  );
+  const permissionSetByArn: Record<string, StateFile["identityCenter"]["permissionSets"][number]> =
+    Object.fromEntries(state.identityCenter.permissionSets.map((ps) => [ps.permissionSetArn, ps]));
 
   const seen = new Set<string>();
   const entries: ProfileEntry[] = [];

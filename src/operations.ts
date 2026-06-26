@@ -161,21 +161,19 @@ const detachIdcManagedPolicyFromPermissionSetOperationSchema = v.strictObject({
   managedPolicyArn: v.string(),
 });
 
-const attachIdcCustomerManagedPolicyReferenceToPermissionSetOperationSchema =
-  v.strictObject({
-    kind: v.literal("attachIdcCustomerManagedPolicyReferenceToPermissionSet"),
-    permissionSetName: v.string(),
-    customerManagedPolicyName: v.string(),
-    customerManagedPolicyPath: v.string(),
-  });
+const attachIdcCustomerManagedPolicyReferenceToPermissionSetOperationSchema = v.strictObject({
+  kind: v.literal("attachIdcCustomerManagedPolicyReferenceToPermissionSet"),
+  permissionSetName: v.string(),
+  customerManagedPolicyName: v.string(),
+  customerManagedPolicyPath: v.string(),
+});
 
-const detachIdcCustomerManagedPolicyReferenceFromPermissionSetOperationSchema =
-  v.strictObject({
-    kind: v.literal("detachIdcCustomerManagedPolicyReferenceFromPermissionSet"),
-    permissionSetName: v.string(),
-    customerManagedPolicyName: v.string(),
-    customerManagedPolicyPath: v.string(),
-  });
+const detachIdcCustomerManagedPolicyReferenceFromPermissionSetOperationSchema = v.strictObject({
+  kind: v.literal("detachIdcCustomerManagedPolicyReferenceFromPermissionSet"),
+  permissionSetName: v.string(),
+  customerManagedPolicyName: v.string(),
+  customerManagedPolicyPath: v.string(),
+});
 
 const provisionIdcPermissionSetOperationSchema = v.strictObject({
   kind: v.literal("provisionIdcPermissionSet"),
@@ -228,11 +226,7 @@ const setIdcAccessControlAttributesOperationSchema = v.strictObject({
   ),
 });
 
-const alternateContactTypeSchema = v.picklist([
-  "BILLING",
-  "OPERATIONS",
-  "SECURITY",
-]);
+const alternateContactTypeSchema = v.picklist(["BILLING", "OPERATIONS", "SECURITY"]);
 
 const putAlternateContactOperationSchema = v.strictObject({
   kind: v.literal("putAlternateContact"),
@@ -371,10 +365,7 @@ const unsupportedDiffKindSchema = v.picklist([
   "accountEmailChange",
 ]);
 
-const unsupportedDiffCategorySchema = v.picklist([
-  "destructive",
-  "unsupportedMutation",
-]);
+const unsupportedDiffCategorySchema = v.picklist(["destructive", "unsupportedMutation"]);
 
 export const unsupportedDiffSchema = v.strictObject({
   kind: unsupportedDiffKindSchema,

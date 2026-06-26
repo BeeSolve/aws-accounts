@@ -73,6 +73,7 @@ The v1 CLI was built incrementally across six phases, each adding a layer of fun
 ### No Saved Plan Artifact
 
 Apply recomputes the plan from current config and state. A saved artifact (like Terraform's plan file) was deferred because:
+
 - Main value is review-across-sessions and CI separation — less critical for single-operator use
 - Requires versioned format and state-fingerprint validation to refuse stale plans
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+
 import { diffStates } from "./diff.js";
 import type { StateFile } from "./state.js";
 
@@ -96,9 +97,7 @@ test("diffStates emits createAccount operation for sentinel new account", () => 
 test("diffStates emits updateAccountTags when desired tags change", () => {
   const current = createBaseState();
   const next = cloneState(current);
-  const account = next.organization.accounts.find(
-    (candidate) => candidate.name === "app-a",
-  );
+  const account = next.organization.accounts.find((candidate) => candidate.name === "app-a");
   if (account == null) {
     throw new Error('Expected fixture account "app-a".');
   }
@@ -129,9 +128,7 @@ test("diffStates emits updateAccountName when desired name differs for the same 
   current.identityCenter.accountAssignments = [];
   current.identityCenter.accessRoles = [];
   const next = cloneState(current);
-  const account = next.organization.accounts.find(
-    (candidate) => candidate.name === "app-a",
-  );
+  const account = next.organization.accounts.find((candidate) => candidate.name === "app-a");
   if (account == null) {
     throw new Error('Expected fixture account "app-a".');
   }
@@ -156,9 +153,7 @@ test("diffStates reports accountEmailChange as unsupported when email differs fo
   current.identityCenter.accountAssignments = [];
   current.identityCenter.accessRoles = [];
   const next = cloneState(current);
-  const account = next.organization.accounts.find(
-    (candidate) => candidate.name === "app-a",
-  );
+  const account = next.organization.accounts.find((candidate) => candidate.name === "app-a");
   if (account == null) {
     throw new Error('Expected fixture account "app-a".');
   }
@@ -182,9 +177,7 @@ test("diffStates emits updateAccountName before moveAccount when renaming and mo
   current.identityCenter.accountAssignments = [];
   current.identityCenter.accessRoles = [];
   const next = cloneState(current);
-  const account = next.organization.accounts.find(
-    (candidate) => candidate.name === "app-a",
-  );
+  const account = next.organization.accounts.find((candidate) => candidate.name === "app-a");
   if (account == null) {
     throw new Error('Expected fixture account "app-a".');
   }
@@ -682,8 +675,7 @@ test("diffStates reports new account with unresolved target OU", () => {
     {
       kind: "newAccountWithUnknownOu",
       category: "unsupportedMutation",
-      description:
-        'new account "app-d" has unresolved target OU "unknown" (__pending_creation__)',
+      description: 'new account "app-d" has unresolved target OU "unknown" (__pending_creation__)',
     },
   ]);
 });
@@ -1334,12 +1326,7 @@ test("diffStates keeps deterministic mixed Organizations and IdC ordering", () =
 
   assert.deepEqual(
     plan.operations.map((operation) => operation.kind),
-    [
-      "createAccount",
-      "createIdcUser",
-      "createIdcPermissionSet",
-      "grantIdcAccountAssignment",
-    ],
+    ["createAccount", "createIdcUser", "createIdcPermissionSet", "grantIdcAccountAssignment"],
   );
 });
 
@@ -1466,13 +1453,10 @@ function setOrganizationalUnitParentId(props: {
   parentId: string;
 }): void {
   const organizationalUnit = props.state.organization.organizationalUnits.find(
-    (currentOrganizationalUnit) =>
-      currentOrganizationalUnit.name === props.organizationalUnitName,
+    (currentOrganizationalUnit) => currentOrganizationalUnit.name === props.organizationalUnitName,
   );
   if (organizationalUnit == null) {
-    throw new Error(
-      `Could not find OU "${props.organizationalUnitName}" in test state.`,
-    );
+    throw new Error(`Could not find OU "${props.organizationalUnitName}" in test state.`);
   }
   organizationalUnit.parentId = props.parentId;
 }

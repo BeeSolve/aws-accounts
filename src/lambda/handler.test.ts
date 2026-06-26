@@ -1,10 +1,12 @@
-import test, { mock } from "node:test";
 import assert from "node:assert/strict";
+import test, { mock } from "node:test";
+
 import fc from "fast-check";
 import * as v from "valibot";
+
+import { lambdaResponseSchema } from "../lambdaClient.js";
 import type { StateFile } from "../state.js";
 import { handler } from "./handler.js";
-import { lambdaResponseSchema } from "../lambdaClient.js";
 
 // Set required env var before any handler calls
 process.env.STATE_BUCKET_NAME = "test-bucket-dummy";
@@ -179,9 +181,9 @@ test("Property 1: Lambda input validation rejects invalid payloads", async () =>
   // Generator for payloads with invalid action values
   const invalidActionValueArb = fc.record({
     action: fc.oneof(
-      fc.string({ minLength: 0, maxLength: 30 }).filter(
-        (s) => s !== "scan" && s !== "getStateUrl" && s !== "apply",
-      ),
+      fc
+        .string({ minLength: 0, maxLength: 30 })
+        .filter((s) => s !== "scan" && s !== "getStateUrl" && s !== "apply"),
       fc.integer(),
       fc.boolean(),
       fc.constant(null),
@@ -285,8 +287,7 @@ test("Property 1: Lambda input validation rejects invalid payloads", async () =>
       );
 
       // Message must be non-empty
-      const message = (response as { error: { message: string } }).error
-        .message;
+      const message = (response as { error: { message: string } }).error.message;
       assert.equal(typeof message, "string");
       assert.ok(message.length > 0, "Error message should be non-empty");
     }),
@@ -342,9 +343,6 @@ test("Property 4: Scan summary counts match state — summary counts equal array
   );
 });
 
-
-
-
 /**
  * Feature: remote-execution-v2, Property 8: Lambda response schema self-validation
  *
@@ -380,9 +378,9 @@ test("Property 8: Lambda response schema self-validation — all handler respons
   // Invalid action values
   const invalidActionArb = fc.record({
     action: fc.oneof(
-      fc.string({ minLength: 0, maxLength: 30 }).filter(
-        (s) => s !== "scan" && s !== "getStateUrl" && s !== "apply",
-      ),
+      fc
+        .string({ minLength: 0, maxLength: 30 })
+        .filter((s) => s !== "scan" && s !== "getStateUrl" && s !== "apply"),
       fc.integer(),
       fc.boolean(),
       fc.constant(null),
@@ -633,25 +631,19 @@ const detachIdcManagedPolicyFromPermissionSetOpArb = fc.record({
 
 /** Generate a valid attachIdcCustomerManagedPolicyReferenceToPermissionSet operation */
 const attachIdcCustomerManagedPolicyReferenceToPermissionSetOpArb = fc.record({
-  kind: fc.constant(
-    "attachIdcCustomerManagedPolicyReferenceToPermissionSet" as const,
-  ),
+  kind: fc.constant("attachIdcCustomerManagedPolicyReferenceToPermissionSet" as const),
   permissionSetName: nonEmptyStringArb,
   customerManagedPolicyName: nonEmptyStringArb,
   customerManagedPolicyPath: nonEmptyStringArb,
 });
 
 /** Generate a valid detachIdcCustomerManagedPolicyReferenceFromPermissionSet operation */
-const detachIdcCustomerManagedPolicyReferenceFromPermissionSetOpArb = fc.record(
-  {
-    kind: fc.constant(
-      "detachIdcCustomerManagedPolicyReferenceFromPermissionSet" as const,
-    ),
-    permissionSetName: nonEmptyStringArb,
-    customerManagedPolicyName: nonEmptyStringArb,
-    customerManagedPolicyPath: nonEmptyStringArb,
-  },
-);
+const detachIdcCustomerManagedPolicyReferenceFromPermissionSetOpArb = fc.record({
+  kind: fc.constant("detachIdcCustomerManagedPolicyReferenceFromPermissionSet" as const),
+  permissionSetName: nonEmptyStringArb,
+  customerManagedPolicyName: nonEmptyStringArb,
+  customerManagedPolicyPath: nonEmptyStringArb,
+});
 
 /** Generate a valid provisionIdcPermissionSet operation */
 const provisionIdcPermissionSetOpArb = fc.record({

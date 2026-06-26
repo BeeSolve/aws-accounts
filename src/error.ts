@@ -61,9 +61,7 @@ function isUsageErrorMessage(message: string): boolean {
     message.includes(
       "Refusing to create organizational units in non-interactive mode without --yes.",
     ) ||
-    message.includes(
-      "Refusing to overwrite config files in non-interactive mode without --yes.",
-    )
+    message.includes("Refusing to overwrite config files in non-interactive mode without --yes.")
   );
 }
 

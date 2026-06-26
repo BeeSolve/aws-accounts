@@ -1,11 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import test from "node:test";
+
+import { regenerateTypesFromState } from "./awsConfig.js";
 import { createTestWorkspace } from "./helpers.test.js";
 import type { Logger } from "./logger.js";
 import type { StateFile } from "./state.js";
-import { regenerateTypesFromState } from "./awsConfig.js";
 
 // --- Collecting logger ---
 
@@ -72,7 +73,10 @@ test("regenerateTypesFromState writes file and logs when content changes", async
     assert.notEqual(written, "// old content\n");
 
     const updateLog = logger.logs.find((l) => l.includes("Updated aws.config.types.ts"));
-    assert.ok(updateLog, `Expected "Updated aws.config.types.ts" log, got: ${JSON.stringify(logger.logs)}`);
+    assert.ok(
+      updateLog,
+      `Expected "Updated aws.config.types.ts" log, got: ${JSON.stringify(logger.logs)}`,
+    );
   } finally {
     await workspace.cleanup();
   }
@@ -94,7 +98,10 @@ test("regenerateTypesFromState logs warning on failure without throwing", async 
     });
 
     const warningLog = logger.logs.find((l) => l.includes("Failed to regenerate types"));
-    assert.ok(warningLog, `Expected warning log containing "Failed to regenerate types", got: ${JSON.stringify(logger.logs)}`);
+    assert.ok(
+      warningLog,
+      `Expected warning log containing "Failed to regenerate types", got: ${JSON.stringify(logger.logs)}`,
+    );
   } finally {
     await workspace.cleanup();
   }
@@ -125,7 +132,11 @@ test("regenerateTypesFromState does not log when types are unchanged", async () 
       logger: logger2,
     });
 
-    assert.equal(logger2.logs.length, 0, `Expected no logs on second run, got: ${JSON.stringify(logger2.logs)}`);
+    assert.equal(
+      logger2.logs.length,
+      0,
+      `Expected no logs on second run, got: ${JSON.stringify(logger2.logs)}`,
+    );
   } finally {
     await workspace.cleanup();
   }

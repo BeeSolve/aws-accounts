@@ -465,7 +465,12 @@ function toExtemptAccountsCondition(exemptAccounts: string[]): Record<string, un
 export type SecurityBaselineOptions<T extends string, A extends string> = {
   cloudTrail?:
     | { enabled: false }
-    | { enabled: true; delegatedAdminAccount: A; logArchiveAccount: A; organizationTrail?: boolean };
+    | {
+        enabled: true;
+        delegatedAdminAccount: A;
+        logArchiveAccount: A;
+        organizationTrail?: boolean;
+      };
   configRecorder?:
     | { enabled: false }
     | {
@@ -490,9 +495,7 @@ export type SecurityBaselineOptions<T extends string, A extends string> = {
         targets?: T[];
         findingPublishingFrequency?: "FIFTEEN_MINUTES" | "ONE_HOUR" | "SIX_HOURS";
       };
-  rootAccessManagement?:
-    | { enabled: false }
-    | { enabled: true; delegatedAdminAccount?: A };
+  rootAccessManagement?: { enabled: false } | { enabled: true; delegatedAdminAccount?: A };
 };
 
 type StackSetDeclaration = {
@@ -571,8 +574,8 @@ export function toSecurityBaseline<
     if (delegatedAdminOu.name !== deliveryBucketOu.name) {
       throw new Error(
         `configRecorder.delegatedAdminAccount ("${String(configRecorder.delegatedAdminAccount)}") is in OU "${delegatedAdminOu.name}" ` +
-        `but deliveryBucketAccount ("${String(configRecorder.deliveryBucketAccount)}") is in OU "${deliveryBucketOu.name}". ` +
-        `Both must be in the same security OU.`,
+          `but deliveryBucketAccount ("${String(configRecorder.deliveryBucketAccount)}") is in OU "${deliveryBucketOu.name}". ` +
+          `Both must be in the same security OU.`,
       );
     }
     if (
@@ -591,7 +594,9 @@ export function toSecurityBaseline<
       ou.accounts.some((a) => a.name === configRecorder.deliveryBucketAccount),
     );
     if (!bucketAccountOu) {
-      throw new Error(`Could not find OU containing delivery bucket account "${configRecorder.deliveryBucketAccount}".`);
+      throw new Error(
+        `Could not find OU containing delivery bucket account "${configRecorder.deliveryBucketAccount}".`,
+      );
     }
     stackSets.push({
       name: "SecurityBaseline-SecuritySetup",
@@ -678,9 +683,10 @@ export function toSecurityBaseline<
     ? { accountName: String(options.configRecorder.deliveryBucketAccount) }
     : undefined;
 
-  const cloudTrailBucket = options.cloudTrail?.enabled && options.cloudTrail.organizationTrail
-    ? { accountName: String(options.cloudTrail.logArchiveAccount) }
-    : undefined;
+  const cloudTrailBucket =
+    options.cloudTrail?.enabled && options.cloudTrail.organizationTrail
+      ? { accountName: String(options.cloudTrail.logArchiveAccount) }
+      : undefined;
 
   return {
     ...config,

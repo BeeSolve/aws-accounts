@@ -93,9 +93,7 @@ organizationalUnits: [
   {
     name: "root",
     parentName: null,
-    defaultTags: [
-      { key: "managed-by", value: "aws-accounts" },
-    ],
+    defaultTags: [{ key: "managed-by", value: "aws-accounts" }],
     accounts: [],
   },
   {
@@ -169,4 +167,3 @@ Mitigations:
 - include inherited/effective-tag context in human `plan` lines (future enhancement),
 - document precedence with concrete examples,
 - keep merge rules deterministic and simple.
-

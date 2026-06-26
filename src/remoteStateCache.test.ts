@@ -1,9 +1,10 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile, unlink, mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { readFile, unlink, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+
 import { readStateCache, writeStateCache, isCacheFresh } from "./remoteStateCache.js";
 import type { StateFile } from "./state.js";
 
@@ -14,11 +15,17 @@ function createSampleState(): StateFile {
     organization: {
       organizationId: "o-test123",
       rootId: "r-root",
-      organizationalUnits: [
-        { id: "ou-a", parentId: "r-root", arn: "arn:1", name: "Alpha" },
-      ],
+      organizationalUnits: [{ id: "ou-a", parentId: "r-root", arn: "arn:1", name: "Alpha" }],
       accounts: [
-        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", state: "ACTIVE", tags: [], parentId: "ou-a" },
+        {
+          id: "111111111111",
+          arn: "arn:1",
+          name: "A",
+          email: "a@example.com",
+          state: "ACTIVE",
+          tags: [],
+          parentId: "ou-a",
+        },
       ],
     },
     identityCenter: {
@@ -87,7 +94,11 @@ test("readStateCache returns null for invalid JSON", async () => {
 test("readStateCache returns null for valid JSON with invalid state", async () => {
   const cachePath = getTmpCachePath();
   const { writeFile: writeFileFs } = await import("node:fs/promises");
-  await writeFileFs(cachePath, JSON.stringify({ fetchedAt: "2026-01-01T00:00:00.000Z", state: { invalid: true } }), "utf8");
+  await writeFileFs(
+    cachePath,
+    JSON.stringify({ fetchedAt: "2026-01-01T00:00:00.000Z", state: { invalid: true } }),
+    "utf8",
+  );
 
   const result = await readStateCache(cachePath);
   assert.equal(result, null);

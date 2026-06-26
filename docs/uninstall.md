@@ -6,11 +6,11 @@ This tool deploys minimal infrastructure to your AWS account. Here's exactly wha
 
 `bootstrap` creates three resources in your AWS account:
 
-| Resource | Name | Purpose |
-|----------|------|--------|
-| S3 bucket | `beesolve-aws-accounts-state-{accountId}-{region}` | Stores org state snapshots |
-| IAM role | `beesolve-aws-accounts-lambda-role` | Execution role for the Lambda |
-| Lambda function | `beesolve-aws-accounts` | Executes scan/apply operations remotely |
+| Resource        | Name                                               | Purpose                                 |
+| --------------- | -------------------------------------------------- | --------------------------------------- |
+| S3 bucket       | `beesolve-aws-accounts-state-{accountId}-{region}` | Stores org state snapshots              |
+| IAM role        | `beesolve-aws-accounts-lambda-role`                | Execution role for the Lambda           |
+| Lambda function | `beesolve-aws-accounts`                            | Executes scan/apply operations remotely |
 
 Optionally (if log group was created):
 | Resource | Name | Purpose |
@@ -58,6 +58,7 @@ aws logs delete-log-group --log-group-name /aws/lambda/beesolve-aws-accounts --r
 ### 5. Remove local files
 
 Delete or keep your project directory as you prefer. The key files are:
+
 - `aws.config.ts` — your org configuration (useful as documentation even without the tool)
 - `aws.context.json` — deployment metadata
 - `.remote-state-cache.json` — local cache of remote state

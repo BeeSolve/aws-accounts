@@ -7,6 +7,7 @@ Enable centralized root access management (delete root credentials from member a
 ## Background
 
 AWS Organizations supports **Centralized Root Access Management** (since late 2024):
+
 - `iam:EnableOrganizationsRootCredentialsManagement` — allows management account or delegated admin to delete root user credentials from member accounts
 - `iam:EnableOrganizationsRootSessions` — allows privileged root actions via `sts:AssumeRoot` without needing root password
 - New accounts created after enabling this feature have **no root credentials by default**
@@ -24,6 +25,7 @@ These are one-time org-level API calls. Once enabled, the management account (or
 ### 1. Lambda action to enable root access management
 
 A new Lambda action `enableRootAccessManagement` that calls:
+
 1. `organizations:EnableAWSServiceAccess` with `ServicePrincipal: "iam.amazonaws.com"`
 2. `iam:EnableOrganizationsRootCredentialsManagement`
 3. `iam:EnableOrganizationsRootSessions`
@@ -101,6 +103,7 @@ Resources:
 ```
 
 **Open question:** `AWS::IAM::AccountPasswordPolicy` is not a standard CloudFormation resource. Options:
+
 - a. Use a Lambda-backed custom resource in the StackSet template
 - b. Handle password policy as a direct API call from the remote Lambda (like root access management) via `iam:UpdateAccountPasswordPolicy` called per-account through role assumption
 - c. Use AWS Config managed rule to detect non-compliant password policies + auto-remediation

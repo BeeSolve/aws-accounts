@@ -67,8 +67,8 @@ Both commands are local-only (no AWS API calls) and operate on the cached state 
 
 ```typescript
 type ProfileCombination = {
-  accountId: string;      // AWS account ID (12 digits)
-  accountName: string;    // Human-readable account name from state
+  accountId: string; // AWS account ID (12 digits)
+  accountName: string; // Human-readable account name from state
   permissionSetName: string; // Permission set name (used as sso_role_name)
 };
 ```
@@ -80,9 +80,9 @@ type ProfileBlockInput = {
   accountId: string;
   accountName: string;
   permissionSetName: string;
-  startUrl: string;       // Derived: https://<identityStoreId>.awsapps.com/start
-  ssoRegion: string;      // From context.deployment.region
-  sessionName: string;    // Derived: beesolve-<identityStoreId>
+  startUrl: string; // Derived: https://<identityStoreId>.awsapps.com/start
+  ssoRegion: string; // From context.deployment.region
+  sessionName: string; // Derived: beesolve-<identityStoreId>
 };
 ```
 
@@ -91,8 +91,8 @@ type ProfileBlockInput = {
 ```typescript
 type ProfileCommandInput = {
   logger: Logger;
-  cachePath: string;      // .remote-state-cache.json
-  contextPath: string;    // aws.context.json
+  cachePath: string; // .remote-state-cache.json
+  contextPath: string; // aws.context.json
   stdin: NodeJS.ReadableStream;
   stdout: NodeJS.WritableStream;
   isTty: boolean | undefined;
@@ -181,11 +181,9 @@ export function buildProfileCombinations(
   graveyardOuId: string,
 ): ProfileCombination[] {
   const permissionSetByArn = new Map(
-    state.identityCenter.permissionSets.map(ps => [ps.permissionSetArn, ps.name])
+    state.identityCenter.permissionSets.map((ps) => [ps.permissionSetArn, ps.name]),
   );
-  const accountById = new Map(
-    state.organization.accounts.map(a => [a.id, a])
-  );
+  const accountById = new Map(state.organization.accounts.map((a) => [a.id, a]));
 
   const seen = new Set<string>();
   const combinations: ProfileCombination[] = [];
@@ -208,9 +206,10 @@ export function buildProfileCombinations(
     });
   }
 
-  return combinations.sort((a, b) =>
-    a.accountName.localeCompare(b.accountName) ||
-    a.permissionSetName.localeCompare(b.permissionSetName)
+  return combinations.sort(
+    (a, b) =>
+      a.accountName.localeCompare(b.accountName) ||
+      a.permissionSetName.localeCompare(b.permissionSetName),
   );
 }
 ```
@@ -301,9 +300,7 @@ type GraveyardCloseCommandInput = {
   contextPath: string;
 };
 
-export async function runGraveyardCloseCommand(
-  props: GraveyardCloseCommandInput,
-): Promise<void> {
+export async function runGraveyardCloseCommand(props: GraveyardCloseCommandInput): Promise<void> {
   const [cache, context] = await Promise.all([
     readStateCache(props.cachePath),
     readAwsContextFromFile(props.contextPath),
@@ -316,7 +313,7 @@ export async function runGraveyardCloseCommand(
 
   const graveyardOuId = context.organization.graveyardOuId;
   const eligibleAccounts = cache.state.organization.accounts
-    .filter(a => a.parentId === graveyardOuId && a.status === "ACTIVE")
+    .filter((a) => a.parentId === graveyardOuId && a.status === "ACTIVE")
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (eligibleAccounts.length === 0) {
@@ -371,35 +368,40 @@ The SSO region comes from `context.deployment.region` since the Identity Center 
 
 ## Error Handling
 
-| Scenario | Behavior |
-|----------|----------|
-| State cache missing | Throw error: "No remote state cache found. Run a scan or apply command first." |
-| Context file missing | Throw error: "aws.context.json not found. Run bootstrap first." |
-| No profile combinations available | Log message and exit cleanly (exit code 0) |
-| stdin is not a TTY (profile) | Throw error: "Interactive mode required. Run in a terminal." |
-| Invalid picker input | Re-prompt with error message |
-| Unknown graveyard subcommand | Throw usage error listing valid subcommands |
-| No eligible accounts for closure | Log message and exit cleanly (exit code 0) |
+| Scenario                          | Behavior                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| State cache missing               | Throw error: "No remote state cache found. Run a scan or apply command first." |
+| Context file missing              | Throw error: "aws.context.json not found. Run bootstrap first."                |
+| No profile combinations available | Log message and exit cleanly (exit code 0)                                     |
+| stdin is not a TTY (profile)      | Throw error: "Interactive mode required. Run in a terminal."                   |
+| Invalid picker input              | Re-prompt with error message                                                   |
+| Unknown graveyard subcommand      | Throw usage error listing valid subcommands                                    |
+| No eligible accounts for closure  | Log message and exit cleanly (exit code 0)                                     |
 
 ## Correctness Properties
 
 ### Property 1: Deterministic profile combinations
+
 `buildProfileCombinations` is deterministic: same state input always produces same sorted output.
 **Validates: Requirements 2.3, 2.4**
 
 ### Property 2: Pure profile block generation
+
 `generateProfileBlock` is a pure function: no side effects, output depends only on input.
 **Validates: Requirements 6.1, 6.2, 6.3**
 
 ### Property 3: Unique profile names
+
 Profile names are unique per (accountName, permissionSetName) pair due to kebab-case derivation.
 **Validates: Requirements 4.6, 5.1**
 
 ### Property 4: Graveyard close safety
+
 Graveyard close only outputs commands for ACTIVE accounts — never SUSPENDED.
 **Validates: Requirements 8.1, 8.2**
 
 ### Property 5: Backward compatibility
+
 Existing `graveyard` command behavior is preserved when no subcommand is given.
 **Validates: Requirements 9.1**
 
@@ -424,10 +426,10 @@ Existing `graveyard` command behavior is preserved when no subcommand is given.
 
 ## File Changes Summary
 
-| File | Change |
-|------|--------|
-| `src/commands/profile.ts` | New file |
-| `src/commands/profile.test.ts` | New file |
-| `src/commands/graveyard.ts` | Add `runGraveyardCloseCommand` |
-| `src/commands/graveyard.test.ts` | Add tests for `close` subcommand |
-| `src/cli.ts` | Add `profile` command, add graveyard subcommand routing |
+| File                             | Change                                                  |
+| -------------------------------- | ------------------------------------------------------- |
+| `src/commands/profile.ts`        | New file                                                |
+| `src/commands/profile.test.ts`   | New file                                                |
+| `src/commands/graveyard.ts`      | Add `runGraveyardCloseCommand`                          |
+| `src/commands/graveyard.test.ts` | Add tests for `close` subcommand                        |
+| `src/cli.ts`                     | Add `profile` command, add graveyard subcommand routing |

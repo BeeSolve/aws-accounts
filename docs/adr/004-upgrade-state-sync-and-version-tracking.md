@@ -21,11 +21,11 @@ When a new feature (e.g. SCP/RCP support added in v1.1.0) is released, the upgra
 
 ### Path analysis
 
-| Path | What happens | Safe? |
-|------|-------------|-------|
-| `upgrade → plan/apply` | Old state has `policies = []`; local config has `policies = []`; diff is zero — no policy operations | **Safe** |
+| Path                          | What happens                                                                                                                                                                                                                                         | Safe?         |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `upgrade → plan/apply`        | Old state has `policies = []`; local config has `policies = []`; diff is zero — no policy operations                                                                                                                                                 | **Safe**      |
 | `upgrade → scan → plan/apply` | New Lambda scans live AWS, discovers existing SCPs (including AWS-managed `FullAWSAccess` attached to root and every OU), writes them to S3 state. Local config still has no policies. Diff generates **DELETE operations for all discovered SCPs**. | **Dangerous** |
-| `upgrade → init → plan/apply` | `init` scans and regenerates `aws.config.ts` including newly-discovered policies. Local config matches AWS state. Diff is zero. | **Safe** |
+| `upgrade → init → plan/apply` | `init` scans and regenerates `aws.config.ts` including newly-discovered policies. Local config matches AWS state. Diff is zero.                                                                                                                      | **Safe**      |
 
 The `upgrade → scan → plan/apply` path is the dangerous one. `scan` is the natural thing to do after an upgrade ("refresh state"), and there is currently nothing to warn the user that doing so will cause `plan/apply` to try to delete every SCP in the organization.
 
@@ -87,8 +87,8 @@ This acts as defense in depth — catching the user even if they missed the post
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
-| `src/awsConfig.ts` | Add `cliVersion?: string` to `deploymentSchema` |
+| File                     | Change                                                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------- |
+| `src/awsConfig.ts`       | Add `cliVersion?: string` to `deploymentSchema`                                          |
 | `src/commands/remote.ts` | Write version after upgrade; add `--update` flag to init; add safety guard to plan/apply |
-| `src/cli.ts` | Version banner on startup |
+| `src/cli.ts`             | Version banner on startup                                                                |

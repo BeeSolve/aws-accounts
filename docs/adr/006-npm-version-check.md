@@ -46,9 +46,10 @@ export async function checkForNewVersionIfNeeded(props: {
     try {
       const raw = await readFile(props.contextPath, "utf8");
       rawContext = JSON.parse(raw) as Record<string, unknown>;
-      lastCheckedAt = typeof rawContext.versionCheckLastRunAt === "string"
-        ? rawContext.versionCheckLastRunAt
-        : undefined;
+      lastCheckedAt =
+        typeof rawContext.versionCheckLastRunAt === "string"
+          ? rawContext.versionCheckLastRunAt
+          : undefined;
     } catch {
       // context file absent — proceed without TTL guard
     }
@@ -85,13 +86,14 @@ export async function checkForNewVersionIfNeeded(props: {
 async function fetchLatestNpmVersion(): Promise<string> {
   const response = await fetch("https://registry.npmjs.org/@beesolve/aws-accounts/latest");
   if (!response.ok) throw new Error(`npm registry returned ${response.status}`);
-  const body = await response.json() as { version?: unknown };
+  const body = (await response.json()) as { version?: unknown };
   if (typeof body.version !== "string") throw new Error("Unexpected npm registry response.");
   return body.version;
 }
 ```
 
 Design notes:
+
 - Uses Node's built-in `fetch` (available since Node 18; this project targets Node 24).
 - `rawContext` spread preserves all existing fields when writing back, avoiding a round-trip through the strict valibot schema.
 - `writeFile` is already imported from `node:fs/promises` in this file.

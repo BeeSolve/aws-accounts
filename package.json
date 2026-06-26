@@ -40,6 +40,11 @@
     "cli": "npm run build && node dist/cli.js",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && npm run build:tests && node --experimental-test-module-mocks --test \"dist/**/*.test.js\"",
+    "lint": "oxlint .",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "check": "oxfmt --check && oxlint .",
+    "prepare": "husky",
     "prepublishOnly": "npm run typecheck && npm run build && npm run build:lambda"
   },
   "dependencies": {
@@ -62,9 +67,14 @@
     "valibot": "^1.4.1"
   },
   "devDependencies": {
+    "@beesolve/lint-config": "^0.2.3",
     "@changesets/cli": "^2.31.0",
     "@types/node": "^24.13.1",
     "fast-check": "^4.8.0",
+    "husky": "^9.1.7",
+    "nano-staged": "^1.0.2",
+    "oxfmt": "^0.56.0",
+    "oxlint": "^1.71.0",
     "typescript": "^6.0.3"
   },
   "volta": {

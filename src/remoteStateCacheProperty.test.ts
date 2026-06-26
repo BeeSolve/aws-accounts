@@ -1,18 +1,22 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+
 import fc from "fast-check";
+
 import { readStateCache, writeStateCache, isCacheFresh } from "./remoteStateCache.js";
-import type { StateFile } from "./state.js";
 import type { StateCacheFile } from "./remoteStateCache.js";
+import type { StateFile } from "./state.js";
 
 // --- Generators ---
 
 /** Generate a non-empty string (matching the nonEmptyString schema in state.ts) */
-const nonEmptyStringArb = fc.string({ minLength: 1, maxLength: 50 }).filter((s) => s.trim().length > 0);
+const nonEmptyStringArb = fc
+  .string({ minLength: 1, maxLength: 50 })
+  .filter((s) => s.trim().length > 0);
 
 /** Generate a valid OrganizationalUnit */
 const organizationalUnitArb = fc.record({
@@ -186,8 +190,11 @@ test("Property 2: Cache freshness determination — isCacheFresh returns true if
       try {
         const result = isCacheFresh(cache, ttlSeconds);
         const expected = elapsedMs <= ttlSeconds * 1000;
-        assert.equal(result, expected,
-          `elapsed=${elapsedMs}ms, ttl=${ttlSeconds}s (${ttlSeconds * 1000}ms): expected ${expected}, got ${result}`);
+        assert.equal(
+          result,
+          expected,
+          `elapsed=${elapsedMs}ms, ttl=${ttlSeconds}s (${ttlSeconds * 1000}ms): expected ${expected}, got ${result}`,
+        );
       } finally {
         Date.now = originalDateNow;
       }

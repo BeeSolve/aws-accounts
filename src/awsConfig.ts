@@ -2,22 +2,24 @@ import { randomUUID } from "node:crypto";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { build as esbuildBuild } from "esbuild";
-import * as v from "valibot";
+
 import {
   assertIamPolicyDocument,
   iamActionCatalog,
   iamPolicyDocumentSchema,
   type IamPolicyDocument,
 } from "@beesolve/iam-policy-ts";
+import { build as esbuildBuild } from "esbuild";
+import * as v from "valibot";
+
+import { assertUnreachable, toRecordByProperty } from "./helpers.js";
+import type { Logger } from "./logger.js";
 import {
   createAccessRoleName,
   type OrgPolicyState,
   type StateFile,
   validateState,
 } from "./state.js";
-import { assertUnreachable, toRecordByProperty } from "./helpers.js";
-import type { Logger } from "./logger.js";
 
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
 const pendingCreationId = "__pending_creation__" as const;

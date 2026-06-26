@@ -1,10 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+
 import fc from "fast-check";
+
 import type { Logger } from "../logger.js";
 import { runGraveyardCloseCommand } from "./graveyard.js";
 
@@ -77,8 +79,18 @@ async function writeFixtures(props: {
         organizationId: "o-test123",
         rootId: "r-root",
         organizationalUnits: [
-          { id: "ou-graveyard", parentId: "r-root", arn: "arn:aws:organizations:::ou/graveyard", name: "Graveyard" },
-          { id: "ou-other", parentId: "r-root", arn: "arn:aws:organizations:::ou/other", name: "Other" },
+          {
+            id: "ou-graveyard",
+            parentId: "r-root",
+            arn: "arn:aws:organizations:::ou/graveyard",
+            name: "Graveyard",
+          },
+          {
+            id: "ou-other",
+            parentId: "r-root",
+            arn: "arn:aws:organizations:::ou/other",
+            name: "Other",
+          },
         ],
         accounts: props.accounts.map((a) => ({
           id: a.id,
@@ -107,9 +119,21 @@ async function writeFixtures(props: {
   const context = {
     version: "1",
     generatedAt: "2026-05-01T00:00:00.000Z",
-    organization: { id: "o-test123", managementAccountId: "999999999999", rootId: "r-root", graveyardOuId: "ou-graveyard" },
+    organization: {
+      id: "o-test123",
+      managementAccountId: "999999999999",
+      rootId: "r-root",
+      graveyardOuId: "ou-graveyard",
+    },
     identityCenter: { instanceArn: "arn:aws:sso:::instance/ssoins-123", identityStoreId: "d-123" },
-    deployment: { profile: "default", region: "eu-central-1", lambdaArn: "", stateBucketName: "", stateCacheTtlSeconds: 300, cliVersion: "0.0.0-test" },
+    deployment: {
+      profile: "default",
+      region: "eu-central-1",
+      lambdaArn: "",
+      stateBucketName: "",
+      stateCacheTtlSeconds: 300,
+      cliVersion: "0.0.0-test",
+    },
   };
 
   await Promise.all([

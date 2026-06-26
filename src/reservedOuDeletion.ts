@@ -2,10 +2,7 @@ import type { AwsContextFile } from "./awsConfig.js";
 import type { Plan } from "./operations.js";
 import type { StateFile } from "./state.js";
 
-export function applyReservedOuDeletionGuard(props: {
-  plan: Plan;
-  context: AwsContextFile;
-}): Plan {
+export function applyReservedOuDeletionGuard(props: { plan: Plan; context: AwsContextFile }): Plan {
   const reservedOuNamesById = new Map<string, string>([
     [props.context.organization.graveyardOuId, "Graveyard"],
   ]);
@@ -37,15 +34,13 @@ export function applyReservedOuDeletionGuard(props: {
     return props.plan;
   }
 
-  const unsupported = [...props.plan.unsupported, ...reservedOuUnsupported].sort(
-    (left, right) => {
-      const kindComparison = left.kind.localeCompare(right.kind);
-      if (kindComparison !== 0) {
-        return kindComparison;
-      }
-      return left.description.localeCompare(right.description);
-    },
-  );
+  const unsupported = [...props.plan.unsupported, ...reservedOuUnsupported].sort((left, right) => {
+    const kindComparison = left.kind.localeCompare(right.kind);
+    if (kindComparison !== 0) {
+      return kindComparison;
+    }
+    return left.description.localeCompare(right.description);
+  });
 
   return {
     operations,

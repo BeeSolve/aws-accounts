@@ -1,19 +1,24 @@
-import { parseArgs } from "node:util";
-import { createInterface } from "node:readline/promises";
 import { basename } from "node:path";
-import { S3Client } from "@aws-sdk/client-s3";
+import { createInterface } from "node:readline/promises";
+import { parseArgs } from "node:util";
+
 import { IAMClient } from "@aws-sdk/client-iam";
 import { LambdaClient } from "@aws-sdk/client-lambda";
-import { STSClient } from "@aws-sdk/client-sts";
-import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import { OrganizationsClient } from "@aws-sdk/client-organizations";
+import { S3Client } from "@aws-sdk/client-s3";
+import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
+import { STSClient } from "@aws-sdk/client-sts";
+
 import { buildAwsClientConfig, resolveAwsProfile, resolveAwsRegion } from "./awsClientConfig.js";
-import { consoleLogger, type Logger } from "./logger.js";
+import {
+  checkForNewVersionIfNeeded,
+  readAwsContextFromFile,
+  readPackageVersion,
+} from "./awsConfig.js";
+import { runConfigRevealCommand } from "./commands/configReveal.js";
 import { runGraveyardCloseCommand, runGraveyardCommand } from "./commands/graveyard.js";
 import { runProfileCommand } from "./commands/profile.js";
 import { runRegenerateCommand } from "./commands/regenerate.js";
-import { runValidateCommand } from "./commands/validate.js";
-import { runConfigRevealCommand } from "./commands/configReveal.js";
 import {
   runRemoteBootstrap,
   runRemoteScan,
@@ -23,13 +28,10 @@ import {
   runRemoteUpgrade,
   runRemoteDrift,
 } from "./commands/remote.js";
+import { runValidateCommand } from "./commands/validate.js";
 import { classifyCliError, exitCodeForCliErrorKind, toUsageError } from "./error.js";
 import { assertUnreachable } from "./helpers.js";
-import {
-  checkForNewVersionIfNeeded,
-  readAwsContextFromFile,
-  readPackageVersion,
-} from "./awsConfig.js";
+import { consoleLogger, type Logger } from "./logger.js";
 
 const commands = [
   "bootstrap",

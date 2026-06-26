@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+
 import {
   classifyCliError,
   CliError,
@@ -20,24 +21,18 @@ test("classifyCliError returns typed kind for CliError", () => {
 
 test("classifyCliError classifies usage message fallback", () => {
   const classified = classifyCliError(
-    new Error(
-      "Missing required --instance-arn for bootstrap in non-interactive mode.",
-    ),
+    new Error("Missing required --instance-arn for bootstrap in non-interactive mode."),
   );
   assert.equal(classified.kind, "usage");
 });
 
 test("classifyCliError classifies validation message fallback", () => {
-  const classified = classifyCliError(
-    new Error('Invalid --instance-arn value: "x".'),
-  );
+  const classified = classifyCliError(new Error('Invalid --instance-arn value: "x".'));
   assert.equal(classified.kind, "validation");
 });
 
 test("classifyCliError classifies precondition message fallback", () => {
-  const classified = classifyCliError(
-    new Error('Could not find "Graveyard" OU in aws.config.ts.'),
-  );
+  const classified = classifyCliError(new Error('Could not find "Graveyard" OU in aws.config.ts.'));
   assert.equal(classified.kind, "precondition");
 });
 

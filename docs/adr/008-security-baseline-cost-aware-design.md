@@ -19,6 +19,7 @@ Users expected to understand costs before enabling features, and needed the abil
 ### 1. Every feature is independently opt-in
 
 Each section in `SecurityBaselineOptions` uses a discriminated union:
+
 ```ts
 cloudTrail?: { enabled: false } | { enabled: true; delegatedAdminAccount: A; ... }
 ```
@@ -39,10 +40,11 @@ This prevents surprise costs from what appears to be a simple boolean toggle.
 ### 3. SCP protection is independent and selective
 
 The `protectSecurityServices` SCP helper accepts a `protect` option:
+
 ```ts
 policies.scp.protectSecurityServices({
-  protect: { cloudTrail: true, config: true, guardDuty: false }
-})
+  protect: { cloudTrail: true, config: true, guardDuty: false },
+});
 ```
 
 This allows disabling protection for a specific service before teardown without removing all protections. The SCP must protect at least one service (empty SCPs are rejected by AWS).

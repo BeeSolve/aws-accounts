@@ -1,8 +1,10 @@
-import test, { mock } from "node:test";
 import assert from "node:assert/strict";
+import test, { mock } from "node:test";
+
 import fc from "fast-check";
-import type { StateFile } from "../state.js";
+
 import type { Operation } from "../operations.js";
+import type { StateFile } from "../state.js";
 
 // --- Minimal valid state for mocked S3 GetObject ---
 
@@ -34,8 +36,7 @@ const minimalState: StateFile = {
 // - GetObjectCommand → return valid state with ETag
 // - PutObjectCommand → succeed (no conflict)
 const mockS3Send = mock.fn(async (command: unknown) => {
-  const commandName = (command as { constructor: { name: string } }).constructor
-    .name;
+  const commandName = (command as { constructor: { name: string } }).constructor.name;
   if (commandName === "GetObjectCommand") {
     return {
       Body: {
@@ -70,19 +71,27 @@ mock.module("@aws-sdk/client-s3", {
     },
     CreateBucketCommand: class CreateBucketCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutBucketPolicyCommand: class PutBucketPolicyCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutPublicAccessBlockCommand: class PutPublicAccessBlockCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutBucketTaggingCommand: class PutBucketTaggingCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     S3ServiceException: class S3ServiceException extends Error {
       $metadata: { httpStatusCode?: number };
@@ -110,8 +119,12 @@ mock.module("@aws-sdk/s3-request-presigner", {
 
 mock.module("@aws-sdk/client-sts", {
   namedExports: {
-    STSClient: class { send = async () => ({}); },
-    AssumeRoleCommand: class { constructor() {} },
+    STSClient: class {
+      send = async () => ({});
+    },
+    AssumeRoleCommand: class {
+      constructor() {}
+    },
   },
 });
 
@@ -120,7 +133,9 @@ mock.module("@aws-sdk/client-organizations", {
     OrganizationsClient: class {
       send = async () => ({});
     },
-    DescribeOrganizationCommand: class { constructor() {} },
+    DescribeOrganizationCommand: class {
+      constructor() {}
+    },
   },
 });
 
@@ -152,17 +167,15 @@ mock.module("@aws-sdk/client-account", {
 let executeCallCount = 0;
 let failAtIndex = 0;
 
-const mockExecuteOperation = mock.fn(
-  async (props: { state: unknown }) => {
-    const currentIndex = executeCallCount;
-    executeCallCount++;
-    if (currentIndex === failAtIndex) {
-      throw new Error(`Operation ${currentIndex} failed intentionally`);
-    }
-    // Return the working state unchanged for successful operations
-    return props.state;
-  },
-);
+const mockExecuteOperation = mock.fn(async (props: { state: unknown }) => {
+  const currentIndex = executeCallCount;
+  executeCallCount++;
+  if (currentIndex === failAtIndex) {
+    throw new Error(`Operation ${currentIndex} failed intentionally`);
+  }
+  // Return the working state unchanged for successful operations
+  return props.state;
+});
 
 mock.module("../applyLogic.js", {
   namedExports: {
@@ -216,9 +229,7 @@ test("Property 5: Apply partial failure reports correct completed count — when
   // Generate N (1-10) and K (0 to N-1)
   const nkArb = fc
     .integer({ min: 1, max: 10 })
-    .chain((n) =>
-      fc.tuple(fc.constant(n), fc.integer({ min: 0, max: n - 1 })),
-    );
+    .chain((n) => fc.tuple(fc.constant(n), fc.integer({ min: 0, max: n - 1 })));
 
   await fc.assert(
     fc.asyncProperty(nkArb, async ([n, k]) => {
@@ -229,18 +240,14 @@ test("Property 5: Apply partial failure reports correct completed count — when
       mockExecuteOperation.mock.resetCalls();
 
       // Reset the implementation to use current failAtIndex
-      mockExecuteOperation.mock.mockImplementation(
-        async (props: { state: unknown }) => {
-          const currentIndex = executeCallCount;
-          executeCallCount++;
-          if (currentIndex === failAtIndex) {
-            throw new Error(
-              `Operation ${currentIndex} failed intentionally`,
-            );
-          }
-          return props.state;
-        },
-      );
+      mockExecuteOperation.mock.mockImplementation(async (props: { state: unknown }) => {
+        const currentIndex = executeCallCount;
+        executeCallCount++;
+        if (currentIndex === failAtIndex) {
+          throw new Error(`Operation ${currentIndex} failed intentionally`);
+        }
+        return props.state;
+      });
       // Reset call count after mockImplementation
       executeCallCount = 0;
 
@@ -264,15 +271,8 @@ test("Property 5: Apply partial failure reports correct completed count — when
       const response = await handler(event);
 
       // Verify the response indicates failure
-      assert.equal(
-        response.success,
-        false,
-        `Expected success=false for N=${n}, K=${k}`,
-      );
-      assert.ok(
-        "error" in response,
-        `Expected error field in response for N=${n}, K=${k}`,
-      );
+      assert.equal(response.success, false, `Expected success=false for N=${n}, K=${k}`);
+      assert.ok("error" in response, `Expected error field in response for N=${n}, K=${k}`);
 
       if ("error" in response) {
         const errorResponse = response as {
@@ -298,10 +298,7 @@ test("Property 5: Apply partial failure reports correct completed count — when
           `Expected non-empty error message for N=${n}, K=${k}`,
         );
 
-        assert.ok(
-          errorResponse.error.details != null,
-          `Expected error.details for N=${n}, K=${k}`,
-        );
+        assert.ok(errorResponse.error.details != null, `Expected error.details for N=${n}, K=${k}`);
 
         assert.equal(
           errorResponse.error.details?.operationsCompleted,

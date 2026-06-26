@@ -139,9 +139,7 @@ function checkOrgPolicyTargets(config: AwsConfigModel, errors: string[]): void {
   for (const policy of config.policies.backupPolicies) {
     for (const target of policy.targets) {
       if (target !== "root" && !ouNames.has(target) && !accountNames.has(target)) {
-        errors.push(
-          `Backup policy "${policy.name}" references unknown target "${target}".`,
-        );
+        errors.push(`Backup policy "${policy.name}" references unknown target "${target}".`);
       }
     }
   }

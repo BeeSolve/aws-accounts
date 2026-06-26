@@ -33,12 +33,12 @@ Research conducted May 2026. Compares current tool capabilities against availabl
 
 ## Gaps: Permission set properties
 
-| Property | API | Status | Impact |
-|----------|-----|--------|--------|
-| Session duration | `SessionDuration` on `CreatePermissionSet` / `UpdatePermissionSet` (ISO-8601, max 12h) | ✅ Done (v1.1.0) | **High** |
-| Relay state | `RelayState` on permission set | Missing | Low — niche, sends users to a specific console page on login. |
-| Permissions boundary | `PutPermissionsBoundaryToPermissionSet` | Missing (on roadmap) | Medium |
-| Tags on permission sets | `TagResource` / `UntagResource` on permission set ARN | Missing | Low — useful for governance/cost allocation. |
+| Property                | API                                                                                    | Status               | Impact                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------- |
+| Session duration        | `SessionDuration` on `CreatePermissionSet` / `UpdatePermissionSet` (ISO-8601, max 12h) | ✅ Done (v1.1.0)     | **High**                                                      |
+| Relay state             | `RelayState` on permission set                                                         | Missing              | Low — niche, sends users to a specific console page on login. |
+| Permissions boundary    | `PutPermissionsBoundaryToPermissionSet`                                                | Missing (on roadmap) | Medium                                                        |
+| Tags on permission sets | `TagResource` / `UntagResource` on permission set ARN                                  | Missing              | Low — useful for governance/cost allocation.                  |
 
 ---
 
@@ -46,14 +46,14 @@ Research conducted May 2026. Compares current tool capabilities against availabl
 
 AWS Organizations supports 6 policy types.
 
-| Policy type | API type constant | Complexity | Impact |
-|-------------|-------------------|------------|--------|
-| **Service Control Policies (SCPs)** | `SERVICE_CONTROL_POLICY` | Medium-high | ✅ Done (v1.1.0) |
-| **Resource Control Policies (RCPs)** | `RESOURCE_CONTROL_POLICY` | Medium | ✅ Done (v1.1.0) |
-| **Tag policies** | `TAG_POLICY` | Low-medium | ✅ Done (v1.1.0) |
-| **Backup policies** | `BACKUP_POLICY` | Medium | Medium — centralized backup plans across accounts. |
-| **AI services opt-out policies** | `AISERVICES_OPT_OUT_POLICY` | Low | ✅ Done (v1.1.0) |
-| **Declarative policies** (EC2, VPC) | `DECLARATIVE_POLICY_EC2` | Low-medium | Low — very new (2024), limited adoption so far. |
+| Policy type                          | API type constant           | Complexity  | Impact                                             |
+| ------------------------------------ | --------------------------- | ----------- | -------------------------------------------------- |
+| **Service Control Policies (SCPs)**  | `SERVICE_CONTROL_POLICY`    | Medium-high | ✅ Done (v1.1.0)                                   |
+| **Resource Control Policies (RCPs)** | `RESOURCE_CONTROL_POLICY`   | Medium      | ✅ Done (v1.1.0)                                   |
+| **Tag policies**                     | `TAG_POLICY`                | Low-medium  | ✅ Done (v1.1.0)                                   |
+| **Backup policies**                  | `BACKUP_POLICY`             | Medium      | Medium — centralized backup plans across accounts. |
+| **AI services opt-out policies**     | `AISERVICES_OPT_OUT_POLICY` | Low         | ✅ Done (v1.1.0)                                   |
+| **Declarative policies** (EC2, VPC)  | `DECLARATIVE_POLICY_EC2`    | Low-medium  | Low — very new (2024), limited adoption so far.    |
 
 All policy types share the same API pattern: `CreatePolicy` / `UpdatePolicy` / `DeletePolicy` / `AttachPolicy` / `DetachPolicy` / `ListPolicies` / `ListPoliciesForTarget` / `DescribePolicy`.
 
@@ -61,33 +61,33 @@ All policy types share the same API pattern: `CreatePolicy` / `UpdatePolicy` / `
 
 ## Gaps: Organization account management
 
-| Feature | API | Complexity | Impact |
-|---------|-----|------------|--------|
-| Account alternate contacts | `PutAlternateContact` / `GetAlternateContact` (billing, operations, security) | Low | ✅ Done (v1.2.0) |
-| Account closure | `CloseAccount` | Low | ✅ Done (v1.1.0) — `graveyard close` subcommand |
-| Delegated administrator | `RegisterDelegatedAdministrator` / `DeregisterDelegatedAdministrator` | Low | Medium — lets you run SSO admin from a non-management account. |
+| Feature                    | API                                                                           | Complexity | Impact                                                         |
+| -------------------------- | ----------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------- |
+| Account alternate contacts | `PutAlternateContact` / `GetAlternateContact` (billing, operations, security) | Low        | ✅ Done (v1.2.0)                                               |
+| Account closure            | `CloseAccount`                                                                | Low        | ✅ Done (v1.1.0) — `graveyard close` subcommand                |
+| Delegated administrator    | `RegisterDelegatedAdministrator` / `DeregisterDelegatedAdministrator`         | Low        | Medium — lets you run SSO admin from a non-management account. |
 
 ---
 
 ## Gaps: IAM Identity Center features
 
-| Feature | API | Complexity | Impact |
-|---------|-----|------------|--------|
-| ABAC (access control attributes) | `CreateInstanceAccessControlAttributeConfiguration` | Low-medium | ✅ Done (v1.2.0) |
-| Trusted token issuers | `CreateTrustedTokenIssuer` | Medium | Low — M2M and cross-service auth. |
-| Applications (SAML/OIDC) | `CreateApplication` / `CreateApplicationAssignment` | High | Low — for app integrations, not account access. |
-| Multi-region replication | Instance replication APIs (2025) | High | Low — enterprise-only, complex. |
+| Feature                          | API                                                 | Complexity | Impact                                          |
+| -------------------------------- | --------------------------------------------------- | ---------- | ----------------------------------------------- |
+| ABAC (access control attributes) | `CreateInstanceAccessControlAttributeConfiguration` | Low-medium | ✅ Done (v1.2.0)                                |
+| Trusted token issuers            | `CreateTrustedTokenIssuer`                          | Medium     | Low — M2M and cross-service auth.               |
+| Applications (SAML/OIDC)         | `CreateApplication` / `CreateApplicationAssignment` | High       | Low — for app integrations, not account access. |
+| Multi-region replication         | Instance replication APIs (2025)                    | High       | Low — enterprise-only, complex.                 |
 
 ---
 
 ## Competitive landscape
 
-| Tool | Strengths | Weaknesses vs. us |
-|------|-----------|-------------------|
-| **Terraform** (aws provider) | Full API coverage, mature ecosystem | Verbose HCL, no plan-from-config UX, no profile generation, no opinionated workflows |
-| **OrgFormation** | CloudFormation-based, deploys resources to accounts, task pipelines | YAML-based, no TypeScript autocomplete, no IAM action helpers, heavier abstraction |
-| **aws-sso-util** (Python) | Profile generation, credential helpers | Python dependency, SSO-only (no org management), unmaintained periods |
-| **AWS Control Tower** | Managed guardrails, account factory | ClickOps-heavy, opaque, creates resources you don't control, expensive at scale |
+| Tool                         | Strengths                                                           | Weaknesses vs. us                                                                    |
+| ---------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| **Terraform** (aws provider) | Full API coverage, mature ecosystem                                 | Verbose HCL, no plan-from-config UX, no profile generation, no opinionated workflows |
+| **OrgFormation**             | CloudFormation-based, deploys resources to accounts, task pipelines | YAML-based, no TypeScript autocomplete, no IAM action helpers, heavier abstraction   |
+| **aws-sso-util** (Python)    | Profile generation, credential helpers                              | Python dependency, SSO-only (no org management), unmaintained periods                |
+| **AWS Control Tower**        | Managed guardrails, account factory                                 | ClickOps-heavy, opaque, creates resources you don't control, expensive at scale      |
 
 ---
 
@@ -122,7 +122,6 @@ All policy types share the same API pattern: `CreatePolicy` / `UpdatePolicy` / `
 16. **Declarative policies** — Too new, limited adoption.
 17. **Trusted token issuers / Applications** — Enterprise edge cases.
 
-
 ---
 
 ## Control Tower / Account Factory functionality via direct APIs
@@ -133,16 +132,16 @@ Research into whether we can provide Control Tower-equivalent functionality usin
 
 A "landing zone" is just a set of resources provisioned via standard APIs:
 
-| CT resource | Direct API equivalent |
-|-------------|----------------------|
-| Security OU | `organizations:CreateOrganizationalUnit` |
-| Log Archive account | `organizations:CreateAccount` + move to Security OU |
-| Audit account | `organizations:CreateAccount` + move to Security OU |
-| Org-wide CloudTrail | `cloudtrail:CreateTrail` with `IsOrganizationTrail: true` |
-| S3 bucket for logs | `s3:CreateBucket` + bucket policy for org trail writes |
-| Deny-region SCP | `organizations:CreatePolicy` + `AttachPolicy` |
-| Baseline SCPs | Same pattern |
-| Config recorder in member accounts | `config:PutConfigurationRecorder` (cross-account) |
+| CT resource                        | Direct API equivalent                                     |
+| ---------------------------------- | --------------------------------------------------------- |
+| Security OU                        | `organizations:CreateOrganizationalUnit`                  |
+| Log Archive account                | `organizations:CreateAccount` + move to Security OU       |
+| Audit account                      | `organizations:CreateAccount` + move to Security OU       |
+| Org-wide CloudTrail                | `cloudtrail:CreateTrail` with `IsOrganizationTrail: true` |
+| S3 bucket for logs                 | `s3:CreateBucket` + bucket policy for org trail writes    |
+| Deny-region SCP                    | `organizations:CreatePolicy` + `AttachPolicy`             |
+| Baseline SCPs                      | Same pattern                                              |
+| Config recorder in member accounts | `config:PutConfigurationRecorder` (cross-account)         |
 
 All achievable via SDK calls from the management account or via `sts:AssumeRole` into member accounts.
 
@@ -150,16 +149,16 @@ All achievable via SDK calls from the management account or via `sts:AssumeRole`
 
 What CT Account Factory does at account creation:
 
-| Step | API | Our status |
-|------|-----|------------|
-| Create account | `organizations:CreateAccount` | ✅ Done |
-| Move to target OU | `organizations:MoveAccount` | ✅ Done |
-| Set alternate contacts | `account:PutAlternateContact` | On roadmap (Tier 2) |
-| Apply SCPs via OU membership | Automatic once SCPs exist on OU | On roadmap (Tier 1) |
-| Enable CloudTrail | `cloudtrail:CreateTrail` / `StartLogging` | Future |
-| Enable Config recording | `config:PutConfigurationRecorder` / `StartConfigurationRecorder` | Future |
-| Deploy baseline IAM roles | `iam:CreateRole` / `PutRolePolicy` | Future |
-| Account-level settings | `account:PutAccountSettings`, `iam:CreateAccountAlias` | Future |
+| Step                         | API                                                              | Our status          |
+| ---------------------------- | ---------------------------------------------------------------- | ------------------- |
+| Create account               | `organizations:CreateAccount`                                    | ✅ Done             |
+| Move to target OU            | `organizations:MoveAccount`                                      | ✅ Done             |
+| Set alternate contacts       | `account:PutAlternateContact`                                    | On roadmap (Tier 2) |
+| Apply SCPs via OU membership | Automatic once SCPs exist on OU                                  | On roadmap (Tier 1) |
+| Enable CloudTrail            | `cloudtrail:CreateTrail` / `StartLogging`                        | Future              |
+| Enable Config recording      | `config:PutConfigurationRecorder` / `StartConfigurationRecorder` | Future              |
+| Deploy baseline IAM roles    | `iam:CreateRole` / `PutRolePolicy`                               | Future              |
+| Account-level settings       | `account:PutAccountSettings`, `iam:CreateAccountAlias`           | Future              |
 
 Cross-account operations use `OrganizationAccountAccessRole` — AWS automatically creates this role in every member account provisioned via `CreateAccount`.
 
@@ -167,11 +166,11 @@ Cross-account operations use `OrganizationAccountAccessRole` — AWS automatical
 
 CT's ~400 controls map to three mechanisms:
 
-| Control type | CT implementation | Our equivalent |
-|--------------|-------------------|----------------|
-| Preventive | SCPs | `organizations:CreatePolicy` / `AttachPolicy` — on roadmap |
-| Detective | AWS Config rules | `config:PutConfigRule` via cross-account assume-role — future |
-| Proactive | CloudFormation hooks | Out of scope (CFN-specific) |
+| Control type | CT implementation    | Our equivalent                                                |
+| ------------ | -------------------- | ------------------------------------------------------------- |
+| Preventive   | SCPs                 | `organizations:CreatePolicy` / `AttachPolicy` — on roadmap    |
+| Detective    | AWS Config rules     | `config:PutConfigRule` via cross-account assume-role — future |
+| Proactive    | CloudFormation hooks | Out of scope (CFN-specific)                                   |
 
 ### Account baselines — recommended approach
 

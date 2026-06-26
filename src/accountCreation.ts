@@ -6,8 +6,9 @@ import {
   type Account,
   type OrganizationsClient,
 } from "@aws-sdk/client-organizations";
-import type { Logger } from "./logger.js";
+
 import { delay } from "./helpers.js";
+import type { Logger } from "./logger.js";
 
 type CreateAccountAndMoveToOuProps = {
   organizationsClient: OrganizationsClient;
@@ -37,9 +38,7 @@ type CreateAccountAndMoveToOuResult = {
 export async function createAccountAndMoveToOu(
   props: CreateAccountAndMoveToOuProps,
 ): Promise<CreateAccountAndMoveToOuResult> {
-  props.logger.log(
-    `Creating account "${props.accountName}" (${props.accountEmail})...`,
-  );
+  props.logger.log(`Creating account "${props.accountName}" (${props.accountEmail})...`);
   const createResponse = await props.organizationsClient.send(
     new CreateAccountCommand({
       AccountName: props.accountName,
@@ -102,16 +101,12 @@ async function pollCreateAccountStatusUntilTerminal(props: {
     }
     if (state === "SUCCEEDED") {
       if (status?.AccountId == null) {
-        throw new Error(
-          "CreateAccount succeeded but response did not include AccountId.",
-        );
+        throw new Error("CreateAccount succeeded but response did not include AccountId.");
       }
       return status.AccountId;
     }
     if (state === "FAILED") {
-      throw new Error(
-        `CreateAccount failed: ${status?.FailureReason ?? "unknown reason"}.`,
-      );
+      throw new Error(`CreateAccount failed: ${status?.FailureReason ?? "unknown reason"}.`);
     }
     await delay(props.pollIntervalInMs);
   }
@@ -185,10 +180,7 @@ async function findAccountById(props: {
   return undefined;
 }
 
-function isCompleteAccount(
-  account: Account,
-  expectedAccountId?: string,
-): boolean {
+function isCompleteAccount(account: Account, expectedAccountId?: string): boolean {
   if (
     account.Id == null ||
     account.Arn == null ||
@@ -203,4 +195,3 @@ function isCompleteAccount(
   }
   return account.Id === expectedAccountId;
 }
-

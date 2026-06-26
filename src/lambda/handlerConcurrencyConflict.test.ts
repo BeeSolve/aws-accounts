@@ -1,8 +1,10 @@
-import test, { mock } from "node:test";
 import assert from "node:assert/strict";
+import test, { mock } from "node:test";
+
 import fc from "fast-check";
-import type { StateFile } from "../state.js";
+
 import type { Operation } from "../operations.js";
+import type { StateFile } from "../state.js";
 
 // --- Mock S3ServiceException class ---
 // This must be defined before mock.module so the handler's instanceof check works.
@@ -53,8 +55,7 @@ const minimalState: StateFile = {
 // - GetObjectCommand → return valid state with ETag
 // - PutObjectCommand → throw PreconditionFailed (S3ServiceException)
 const mockS3Send = mock.fn(async (command: unknown) => {
-  const commandName = (command as { constructor: { name: string } }).constructor
-    .name;
+  const commandName = (command as { constructor: { name: string } }).constructor.name;
   if (commandName === "GetObjectCommand") {
     return {
       Body: {
@@ -66,8 +67,7 @@ const mockS3Send = mock.fn(async (command: unknown) => {
   if (commandName === "PutObjectCommand") {
     const error = new MockS3ServiceException({
       name: "PreconditionFailed",
-      message:
-        "At least one of the pre-conditions you specified did not hold",
+      message: "At least one of the pre-conditions you specified did not hold",
       $fault: "client",
       $metadata: { httpStatusCode: 412 },
     });
@@ -95,19 +95,27 @@ mock.module("@aws-sdk/client-s3", {
     },
     CreateBucketCommand: class CreateBucketCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutBucketPolicyCommand: class PutBucketPolicyCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutPublicAccessBlockCommand: class PutPublicAccessBlockCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     PutBucketTaggingCommand: class PutBucketTaggingCommand {
       input: unknown;
-      constructor(input: unknown) { this.input = input; }
+      constructor(input: unknown) {
+        this.input = input;
+      }
     },
     S3ServiceException: MockS3ServiceException,
   },
@@ -121,8 +129,12 @@ mock.module("@aws-sdk/s3-request-presigner", {
 
 mock.module("@aws-sdk/client-sts", {
   namedExports: {
-    STSClient: class { send = async () => ({}); },
-    AssumeRoleCommand: class { constructor() {} },
+    STSClient: class {
+      send = async () => ({});
+    },
+    AssumeRoleCommand: class {
+      constructor() {}
+    },
   },
 });
 
@@ -131,7 +143,9 @@ mock.module("@aws-sdk/client-organizations", {
     OrganizationsClient: class {
       send = async () => ({});
     },
-    DescribeOrganizationCommand: class { constructor() {} },
+    DescribeOrganizationCommand: class {
+      constructor() {}
+    },
   },
 });
 
@@ -160,9 +174,7 @@ mock.module("@aws-sdk/client-account", {
 });
 
 // Mock executeOperation to always succeed (return working state unchanged)
-const mockExecuteOperation = mock.fn(
-  async (props: { state: unknown }) => props.state,
-);
+const mockExecuteOperation = mock.fn(async (props: { state: unknown }) => props.state);
 
 mock.module("../applyLogic.js", {
   namedExports: {
@@ -238,10 +250,7 @@ test("Property 6: Concurrency conflict detection — S3 PreconditionFailed maps 
         false,
         `Expected success=false for ${operations.length} operations`,
       );
-      assert.ok(
-        "error" in response,
-        "Response should have an error field",
-      );
+      assert.ok("error" in response, "Response should have an error field");
       if ("error" in response) {
         const errorResponse = response as {
           success: false;
@@ -252,10 +261,7 @@ test("Property 6: Concurrency conflict detection — S3 PreconditionFailed maps 
           "concurrencyConflict",
           `Expected error.kind="concurrencyConflict", got "${errorResponse.error.kind}"`,
         );
-        assert.ok(
-          errorResponse.error.message.length > 0,
-          "Error message should be non-empty",
-        );
+        assert.ok(errorResponse.error.message.length > 0, "Error message should be non-empty");
       }
     }),
     { numRuns: 100 },

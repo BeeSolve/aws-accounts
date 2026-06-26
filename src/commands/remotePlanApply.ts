@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+
 import {
   loadAwsConfigModelFromTsFile,
   mapAwsConfigToState,
@@ -6,10 +7,10 @@ import {
   regenerateTypesFromState,
 } from "../awsConfig.js";
 import { diffStates } from "../diff.js";
-import { invokeLambda } from "../lambdaClient.js";
 import { startProgressTimer } from "../helpers.js";
-import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
+import { invokeLambda } from "../lambdaClient.js";
 import { writeStateCache } from "../remoteStateCache.js";
+import { applyReservedOuDeletionGuard } from "../reservedOuDeletion.js";
 import type { RemoteCommandInput } from "./remote.js";
 import {
   cachePath,

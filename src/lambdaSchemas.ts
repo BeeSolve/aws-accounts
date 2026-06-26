@@ -1,12 +1,9 @@
 import * as v from "valibot";
+
 import { operationSchema } from "./operations.js";
 import { stateSchema } from "./state.js";
 
-const validStackSetNames = [
-  "security-setup",
-  "config-recorder",
-  "guardduty-member",
-] as const;
+const validStackSetNames = ["security-setup", "config-recorder", "guardduty-member"] as const;
 const stackSetNameSchema = v.picklist(validStackSetNames);
 
 const scanRequestSchema = v.strictObject({
@@ -51,15 +48,21 @@ const createConfigDeliveryBucketRequestSchema = v.strictObject({
 
 const recordDeployedStackSetsRequestSchema = v.strictObject({
   action: v.literal("recordDeployedStackSets"),
-  stackSets: v.array(v.strictObject({
-    name: v.string(),
-    targets: v.array(v.string()),
-  })),
-  pendingOperations: v.optional(v.array(v.strictObject({
-    stackSetName: v.string(),
-    operationId: v.string(),
-    startedAt: v.string(),
-  }))),
+  stackSets: v.array(
+    v.strictObject({
+      name: v.string(),
+      targets: v.array(v.string()),
+    }),
+  ),
+  pendingOperations: v.optional(
+    v.array(
+      v.strictObject({
+        stackSetName: v.string(),
+        operationId: v.string(),
+        startedAt: v.string(),
+      }),
+    ),
+  ),
 });
 
 const createConfigAggregatorRequestSchema = v.strictObject({
@@ -70,10 +73,12 @@ const createConfigAggregatorRequestSchema = v.strictObject({
 
 const checkPendingStackSetsRequestSchema = v.strictObject({
   action: v.literal("checkPendingStackSets"),
-  operations: v.array(v.strictObject({
-    stackSetName: v.string(),
-    operationId: v.string(),
-  })),
+  operations: v.array(
+    v.strictObject({
+      stackSetName: v.string(),
+      operationId: v.string(),
+    }),
+  ),
 });
 
 const createCloudTrailBucketRequestSchema = v.strictObject({
@@ -186,11 +191,13 @@ const createConfigAggregatorResponseSchema = v.strictObject({
 const checkPendingStackSetsResponseSchema = v.strictObject({
   action: v.literal("checkPendingStackSets"),
   success: v.literal(true),
-  results: v.array(v.strictObject({
-    stackSetName: v.string(),
-    operationId: v.string(),
-    status: v.string(),
-  })),
+  results: v.array(
+    v.strictObject({
+      stackSetName: v.string(),
+      operationId: v.string(),
+      status: v.string(),
+    }),
+  ),
 });
 
 const createCloudTrailBucketResponseSchema = v.strictObject({

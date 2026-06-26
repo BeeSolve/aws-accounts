@@ -104,10 +104,12 @@ Task 11 (integration tests) ────── depends on all    │
 ## Parallelization
 
 Can run in parallel:
+
 - Tasks 1, 4, 6 (no shared dependencies)
 - Tasks 2, 3 (after Task 1)
 - Tasks 5, 7 (after their deps)
 
 Sequential:
+
 - Task 8 requires 2, 3, 7 complete
 - Tasks 9, 10, 11 are final

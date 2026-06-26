@@ -50,6 +50,7 @@ npx aws-accounts init
 ```
 
 This scans your (currently empty) org and generates:
+
 - `aws.config.ts` — your editable source of truth
 - `aws.config.types.ts` — generated types for IDE autocomplete
 
@@ -69,12 +70,8 @@ const awsConfig: AwsConfig = {
     { name: "prod-app", email: "aws+prod@example.com", parentName: "Production" },
     { name: "dev-app", email: "aws+dev@example.com", parentName: "Development" },
   ],
-  users: [
-    { userName: "admin", displayName: "Admin User", email: "admin@example.com" },
-  ],
-  groups: [
-    { displayName: "Admins", description: "Full access", members: ["admin"] },
-  ],
+  users: [{ userName: "admin", displayName: "Admin User", email: "admin@example.com" }],
+  groups: [{ displayName: "Admins", description: "Full access", members: ["admin"] }],
   permissionSets: [
     {
       name: "AdminAccess",

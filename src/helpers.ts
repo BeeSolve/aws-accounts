@@ -9,10 +9,7 @@
  *    assertUnreachable(action.kind);
  * ```
  */
-export function assertUnreachable(
-  value: never,
-  message: string = JSON.stringify(value),
-): never {
+export function assertUnreachable(value: never, message: string = JSON.stringify(value)): never {
   throw Error("An unreachable state reached!\n" + message);
 }
 
@@ -91,10 +88,7 @@ export function toRecordByProperty<T extends { [key: string]: any }>(
   keyTransformer: (key: string) => string = (key) => key,
 ): Record<string, T> {
   return Object.fromEntries(
-    input.map((item) => [
-      keyTransformer(typeof key === "function" ? key(item) : item[key]),
-      item,
-    ]),
+    input.map((item) => [keyTransformer(typeof key === "function" ? key(item) : item[key]), item]),
   );
 }
 
@@ -125,7 +119,10 @@ export async function delay(ms: number): Promise<void> {
  *    stop();
  * ```
  */
-export function startProgressTimer(onTick: (elapsed: number) => void, intervalMs = 5000): () => void {
+export function startProgressTimer(
+  onTick: (elapsed: number) => void,
+  intervalMs = 5000,
+): () => void {
   let elapsed = 0;
   const timer = setInterval(() => {
     elapsed += intervalMs / 1000;

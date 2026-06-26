@@ -1,5 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+
 import {
   addGroupMembershipToWorkingState,
   addAccountAssignmentToWorkingState,
@@ -29,7 +30,7 @@ test("validateState rejects unknown fields", () => {
       organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [],
-      accounts: []
+      accounts: [],
     },
     identityCenter: {
       instanceArn: "arn:aws:sso:::instance/ssoins-123",
@@ -40,9 +41,9 @@ test("validateState rejects unknown fields", () => {
       permissionSets: [],
       accountAssignments: [],
       accessRoles: [],
-      accessControlAttributes: []
+      accessControlAttributes: [],
     },
-    extra: true
+    extra: true,
   };
 
   assert.throws(() => validateState(invalid));
@@ -56,7 +57,7 @@ test("validateState rejects invalid principalType", () => {
       organizationId: "o-test123",
       rootId: "r-root",
       organizationalUnits: [],
-      accounts: []
+      accounts: [],
     },
     identityCenter: {
       instanceArn: "arn:aws:sso:::instance/ssoins-123",
@@ -70,12 +71,12 @@ test("validateState rejects invalid principalType", () => {
           accountId: "111111111111",
           permissionSetArn: "arn:ps-1",
           principalId: "p-1",
-          principalType: "ROLE"
-        }
+          principalType: "ROLE",
+        },
       ],
       accessRoles: [],
-      accessControlAttributes: []
-    }
+      accessControlAttributes: [],
+    },
   };
 
   assert.throws(() => validateState(invalid));
@@ -85,10 +86,10 @@ test("working state materializes back to the original state", () => {
   const input = createSampleState();
 
   const workingState = createWorkingState({
-    state: input
+    state: input,
   });
   const materialized = materializeWorkingState({
-    workingState
+    workingState,
   });
 
   assert.deepEqual(materialized, input);
@@ -98,17 +99,17 @@ test("working state helpers update organization records immutably", () => {
   const input = createSampleState();
 
   const workingState = createWorkingState({
-    state: input
+    state: input,
   });
   const movedState = moveAccountInWorkingState({
     workingState,
     accountId: "111111111111",
-    parentId: "ou-b"
+    parentId: "ou-b",
   });
   const renamedState = renameOrganizationalUnitInWorkingState({
     workingState: movedState,
     organizationalUnitId: "ou-a",
-    name: "AlphaRenamed"
+    name: "AlphaRenamed",
   });
   const withCreatedOu = upsertOrganizationalUnitInWorkingState({
     workingState: renamedState,
@@ -116,8 +117,8 @@ test("working state helpers update organization records immutably", () => {
       id: "ou-c",
       parentId: "r-root",
       arn: "arn:3",
-      name: "Gamma"
-    }
+      name: "Gamma",
+    },
   });
   const withCreatedAccount = upsertAccountInWorkingState({
     workingState: withCreatedOu,
@@ -128,36 +129,52 @@ test("working state helpers update organization records immutably", () => {
       email: "c@example.com",
       state: "ACTIVE",
       tags: [],
-      parentId: "ou-c"
-    }
+      parentId: "ou-c",
+    },
   });
   const withoutBetaOu = removeOrganizationalUnitFromWorkingState({
     workingState: withCreatedAccount,
     organizationalUnitId: "ou-b",
   });
   const materialized = materializeWorkingState({
-    workingState: withoutBetaOu
+    workingState: withoutBetaOu,
   });
 
   assert.equal(input.organization.accounts[0]?.parentId, "ou-a");
   assert.equal(input.organization.organizationalUnits[0]?.name, "Alpha");
-  assert.equal(materialized.organization.accounts.find((account) => account.id === "111111111111")?.parentId, "ou-b");
-  assert.equal(materialized.organization.organizationalUnits.find((organizationalUnit) => organizationalUnit.id === "ou-a")?.name, "AlphaRenamed");
-  assert.equal(materialized.organization.organizationalUnits.find((organizationalUnit) => organizationalUnit.id === "ou-c")?.name, "Gamma");
+  assert.equal(
+    materialized.organization.accounts.find((account) => account.id === "111111111111")?.parentId,
+    "ou-b",
+  );
+  assert.equal(
+    materialized.organization.organizationalUnits.find(
+      (organizationalUnit) => organizationalUnit.id === "ou-a",
+    )?.name,
+    "AlphaRenamed",
+  );
+  assert.equal(
+    materialized.organization.organizationalUnits.find(
+      (organizationalUnit) => organizationalUnit.id === "ou-c",
+    )?.name,
+    "Gamma",
+  );
   assert.equal(
     materialized.organization.organizationalUnits.some(
       (organizationalUnit) => organizationalUnit.id === "ou-b",
     ),
     false,
   );
-  assert.equal(materialized.organization.accounts.find((account) => account.id === "333333333333")?.parentId, "ou-c");
+  assert.equal(
+    materialized.organization.accounts.find((account) => account.id === "333333333333")?.parentId,
+    "ou-c",
+  );
 });
 
 test("working state helpers update IdC records immutably and regenerate access roles", () => {
   const input = createSampleState();
 
   const workingState = createWorkingState({
-    state: input
+    state: input,
   });
   const withUser = upsertIdcUserInWorkingState({
     workingState,
@@ -253,14 +270,8 @@ test("working state helpers update IdC records immutably and regenerate access r
   assert.equal(input.identityCenter.users.length, 0);
   assert.equal(withAssignmentMaterialized.identityCenter.users[0]?.userName, "alice");
   assert.equal(withAssignmentMaterialized.identityCenter.groups[0]?.displayName, "Admins");
-  assert.equal(
-    withAssignmentMaterialized.identityCenter.permissionSets[0]?.name,
-    "AdminAccess",
-  );
-  assert.equal(
-    withAssignmentMaterialized.identityCenter.accountAssignments.length,
-    1,
-  );
+  assert.equal(withAssignmentMaterialized.identityCenter.permissionSets[0]?.name, "AdminAccess");
+  assert.equal(withAssignmentMaterialized.identityCenter.accountAssignments.length, 1);
   assert.equal(withAssignmentMaterialized.identityCenter.groupMemberships.length, 1);
   assert.equal(withAssignmentMaterialized.identityCenter.accessRoles.length, 1);
   assert.equal(withoutAssignmentMaterialized.identityCenter.groupMemberships.length, 0);
@@ -274,10 +285,7 @@ test("working state helpers update IdC records immutably and regenerate access r
   assert.equal(withoutGroupMaterialized.identityCenter.accountAssignments.length, 0);
   assert.equal(withoutGroupMaterialized.identityCenter.accessRoles.length, 0);
   assert.equal(withoutPermissionSetMaterialized.identityCenter.permissionSets.length, 0);
-  assert.equal(
-    withoutPermissionSetMaterialized.identityCenter.accountAssignments.length,
-    0,
-  );
+  assert.equal(withoutPermissionSetMaterialized.identityCenter.accountAssignments.length, 0);
   assert.equal(withoutPermissionSetMaterialized.identityCenter.accessRoles.length, 0);
 });
 
@@ -290,14 +298,30 @@ function createSampleState() {
       rootId: "r-root",
       organizationalUnits: [
         { id: "ou-a", parentId: "r-root", arn: "arn:1", name: "Alpha" },
-        { id: "ou-b", parentId: "r-root", arn: "arn:2", name: "Beta" }
+        { id: "ou-b", parentId: "r-root", arn: "arn:2", name: "Beta" },
       ],
       accounts: [
-        { id: "111111111111", arn: "arn:1", name: "A", email: "a@example.com", state: "ACTIVE", tags: [], parentId: "ou-a" },
-        { id: "222222222222", arn: "arn:2", name: "B", email: "b@example.com", state: "ACTIVE", tags: [], parentId: "ou-b" }
+        {
+          id: "111111111111",
+          arn: "arn:1",
+          name: "A",
+          email: "a@example.com",
+          state: "ACTIVE",
+          tags: [],
+          parentId: "ou-a",
+        },
+        {
+          id: "222222222222",
+          arn: "arn:2",
+          name: "B",
+          email: "b@example.com",
+          state: "ACTIVE",
+          tags: [],
+          parentId: "ou-b",
+        },
       ],
       policies: [],
-      policyAttachments: []
+      policyAttachments: [],
     },
     identityCenter: {
       instanceArn: "arn:aws:sso:::instance/ssoins-123",
@@ -308,7 +332,7 @@ function createSampleState() {
       permissionSets: [],
       accountAssignments: [],
       accessRoles: [],
-      accessControlAttributes: []
-    }
+      accessControlAttributes: [],
+    },
   };
 }

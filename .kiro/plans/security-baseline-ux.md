@@ -53,6 +53,7 @@ guardDuty?:
 ```
 
 Apply the same pattern to:
+
 - `cloudTrail`: `delegatedAdminAccount` and `logArchiveAccount` only when `enabled: true`
 - `configRecorder`: `delegatedAdminAccount`, `deliveryBucketAccount`, `targets` only when `enabled: true`
 - `rootAccessManagement`: `delegatedAdminAccount` only when `enabled: true`
@@ -69,13 +70,13 @@ Add a new section "## Security Baseline Cost Estimate" after the existing Securi
 
 **Cost breakdown table (~20 accounts, eu-central-1):**
 
-| Service | What drives cost | Idle accounts | Active accounts |
-|---------|-----------------|---------------|-----------------|
-| AWS Config | $0.003/configuration item | ~$12/mo | ~$30–90/mo |
-| GuardDuty | CloudTrail events, VPC Flow Logs, DNS queries | ~$20–40/mo | ~$50–100/mo |
-| CloudTrail | S3 storage (management trail free) | ~$2–5/mo | ~$10–30/mo |
-| S3 storage | Snapshots + logs | ~$1–3/mo | ~$3–10/mo |
-| **Total** | | **~$35–50/mo** | **~$100–230/mo** |
+| Service    | What drives cost                              | Idle accounts  | Active accounts  |
+| ---------- | --------------------------------------------- | -------------- | ---------------- |
+| AWS Config | $0.003/configuration item                     | ~$12/mo        | ~$30–90/mo       |
+| GuardDuty  | CloudTrail events, VPC Flow Logs, DNS queries | ~$20–40/mo     | ~$50–100/mo      |
+| CloudTrail | S3 storage (management trail free)            | ~$2–5/mo       | ~$10–30/mo       |
+| S3 storage | Snapshots + logs                              | ~$1–3/mo       | ~$3–10/mo        |
+| **Total**  |                                               | **~$35–50/mo** | **~$100–230/mo** |
 
 Note: link to AWS Pricing Calculator for precise estimates.
 
@@ -85,11 +86,11 @@ Document how to enable/disable each feature independently:
 
 ```ts
 withSecurityBaseline(config, {
-  cloudTrail: { enabled: false },         // disable CloudTrail delegation
-  configRecorder: { enabled: false },     // disable Config recorders
-  guardDuty: { enabled: false },          // disable GuardDuty
+  cloudTrail: { enabled: false }, // disable CloudTrail delegation
+  configRecorder: { enabled: false }, // disable Config recorders
+  guardDuty: { enabled: false }, // disable GuardDuty
   rootAccessManagement: { enabled: false }, // disable root access mgmt
-})
+});
 ```
 
 Document the teardown procedure for each service (what manual steps are needed after disabling):
@@ -107,6 +108,7 @@ Document the `protectSecurityServices` `protect` option for selective protection
 **File:** `src/security.test.ts`
 
 Add tests:
+
 - Default behavior (all protected) still works
 - `protect: { cloudTrail: true, config: true, guardDuty: false }` — only 2 statements
 - `protect: { guardDuty: true }` — only GuardDuty statement

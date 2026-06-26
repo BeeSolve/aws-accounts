@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
+
 import * as v from "valibot";
+
 import { toRecordByProperty } from "./helpers.js";
 
 const nonEmptyString = v.pipe(v.string(), v.minLength(1));
@@ -150,27 +152,29 @@ export const stateSchema = v.strictObject({
     accessRoles: v.array(accessRoleSchema),
     accessControlAttributes: v.array(accessControlAttributeSchema),
   }),
-  deployedStackSets: v.optional(v.array(v.strictObject({
-    name: nonEmptyString,
-    targets: v.array(nonEmptyString),
-  }))),
-  pendingStackSetOperations: v.optional(v.array(v.strictObject({
-    stackSetName: nonEmptyString,
-    operationId: nonEmptyString,
-    startedAt: nonEmptyString,
-  }))),
+  deployedStackSets: v.optional(
+    v.array(
+      v.strictObject({
+        name: nonEmptyString,
+        targets: v.array(nonEmptyString),
+      }),
+    ),
+  ),
+  pendingStackSetOperations: v.optional(
+    v.array(
+      v.strictObject({
+        stackSetName: nonEmptyString,
+        operationId: nonEmptyString,
+        startedAt: nonEmptyString,
+      }),
+    ),
+  ),
 });
 
-export type OrganizationalUnitState = v.InferOutput<
-  typeof organizationalUnitSchema
->;
+export type OrganizationalUnitState = v.InferOutput<typeof organizationalUnitSchema>;
 export type OrgPolicyState = v.InferOutput<typeof orgPolicySchema>;
-export type OrgPolicyAttachmentState = v.InferOutput<
-  typeof orgPolicyAttachmentSchema
->;
-export type AlternateContactState = v.InferOutput<
-  typeof alternateContactSchema
->;
+export type OrgPolicyAttachmentState = v.InferOutput<typeof orgPolicyAttachmentSchema>;
+export type AlternateContactState = v.InferOutput<typeof alternateContactSchema>;
 export type AccountState = v.InferOutput<typeof accountSchema>;
 export type UserState = v.InferOutput<typeof userSchema>;
 export type GroupState = v.InferOutput<typeof groupSchema>;
@@ -179,16 +183,10 @@ export type CustomerManagedPolicyReferenceState = v.InferOutput<
   typeof customerManagedPolicyReferenceSchema
 >;
 export type PermissionSetState = v.InferOutput<typeof permissionSetSchema>;
-export type AccountAssignmentState = v.InferOutput<
-  typeof accountAssignmentSchema
->;
+export type AccountAssignmentState = v.InferOutput<typeof accountAssignmentSchema>;
 export type AccessRoleState = v.InferOutput<typeof accessRoleSchema>;
-export type AccessControlAttributeState = v.InferOutput<
-  typeof accessControlAttributeSchema
->;
-export type DelegatedAdministratorState = v.InferOutput<
-  typeof delegatedAdministratorSchema
->;
+export type AccessControlAttributeState = v.InferOutput<typeof accessControlAttributeSchema>;
+export type DelegatedAdministratorState = v.InferOutput<typeof delegatedAdministratorSchema>;
 export type StateFile = v.InferOutput<typeof stateSchema>;
 
 type WorkingIdentityCenterState = {
@@ -234,8 +232,7 @@ export function validateState(value: unknown): StateFile {
 export function createWorkingState(props: { state: StateFile }): WorkingState {
   const policies = props.state.organization.policies ?? [];
   const policyAttachments = props.state.organization.policyAttachments ?? [];
-  const delegatedAdministrators =
-    props.state.organization.delegatedAdministrators ?? [];
+  const delegatedAdministrators = props.state.organization.delegatedAdministrators ?? [];
   return {
     version: props.state.version,
     generatedAt: props.state.generatedAt,
@@ -247,17 +244,11 @@ export function createWorkingState(props: { state: StateFile }): WorkingState {
         "id",
       ),
       accountsById: toRecordByProperty(props.state.organization.accounts, "id"),
-      accountsByName: toRecordByProperty(
-        props.state.organization.accounts,
-        "name",
-      ),
+      accountsByName: toRecordByProperty(props.state.organization.accounts, "name"),
       policiesById: toRecordByProperty(policies, "id"),
       policiesByName: toRecordByProperty(policies, "name"),
       policyAttachments: structuredClone(policyAttachments),
-      policyAttachmentsByKey: toRecordByProperty(
-        policyAttachments,
-        createOrgPolicyAttachmentKey,
-      ),
+      policyAttachmentsByKey: toRecordByProperty(policyAttachments, createOrgPolicyAttachmentKey),
       delegatedAdministrators: structuredClone(delegatedAdministrators),
       delegatedAdministratorsByKey: toRecordByProperty(
         delegatedAdministrators,
@@ -270,23 +261,17 @@ export function createWorkingState(props: { state: StateFile }): WorkingState {
   };
 }
 
-export function materializeWorkingState(props: {
-  workingState: WorkingState;
-}): StateFile {
+export function materializeWorkingState(props: { workingState: WorkingState }): StateFile {
   return {
     version: props.workingState.version,
     generatedAt: props.workingState.generatedAt,
     organization: {
       organizationId: props.workingState.organization.organizationId,
       rootId: props.workingState.organization.rootId,
-      organizationalUnits: Object.values(
-        props.workingState.organization.organizationalUnitsById,
-      ),
+      organizationalUnits: Object.values(props.workingState.organization.organizationalUnitsById),
       accounts: Object.values(props.workingState.organization.accountsById),
       policies: Object.values(props.workingState.organization.policiesById),
-      policyAttachments: structuredClone(
-        props.workingState.organization.policyAttachments,
-      ),
+      policyAttachments: structuredClone(props.workingState.organization.policyAttachments),
       ...(props.workingState.organization.delegatedAdministrators.length > 0
         ? {
             delegatedAdministrators: structuredClone(
@@ -300,18 +285,10 @@ export function materializeWorkingState(props: {
       identityStoreId: props.workingState.identityCenter.identityStoreId,
       users: structuredClone(props.workingState.identityCenter.users),
       groups: structuredClone(props.workingState.identityCenter.groups),
-      groupMemberships: structuredClone(
-        props.workingState.identityCenter.groupMemberships,
-      ),
-      permissionSets: structuredClone(
-        props.workingState.identityCenter.permissionSets,
-      ),
-      accountAssignments: structuredClone(
-        props.workingState.identityCenter.accountAssignments,
-      ),
-      accessRoles: structuredClone(
-        props.workingState.identityCenter.accessRoles,
-      ),
+      groupMemberships: structuredClone(props.workingState.identityCenter.groupMemberships),
+      permissionSets: structuredClone(props.workingState.identityCenter.permissionSets),
+      accountAssignments: structuredClone(props.workingState.identityCenter.accountAssignments),
+      accessRoles: structuredClone(props.workingState.identityCenter.accessRoles),
       accessControlAttributes: structuredClone(
         props.workingState.identityCenter.accessControlAttributes,
       ),
@@ -324,8 +301,7 @@ export function moveAccountInWorkingState(props: {
   accountId: string;
   parentId: string;
 }): WorkingState {
-  const currentAccount =
-    props.workingState.organization.accountsById[props.accountId];
+  const currentAccount = props.workingState.organization.accountsById[props.accountId];
   if (currentAccount == null || currentAccount.parentId === props.parentId) {
     return props.workingState;
   }
@@ -355,8 +331,7 @@ export function upsertAccountInWorkingState(props: {
   workingState: WorkingState;
   account: AccountState;
 }): WorkingState {
-  const currentAccount =
-    props.workingState.organization.accountsById[props.account.id];
+  const currentAccount = props.workingState.organization.accountsById[props.account.id];
   if (
     currentAccount != null &&
     currentAccount.id === props.account.id &&
@@ -399,9 +374,7 @@ export function upsertOrganizationalUnitInWorkingState(props: {
   organizationalUnit: OrganizationalUnitState;
 }): WorkingState {
   const currentOrganizationalUnit =
-    props.workingState.organization.organizationalUnitsById[
-      props.organizationalUnit.id
-    ];
+    props.workingState.organization.organizationalUnitsById[props.organizationalUnit.id];
   if (
     currentOrganizationalUnit != null &&
     currentOrganizationalUnit.id === props.organizationalUnit.id &&
@@ -429,13 +402,8 @@ export function renameOrganizationalUnitInWorkingState(props: {
   name: string;
 }): WorkingState {
   const currentOrganizationalUnit =
-    props.workingState.organization.organizationalUnitsById[
-      props.organizationalUnitId
-    ];
-  if (
-    currentOrganizationalUnit == null ||
-    currentOrganizationalUnit.name === props.name
-  ) {
+    props.workingState.organization.organizationalUnitsById[props.organizationalUnitId];
+  if (currentOrganizationalUnit == null || currentOrganizationalUnit.name === props.name) {
     return props.workingState;
   }
   return {
@@ -457,11 +425,7 @@ export function removeOrganizationalUnitFromWorkingState(props: {
   workingState: WorkingState;
   organizationalUnitId: string;
 }): WorkingState {
-  if (
-    props.workingState.organization.organizationalUnitsById[
-      props.organizationalUnitId
-    ] == null
-  ) {
+  if (props.workingState.organization.organizationalUnitsById[props.organizationalUnitId] == null) {
     return props.workingState;
   }
   const nextOrganizationalUnitsById = {
@@ -483,18 +447,12 @@ function createAccountAssignmentKey(props: {
   principalId: string;
   principalType: AccountAssignmentState["principalType"];
 }): string {
-  return [
-    props.accountId,
-    props.permissionSetArn,
-    props.principalId,
-    props.principalType,
-  ].join("|");
+  return [props.accountId, props.permissionSetArn, props.principalId, props.principalType].join(
+    "|",
+  );
 }
 
-export function createGroupMembershipKey(props: {
-  groupId: string;
-  userId: string;
-}): string {
+export function createGroupMembershipKey(props: { groupId: string; userId: string }): string {
   return [props.groupId, props.userId].join("|");
 }
 
@@ -502,8 +460,7 @@ export function upsertIdcUserInWorkingState(props: {
   workingState: WorkingState;
   user: UserState;
 }): WorkingState {
-  const currentUser =
-    props.workingState.identityCenter.usersByUserName[props.user.userName];
+  const currentUser = props.workingState.identityCenter.usersByUserName[props.user.userName];
   if (
     currentUser != null &&
     currentUser.userId === props.user.userId &&
@@ -533,8 +490,7 @@ export function removeIdcUserFromWorkingState(props: {
   workingState: WorkingState;
   userName: string;
 }): WorkingState {
-  const user =
-    props.workingState.identityCenter.usersByUserName[props.userName];
+  const user = props.workingState.identityCenter.usersByUserName[props.userName];
   if (user == null) {
     return props.workingState;
   }
@@ -548,16 +504,14 @@ export function removeIdcUserFromWorkingState(props: {
         users: props.workingState.identityCenter.users.filter(
           (currentUser) => currentUser.userName !== props.userName,
         ),
-        groupMemberships:
-          props.workingState.identityCenter.groupMemberships.filter(
-            (groupMembership) => groupMembership.userId !== user.userId,
-          ),
-        accountAssignments:
-          props.workingState.identityCenter.accountAssignments.filter(
-            (accountAssignment) =>
-              accountAssignment.principalType !== "USER" ||
-              accountAssignment.principalId !== user.userId,
-          ),
+        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
+          (groupMembership) => groupMembership.userId !== user.userId,
+        ),
+        accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
+          (accountAssignment) =>
+            accountAssignment.principalType !== "USER" ||
+            accountAssignment.principalId !== user.userId,
+        ),
       },
     }),
   };
@@ -568,9 +522,7 @@ export function upsertIdcGroupInWorkingState(props: {
   group: GroupState;
 }): WorkingState {
   const currentGroup =
-    props.workingState.identityCenter.groupsByDisplayName[
-      props.group.displayName
-    ];
+    props.workingState.identityCenter.groupsByDisplayName[props.group.displayName];
   if (
     currentGroup != null &&
     currentGroup.groupId === props.group.groupId &&
@@ -599,10 +551,7 @@ export function removeIdcGroupFromWorkingState(props: {
   workingState: WorkingState;
   groupDisplayName: string;
 }): WorkingState {
-  const group =
-    props.workingState.identityCenter.groupsByDisplayName[
-      props.groupDisplayName
-    ];
+  const group = props.workingState.identityCenter.groupsByDisplayName[props.groupDisplayName];
   if (group == null) {
     return props.workingState;
   }
@@ -616,16 +565,14 @@ export function removeIdcGroupFromWorkingState(props: {
         groups: props.workingState.identityCenter.groups.filter(
           (currentGroup) => currentGroup.displayName !== props.groupDisplayName,
         ),
-        groupMemberships:
-          props.workingState.identityCenter.groupMemberships.filter(
-            (groupMembership) => groupMembership.groupId !== group.groupId,
-          ),
-        accountAssignments:
-          props.workingState.identityCenter.accountAssignments.filter(
-            (accountAssignment) =>
-              accountAssignment.principalType !== "GROUP" ||
-              accountAssignment.principalId !== group.groupId,
-          ),
+        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
+          (groupMembership) => groupMembership.groupId !== group.groupId,
+        ),
+        accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
+          (accountAssignment) =>
+            accountAssignment.principalType !== "GROUP" ||
+            accountAssignment.principalId !== group.groupId,
+        ),
       },
     }),
   };
@@ -636,17 +583,13 @@ export function upsertIdcPermissionSetInWorkingState(props: {
   permissionSet: PermissionSetState;
 }): WorkingState {
   const currentPermissionSet =
-    props.workingState.identityCenter.permissionSetsByName[
-      props.permissionSet.name
-    ];
+    props.workingState.identityCenter.permissionSetsByName[props.permissionSet.name];
   if (
     currentPermissionSet != null &&
-    currentPermissionSet.permissionSetArn ===
-      props.permissionSet.permissionSetArn &&
+    currentPermissionSet.permissionSetArn === props.permissionSet.permissionSetArn &&
     currentPermissionSet.name === props.permissionSet.name &&
     currentPermissionSet.description === props.permissionSet.description &&
-    currentPermissionSet.sessionDuration ===
-      props.permissionSet.sessionDuration &&
+    currentPermissionSet.sessionDuration === props.permissionSet.sessionDuration &&
     currentPermissionSet.inlinePolicy === props.permissionSet.inlinePolicy &&
     JSON.stringify(currentPermissionSet.awsManagedPolicies) ===
       JSON.stringify(props.permissionSet.awsManagedPolicies) &&
@@ -657,10 +600,9 @@ export function upsertIdcPermissionSetInWorkingState(props: {
   ) {
     return props.workingState;
   }
-  const remainingPermissionSets =
-    props.workingState.identityCenter.permissionSets.filter(
-      (permissionSet) => permissionSet.name !== props.permissionSet.name,
-    );
+  const remainingPermissionSets = props.workingState.identityCenter.permissionSets.filter(
+    (permissionSet) => permissionSet.name !== props.permissionSet.name,
+  );
   return {
     ...props.workingState,
     identityCenter: createWorkingIdentityCenterState({
@@ -679,9 +621,7 @@ export function removeIdcPermissionSetFromWorkingState(props: {
   permissionSetName: string;
 }): WorkingState {
   const permissionSet =
-    props.workingState.identityCenter.permissionSetsByName[
-      props.permissionSetName
-    ];
+    props.workingState.identityCenter.permissionSetsByName[props.permissionSetName];
   if (permissionSet == null) {
     return props.workingState;
   }
@@ -693,15 +633,12 @@ export function removeIdcPermissionSetFromWorkingState(props: {
           identityCenter: props.workingState.identityCenter,
         }),
         permissionSets: props.workingState.identityCenter.permissionSets.filter(
-          (currentPermissionSet) =>
-            currentPermissionSet.name !== props.permissionSetName,
+          (currentPermissionSet) => currentPermissionSet.name !== props.permissionSetName,
         ),
-        accountAssignments:
-          props.workingState.identityCenter.accountAssignments.filter(
-            (accountAssignment) =>
-              accountAssignment.permissionSetArn !==
-              permissionSet.permissionSetArn,
-          ),
+        accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
+          (accountAssignment) =>
+            accountAssignment.permissionSetArn !== permissionSet.permissionSetArn,
+        ),
       },
     }),
   };
@@ -717,10 +654,7 @@ export function addAccountAssignmentToWorkingState(props: {
     principalId: props.accountAssignment.principalId,
     principalType: props.accountAssignment.principalType,
   });
-  if (
-    props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] !=
-    null
-  ) {
+  if (props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] != null) {
     return props.workingState;
   }
   return {
@@ -747,10 +681,7 @@ export function addGroupMembershipToWorkingState(props: {
     groupId: props.groupMembership.groupId,
     userId: props.groupMembership.userId,
   });
-  if (
-    props.workingState.identityCenter.groupMembershipsByKey[membershipKey] !=
-    null
-  ) {
+  if (props.workingState.identityCenter.groupMembershipsByKey[membershipKey] != null) {
     return props.workingState;
   }
   return {
@@ -777,10 +708,7 @@ export function removeGroupMembershipFromWorkingState(props: {
     groupId: props.groupMembership.groupId,
     userId: props.groupMembership.userId,
   });
-  if (
-    props.workingState.identityCenter.groupMembershipsByKey[membershipKey] ==
-    null
-  ) {
+  if (props.workingState.identityCenter.groupMembershipsByKey[membershipKey] == null) {
     return props.workingState;
   }
   return {
@@ -790,14 +718,13 @@ export function removeGroupMembershipFromWorkingState(props: {
         ...materializeWorkingIdentityCenterState({
           identityCenter: props.workingState.identityCenter,
         }),
-        groupMemberships:
-          props.workingState.identityCenter.groupMemberships.filter(
-            (groupMembership) =>
-              createGroupMembershipKey({
-                groupId: groupMembership.groupId,
-                userId: groupMembership.userId,
-              }) !== membershipKey,
-          ),
+        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
+          (groupMembership) =>
+            createGroupMembershipKey({
+              groupId: groupMembership.groupId,
+              userId: groupMembership.userId,
+            }) !== membershipKey,
+        ),
       },
     }),
   };
@@ -813,10 +740,7 @@ export function removeAccountAssignmentFromWorkingState(props: {
     principalId: props.accountAssignment.principalId,
     principalType: props.accountAssignment.principalType,
   });
-  if (
-    props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] ==
-    null
-  ) {
+  if (props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] == null) {
     return props.workingState;
   }
   return {
@@ -826,16 +750,15 @@ export function removeAccountAssignmentFromWorkingState(props: {
         ...materializeWorkingIdentityCenterState({
           identityCenter: props.workingState.identityCenter,
         }),
-        accountAssignments:
-          props.workingState.identityCenter.accountAssignments.filter(
-            (accountAssignment) =>
-              createAccountAssignmentKey({
-                accountId: accountAssignment.accountId,
-                permissionSetArn: accountAssignment.permissionSetArn,
-                principalId: accountAssignment.principalId,
-                principalType: accountAssignment.principalType,
-              }) !== assignmentKey,
-          ),
+        accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
+          (accountAssignment) =>
+            createAccountAssignmentKey({
+              accountId: accountAssignment.accountId,
+              permissionSetArn: accountAssignment.permissionSetArn,
+              principalId: accountAssignment.principalId,
+              principalType: accountAssignment.principalType,
+            }) !== assignmentKey,
+        ),
       },
     }),
   };
@@ -852,8 +775,7 @@ export function upsertOrgPolicyInWorkingState(props: {
   workingState: WorkingState;
   policy: OrgPolicyState;
 }): WorkingState {
-  const currentPolicy =
-    props.workingState.organization.policiesById[props.policy.id];
+  const currentPolicy = props.workingState.organization.policiesById[props.policy.id];
   if (
     currentPolicy != null &&
     currentPolicy.id === props.policy.id &&
@@ -865,9 +787,9 @@ export function upsertOrgPolicyInWorkingState(props: {
   ) {
     return props.workingState;
   }
-  const remainingPolicies = Object.values(
-    props.workingState.organization.policiesById,
-  ).filter((p) => p.id !== props.policy.id);
+  const remainingPolicies = Object.values(props.workingState.organization.policiesById).filter(
+    (p) => p.id !== props.policy.id,
+  );
   const nextPolicies = [...remainingPolicies, props.policy];
   return {
     ...props.workingState,
@@ -886,13 +808,12 @@ export function removeOrgPolicyFromWorkingState(props: {
   if (props.workingState.organization.policiesById[props.policyId] == null) {
     return props.workingState;
   }
-  const nextPolicies = Object.values(
-    props.workingState.organization.policiesById,
-  ).filter((p) => p.id !== props.policyId);
-  const nextAttachments =
-    props.workingState.organization.policyAttachments.filter(
-      (a) => a.policyId !== props.policyId,
-    );
+  const nextPolicies = Object.values(props.workingState.organization.policiesById).filter(
+    (p) => p.id !== props.policyId,
+  );
+  const nextAttachments = props.workingState.organization.policyAttachments.filter(
+    (a) => a.policyId !== props.policyId,
+  );
   return {
     ...props.workingState,
     organization: {
@@ -900,10 +821,7 @@ export function removeOrgPolicyFromWorkingState(props: {
       policiesById: toRecordByProperty(nextPolicies, "id"),
       policiesByName: toRecordByProperty(nextPolicies, "name"),
       policyAttachments: nextAttachments,
-      policyAttachmentsByKey: toRecordByProperty(
-        nextAttachments,
-        createOrgPolicyAttachmentKey,
-      ),
+      policyAttachmentsByKey: toRecordByProperty(nextAttachments, createOrgPolicyAttachmentKey),
     },
   };
 }
@@ -919,19 +837,13 @@ export function addOrgPolicyAttachmentToWorkingState(props: {
   if (props.workingState.organization.policyAttachmentsByKey[key] != null) {
     return props.workingState;
   }
-  const nextAttachments = [
-    ...props.workingState.organization.policyAttachments,
-    props.attachment,
-  ];
+  const nextAttachments = [...props.workingState.organization.policyAttachments, props.attachment];
   return {
     ...props.workingState,
     organization: {
       ...props.workingState.organization,
       policyAttachments: nextAttachments,
-      policyAttachmentsByKey: toRecordByProperty(
-        nextAttachments,
-        createOrgPolicyAttachmentKey,
-      ),
+      policyAttachmentsByKey: toRecordByProperty(nextAttachments, createOrgPolicyAttachmentKey),
     },
   };
 }
@@ -948,23 +860,19 @@ export function removeOrgPolicyAttachmentFromWorkingState(props: {
   if (props.workingState.organization.policyAttachmentsByKey[key] == null) {
     return props.workingState;
   }
-  const nextAttachments =
-    props.workingState.organization.policyAttachments.filter(
-      (a) =>
-        createOrgPolicyAttachmentKey({
-          policyId: a.policyId,
-          targetId: a.targetId,
-        }) !== key,
-    );
+  const nextAttachments = props.workingState.organization.policyAttachments.filter(
+    (a) =>
+      createOrgPolicyAttachmentKey({
+        policyId: a.policyId,
+        targetId: a.targetId,
+      }) !== key,
+  );
   return {
     ...props.workingState,
     organization: {
       ...props.workingState.organization,
       policyAttachments: nextAttachments,
-      policyAttachmentsByKey: toRecordByProperty(
-        nextAttachments,
-        createOrgPolicyAttachmentKey,
-      ),
+      policyAttachmentsByKey: toRecordByProperty(nextAttachments, createOrgPolicyAttachmentKey),
     },
   };
 }
@@ -984,9 +892,7 @@ export function upsertDelegatedAdministratorInWorkingState(props: {
     accountId: props.delegatedAdministrator.accountId,
     servicePrincipal: props.delegatedAdministrator.servicePrincipal,
   });
-  if (
-    props.workingState.organization.delegatedAdministratorsByKey[key] != null
-  ) {
+  if (props.workingState.organization.delegatedAdministratorsByKey[key] != null) {
     return props.workingState;
   }
   const nextDelegatedAdministrators = [
@@ -1015,9 +921,7 @@ export function removeDelegatedAdministratorFromWorkingState(props: {
     accountId: props.accountId,
     servicePrincipal: props.servicePrincipal,
   });
-  if (
-    props.workingState.organization.delegatedAdministratorsByKey[key] == null
-  ) {
+  if (props.workingState.organization.delegatedAdministratorsByKey[key] == null) {
     return props.workingState;
   }
   const nextDelegatedAdministrators =
@@ -1047,9 +951,7 @@ export async function readStateFile(path: string): Promise<StateFile> {
   return validateState(parsed);
 }
 
-export function createAccessRoleName(
-  assignment: AccountAssignmentState,
-): string {
+export function createAccessRoleName(assignment: AccountAssignmentState): string {
   return `AWSReservedSSO_${assignment.permissionSetArn.split("/").at(-1) ?? "PermissionSet"}_${assignment.accountId}`;
 }
 
@@ -1058,13 +960,9 @@ function createWorkingIdentityCenterState(props: {
 }): WorkingIdentityCenterState {
   const users = structuredClone(props.identityCenter.users);
   const groups = structuredClone(props.identityCenter.groups);
-  const groupMemberships = structuredClone(
-    props.identityCenter.groupMemberships,
-  );
+  const groupMemberships = structuredClone(props.identityCenter.groupMemberships);
   const permissionSets = structuredClone(props.identityCenter.permissionSets);
-  const accountAssignments = structuredClone(
-    props.identityCenter.accountAssignments,
-  );
+  const accountAssignments = structuredClone(props.identityCenter.accountAssignments);
   return {
     instanceArn: props.identityCenter.instanceArn,
     identityStoreId: props.identityCenter.identityStoreId,
@@ -1073,23 +971,15 @@ function createWorkingIdentityCenterState(props: {
     groups,
     groupsByDisplayName: toRecordByProperty(groups, "displayName"),
     groupMemberships,
-    groupMembershipsByKey: toRecordByProperty(
-      groupMemberships,
-      createGroupMembershipKey,
-    ),
+    groupMembershipsByKey: toRecordByProperty(groupMemberships, createGroupMembershipKey),
     permissionSets,
     permissionSetsByName: toRecordByProperty(permissionSets, "name"),
     accountAssignments,
-    accountAssignmentsByKey: toRecordByProperty(
-      accountAssignments,
-      createAccountAssignmentKey,
-    ),
+    accountAssignmentsByKey: toRecordByProperty(accountAssignments, createAccountAssignmentKey),
     accessRoles: createAccessRoles({
       accountAssignments,
     }),
-    accessControlAttributes: structuredClone(
-      props.identityCenter.accessControlAttributes ?? [],
-    ),
+    accessControlAttributes: structuredClone(props.identityCenter.accessControlAttributes ?? []),
   };
 }
 
@@ -1103,13 +993,9 @@ function materializeWorkingIdentityCenterState(props: {
     groups: structuredClone(props.identityCenter.groups),
     groupMemberships: structuredClone(props.identityCenter.groupMemberships),
     permissionSets: structuredClone(props.identityCenter.permissionSets),
-    accountAssignments: structuredClone(
-      props.identityCenter.accountAssignments,
-    ),
+    accountAssignments: structuredClone(props.identityCenter.accountAssignments),
     accessRoles: structuredClone(props.identityCenter.accessRoles),
-    accessControlAttributes: structuredClone(
-      props.identityCenter.accessControlAttributes,
-    ),
+    accessControlAttributes: structuredClone(props.identityCenter.accessControlAttributes),
   };
 }
 

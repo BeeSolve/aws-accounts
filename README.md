@@ -30,6 +30,7 @@ npx aws-accounts apply
 ```
 
 The CLI will:
+
 1. Detect no Organization exists and offer to create one (all features enabled)
 2. Detect Identity Center is not enabled and provide Console instructions
 3. Deploy the remote infrastructure (S3 bucket, IAM role, Lambda)
@@ -37,6 +38,7 @@ The CLI will:
 ### Path B: Existing Organization
 
 Prerequisites:
+
 - **AWS Organization** with all features enabled
 - **IAM Identity Center** enabled in the management account
 - **AWS credentials** with management account access
@@ -70,20 +72,20 @@ Requires **Node.js 24+**.
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `bootstrap` | One-time setup: creates Organization (if needed), guides Identity Center enablement, deploys infrastructure |
-| `init` | Scans live AWS state and generates `aws.config.ts` + `aws.config.types.ts` |
-| `regenerate` | Refreshes `aws.config.types.ts` (picklists, autocomplete) from current config |
-| `plan` | Computes diff between desired config and actual AWS state |
-| `apply` | Executes planned operations via Lambda |
-| `upgrade` | Updates the deployed Lambda function code |
-| `scan` | Refreshes remote state in S3 (advanced/recovery use) |
-| `drift` | Shows what changed in AWS since last scan |
-| `validate` | Validates `aws.config.ts` locally without hitting AWS |
-| `config reveal` | Copies default CloudFormation templates to your project for customization |
-| `graveyard` | Lists accounts parked in the Graveyard OU |
-| `profile` | Generates an AWS CLI SSO profile block from local state |
+| Command         | Description                                                                                                 |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `bootstrap`     | One-time setup: creates Organization (if needed), guides Identity Center enablement, deploys infrastructure |
+| `init`          | Scans live AWS state and generates `aws.config.ts` + `aws.config.types.ts`                                  |
+| `regenerate`    | Refreshes `aws.config.types.ts` (picklists, autocomplete) from current config                               |
+| `plan`          | Computes diff between desired config and actual AWS state                                                   |
+| `apply`         | Executes planned operations via Lambda                                                                      |
+| `upgrade`       | Updates the deployed Lambda function code                                                                   |
+| `scan`          | Refreshes remote state in S3 (advanced/recovery use)                                                        |
+| `drift`         | Shows what changed in AWS since last scan                                                                   |
+| `validate`      | Validates `aws.config.ts` locally without hitting AWS                                                       |
+| `config reveal` | Copies default CloudFormation templates to your project for customization                                   |
+| `graveyard`     | Lists accounts parked in the Graveyard OU                                                                   |
+| `profile`       | Generates an AWS CLI SSO profile block from local state                                                     |
 
 ## Configuration
 
@@ -113,7 +115,7 @@ permissionSets: [
 ```ts
 import { awsConfigSchema, iam, type AwsConfig } from "./aws.config.types.js";
 
-Action: [iam.s3("GetObject"), iam.identitystore("CreateGroupMembership")]
+Action: [iam.s3("GetObject"), iam.identitystore("CreateGroupMembership")];
 ```
 
 ## Supported Mutations
@@ -179,11 +181,13 @@ The CLI delegates all AWS operations to a deployed Lambda. Day-to-day usage requ
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": "lambda:InvokeFunction",
-    "Resource": "arn:aws:lambda:*:*:function:beesolve-aws-accounts"
-  }]
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": "arn:aws:lambda:*:*:function:beesolve-aws-accounts"
+    }
+  ]
 }
 ```
 

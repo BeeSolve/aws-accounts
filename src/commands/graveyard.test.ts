@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import test from "node:test";
+
 import { createTestWorkspace } from "../helpers.test.js";
 import type { Logger } from "../logger.js";
 import { runGraveyardCloseCommand, runGraveyardCommand } from "./graveyard.js";

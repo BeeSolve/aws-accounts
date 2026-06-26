@@ -1,5 +1,6 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
 import { toPolicies, toSecurityBaseline } from "./security.js";
 
 const { scp, backupPolicy, permissionSet } = toPolicies<string, string>();
@@ -86,7 +87,10 @@ describe("scp.protectSecurityServices", () => {
 
   it("throws when all services are set to false", () => {
     assert.throws(
-      () => scp.protectSecurityServices({ protect: { cloudTrail: false, config: false, guardDuty: false } }),
+      () =>
+        scp.protectSecurityServices({
+          protect: { cloudTrail: false, config: false, guardDuty: false },
+        }),
       (error: Error) => error.message.includes("at least one service must be protected"),
     );
   });

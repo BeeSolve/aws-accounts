@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
+
 import { createTestWorkspace } from "../helpers.test.js";
 import type { Logger } from "../logger.js";
 import { noopLogger } from "../logger.js";
@@ -727,7 +728,11 @@ test("runRemoteApply creates aggregator when deploying security baseline StackSe
         ],
       },
     };
-    await writeFile(cachePath, JSON.stringify({ fetchedAt: new Date().toISOString(), state }, null, 2), "utf8");
+    await writeFile(
+      cachePath,
+      JSON.stringify({ fetchedAt: new Date().toISOString(), state }, null, 2),
+      "utf8",
+    );
 
     await writeFile(typesPath, createTypesFileWithSecurityBaseline(), "utf8");
     await writeFile(configPath, createConfigWithSecurityBaseline(), "utf8");
@@ -742,62 +747,76 @@ test("runRemoteApply creates aggregator when deploying security baseline StackSe
         if (payload.action === "apply") {
           return {
             StatusCode: 200,
-            Payload: new TextEncoder().encode(JSON.stringify({
-              action: "apply",
-              success: true,
-              operationsCompleted: payload.operations.length,
-              state,
-            })),
+            Payload: new TextEncoder().encode(
+              JSON.stringify({
+                action: "apply",
+                success: true,
+                operationsCompleted: payload.operations.length,
+                state,
+              }),
+            ),
           };
         }
         if (payload.action === "getUploadUrl") {
           return {
             StatusCode: 200,
-            Payload: new TextEncoder().encode(JSON.stringify({
-              action: "getUploadUrl",
-              success: true,
-              url: "http://localhost/fake-upload",
-              expiresInSeconds: 300,
-            })),
+            Payload: new TextEncoder().encode(
+              JSON.stringify({
+                action: "getUploadUrl",
+                success: true,
+                url: "http://localhost/fake-upload",
+                expiresInSeconds: 300,
+              }),
+            ),
           };
         }
         if (payload.action === "deployStackSet") {
           return {
             StatusCode: 200,
-            Payload: new TextEncoder().encode(JSON.stringify({
-              action: "deployStackSet",
-              success: true,
-              stackSetId: "fake-stack-set-id",
-              operationId: "fake-op-id",
-            })),
+            Payload: new TextEncoder().encode(
+              JSON.stringify({
+                action: "deployStackSet",
+                success: true,
+                stackSetId: "fake-stack-set-id",
+                operationId: "fake-op-id",
+              }),
+            ),
           };
         }
         if (payload.action === "createConfigDeliveryBucket") {
           return {
             StatusCode: 200,
-            Payload: new TextEncoder().encode(JSON.stringify({
-              action: "createConfigDeliveryBucket",
-              success: true,
-              bucketName: "config-delivery-o-test123-us-east-1",
-              created: false,
-            })),
+            Payload: new TextEncoder().encode(
+              JSON.stringify({
+                action: "createConfigDeliveryBucket",
+                success: true,
+                bucketName: "config-delivery-o-test123-us-east-1",
+                created: false,
+              }),
+            ),
           };
         }
         if (payload.action === "createConfigAggregator") {
           return {
             StatusCode: 200,
-            Payload: new TextEncoder().encode(JSON.stringify({ action: "createConfigAggregator", success: true })),
+            Payload: new TextEncoder().encode(
+              JSON.stringify({ action: "createConfigAggregator", success: true }),
+            ),
           };
         }
         if (payload.action === "recordDeployedStackSets") {
           return {
             StatusCode: 200,
-            Payload: new TextEncoder().encode(JSON.stringify({ action: "recordDeployedStackSets", success: true })),
+            Payload: new TextEncoder().encode(
+              JSON.stringify({ action: "recordDeployedStackSets", success: true }),
+            ),
           };
         }
         return {
           StatusCode: 200,
-          Payload: new TextEncoder().encode(JSON.stringify({ action: payload.action, success: true })),
+          Payload: new TextEncoder().encode(
+            JSON.stringify({ action: payload.action, success: true }),
+          ),
         };
       },
     };
@@ -808,7 +827,13 @@ test("runRemoteApply creates aggregator when deploying security baseline StackSe
     const logger = createCollectingLogger();
     const input = createBaseInput({
       subcommand: "apply",
-      flags: { yes: true, refresh: false, allowDestructive: false, ignoreUnsupported: false, redeployStacksets: false },
+      flags: {
+        yes: true,
+        refresh: false,
+        allowDestructive: false,
+        ignoreUnsupported: false,
+        redeployStacksets: false,
+      },
       logger,
       lambdaClient: mockLambdaClient as any,
     });

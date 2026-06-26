@@ -18,7 +18,7 @@ The @beesolve/aws-accounts CLI originally supported two execution models:
 Maintaining both paths created ongoing costs:
 
 - Two sets of command implementations with overlapping logic
-- Users needed broad IAM permissions (organizations:*, sso:*, identitystore:*, account:*) for local execution
+- Users needed broad IAM permissions (organizations:_, sso:_, identitystore:_, account:_) for local execution
 - No built-in concurrency control for local execution — multiple users could corrupt shared state
 - Every new feature required implementation and testing across both paths
 
@@ -54,18 +54,18 @@ node dist/cli.js --help
 
 ### Files Removed from `src/`
 
-| File | Purpose |
-|------|---------|
-| `src/commands/scan.ts` | Local scan command (direct AWS SDK calls) |
-| `src/commands/scan.test.ts` | Tests for local scan |
-| `src/commands/bootstrap.ts` | Local bootstrap command |
-| `src/commands/bootstrap.test.ts` | Tests for local bootstrap |
-| `src/commands/init.ts` | Local init command |
-| `src/commands/init.test.ts` | Tests for local init |
-| `src/commands/plan.ts` | Local plan command |
-| `src/commands/plan.test.ts` | Tests for local plan |
-| `src/commands/apply.ts` | Local apply command |
-| `src/commands/apply.test.ts` | Tests for local apply |
+| File                             | Purpose                                   |
+| -------------------------------- | ----------------------------------------- |
+| `src/commands/scan.ts`           | Local scan command (direct AWS SDK calls) |
+| `src/commands/scan.test.ts`      | Tests for local scan                      |
+| `src/commands/bootstrap.ts`      | Local bootstrap command                   |
+| `src/commands/bootstrap.test.ts` | Tests for local bootstrap                 |
+| `src/commands/init.ts`           | Local init command                        |
+| `src/commands/init.test.ts`      | Tests for local init                      |
+| `src/commands/plan.ts`           | Local plan command                        |
+| `src/commands/plan.test.ts`      | Tests for local plan                      |
+| `src/commands/apply.ts`          | Local apply command                       |
+| `src/commands/apply.test.ts`     | Tests for local apply                     |
 
 ### Commands Removed as Local Execution
 

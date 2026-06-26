@@ -13,6 +13,7 @@ Accepted
 This project needed a CLI tool to manage AWS Organizations structure and IAM Identity Center configuration declaratively — similar to Terraform but purpose-built for the Organizations + Identity Center domain.
 
 Key requirements:
+
 - Declarative config file (`aws.config.ts`) as the source of truth for desired state
 - Plan/apply workflow with safety gates for destructive operations
 - Support for Organizations (OUs, accounts, tags) and IAM Identity Center (users, groups, permission sets, assignments)

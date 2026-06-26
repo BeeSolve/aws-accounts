@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import test from "node:test";
+
 import * as v from "valibot";
+
 import {
   awsConfigModelSchema,
   loadAwsConfigModelFromTsFile,
@@ -92,11 +94,7 @@ test("writeAwsConfigFromState renders IAM action helpers for known inline policy
       Statement: [
         {
           Effect: "Allow",
-          Action: [
-            "s3:GetObject",
-            "sso-directory:SearchUsers",
-            "custom-service:DoThing",
-          ],
+          Action: ["s3:GetObject", "sso-directory:SearchUsers", "custom-service:DoThing"],
           Resource: "*",
         },
       ],
@@ -174,11 +172,7 @@ test("writeAwsConfigFromState fails on context mismatch", async () => {
       organization: { graveyardOuId: string };
     };
     context.organization.graveyardOuId = "ou-graveyard-mismatch";
-    await writeFile(
-      contextPath,
-      `${JSON.stringify(context, null, 2)}\n`,
-      "utf8",
-    );
+    await writeFile(contextPath, `${JSON.stringify(context, null, 2)}\n`, "utf8");
 
     await assert.rejects(
       () =>
@@ -401,8 +395,7 @@ test("mapAwsConfigToState emits sentinel ids for entities missing in current sta
     );
     assert.equal(
       mapped.identityCenter.users.some(
-        (user) =>
-          user.userName === "bob" && user.userId === "__pending_creation__",
+        (user) => user.userName === "bob" && user.userId === "__pending_creation__",
       ),
       true,
     );
@@ -498,8 +491,7 @@ test("mapAwsConfigToState keeps existing ids for unchanged config entities", asy
 
     assert.equal(
       mapped.organization.accounts.some(
-        (account) =>
-          account.name === "AppAccount" && account.id === "111111111111",
+        (account) => account.name === "AppAccount" && account.id === "111111111111",
       ),
       true,
     );
@@ -534,15 +526,12 @@ test("mapAwsConfigToState keeps existing ids for unchanged config entities", asy
       mapped.identityCenter.permissionSets.some(
         (permissionSet) =>
           permissionSet.name === "AdminAccess" &&
-          permissionSet.permissionSetArn ===
-            "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
+          permissionSet.permissionSetArn === "arn:aws:sso:::permissionSet/ssoins-123/ps-1",
       ),
       true,
     );
     assert.equal(
-      mapped.organization.accounts.some(
-        (account) => account.id === "__pending_creation__",
-      ),
+      mapped.organization.accounts.some((account) => account.id === "__pending_creation__"),
       false,
     );
   } finally {
@@ -581,9 +570,7 @@ test("mapAwsConfigToState matches existing member account by email when config n
     const pendingOu = renamedConfig.organizationalUnits.find(
       (organizationalUnit) => organizationalUnit.name === "Pending",
     );
-    const appAccount = pendingOu?.accounts.find(
-      (account) => account.name === "AppAccount",
-    );
+    const appAccount = pendingOu?.accounts.find((account) => account.name === "AppAccount");
     if (appAccount == null) {
       throw new Error('Expected account "AppAccount".');
     }
@@ -669,10 +656,7 @@ test("permission set policy state round-trips between state and config", async (
 
     assert.match(configRaw, /\binlinePolicy: \{/);
     assert.match(configRaw, /\bVersion: "2012-10-17"/);
-    assert.match(
-      configRaw,
-      /"arn:aws:iam::aws:policy\/ReadOnlyAccess"/,
-    );
+    assert.match(configRaw, /"arn:aws:iam::aws:policy\/ReadOnlyAccess"/);
     assert.match(configRaw, /\bcustomerManagedPolicies: \[/);
     assert.deepEqual(config.permissionSets[0]?.inlinePolicy, {
       Statement: [
@@ -697,15 +681,12 @@ test("permission set policy state round-trips between state and config", async (
     assert.deepEqual(mapped.identityCenter.permissionSets[0]?.awsManagedPolicies, [
       "arn:aws:iam::aws:policy/ReadOnlyAccess",
     ]);
-    assert.deepEqual(
-      mapped.identityCenter.permissionSets[0]?.customerManagedPolicies,
-      [
-        {
-          name: "SupportReadOnly",
-          path: "/beesolve/",
-        },
-      ],
-    );
+    assert.deepEqual(mapped.identityCenter.permissionSets[0]?.customerManagedPolicies, [
+      {
+        name: "SupportReadOnly",
+        path: "/beesolve/",
+      },
+    ]);
   } finally {
     await workspace.cleanup();
   }
@@ -897,11 +878,7 @@ async function writeFixtureFiles(props: {
   contextPath: string;
 }): Promise<{ state: ReturnType<typeof getFixtureState> }> {
   const state = getFixtureState();
-  await writeFile(
-    props.contextPath,
-    `${JSON.stringify(getFixtureContext(), null, 2)}\n`,
-    "utf8",
-  );
+  await writeFile(props.contextPath, `${JSON.stringify(getFixtureContext(), null, 2)}\n`, "utf8");
   return { state };
 }
 
@@ -1043,8 +1020,7 @@ async function updateConfigModel(props: {
     }>;
   }) => void;
 }): Promise<void> {
-  const typesPath =
-    props.typesPath ?? join(dirname(props.configPath), "aws.config.types.ts");
+  const typesPath = props.typesPath ?? join(dirname(props.configPath), "aws.config.types.ts");
   void typesPath;
   const parsedConfig = (await readConfigModelForTest({
     configPath: props.configPath,

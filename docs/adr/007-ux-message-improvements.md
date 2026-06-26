@@ -76,12 +76,12 @@ Run aws-accounts scan --refresh to refresh state before retrying.
 
 A `startProgressTimer(onTick, intervalMs?)` utility is added to `src/helpers.ts`. It starts a repeating timer that calls `onTick` with total elapsed seconds, and returns a stop function. Applied to five call sites:
 
-| Command / function | Progress message |
-|---|---|
-| `runRemoteApply` | `Still applying... (Xs)` |
-| `runRemoteScan` | `Still scanning... (Xs)` |
-| `runRemoteInit` | `Still scanning... (Xs)` |
-| `runRemoteDrift` | `Still scanning... (Xs)` |
+| Command / function  | Progress message         |
+| ------------------- | ------------------------ |
+| `runRemoteApply`    | `Still applying... (Xs)` |
+| `runRemoteScan`     | `Still scanning... (Xs)` |
+| `runRemoteInit`     | `Still scanning... (Xs)` |
+| `runRemoteDrift`    | `Still scanning... (Xs)` |
 | `fetchCurrentState` | `Still fetching... (Xs)` |
 
 `waitForLambdaReady` and `createLambdaFunctionWithRetry` were not changed — they already log per-attempt messages.

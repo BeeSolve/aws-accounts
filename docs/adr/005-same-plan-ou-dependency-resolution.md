@@ -36,8 +36,8 @@ Before the account processing loop, compute the set of OU names that will have a
 ```ts
 const ouNamesBeingCreated = new Set(
   nextOrganization.organizationalUnits
-    .filter(ou => !currentOrganization.organizationalUnitByName.has(ou.name))
-    .map(ou => ou.name),
+    .filter((ou) => !currentOrganization.organizationalUnitByName.has(ou.name))
+    .map((ou) => ou.name),
 );
 ```
 
@@ -65,9 +65,11 @@ function resolveOrganizationalUnitId(props: {
   organizationalUnitName: string;
 }): string {
   if (props.organizationalUnitId !== "__pending_creation__") return props.organizationalUnitId;
-  const ou = Object.values(props.state.organization.organizationalUnitsById)
-    .find(ou => ou.name === props.organizationalUnitName);
-  if (ou == null) throw new Error(`Could not resolve OU "${props.organizationalUnitName}" in working state.`);
+  const ou = Object.values(props.state.organization.organizationalUnitsById).find(
+    (ou) => ou.name === props.organizationalUnitName,
+  );
+  if (ou == null)
+    throw new Error(`Could not resolve OU "${props.organizationalUnitName}" in working state.`);
   return ou.id;
 }
 ```

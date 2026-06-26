@@ -1,3 +1,25 @@
+import { AccountClient } from "@aws-sdk/client-account";
+import {
+  CloudFormationClient,
+  CreateStackSetCommand,
+  UpdateStackSetCommand,
+  CreateStackInstancesCommand,
+  DescribeStackSetCommand,
+  DescribeStackSetOperationCommand,
+} from "@aws-sdk/client-cloudformation";
+import {
+  CloudTrailClient,
+  CreateTrailCommand,
+  GetTrailCommand,
+  StartLoggingCommand,
+  UpdateTrailCommand,
+} from "@aws-sdk/client-cloudtrail";
+import {
+  ConfigServiceClient,
+  PutConfigurationAggregatorCommand,
+} from "@aws-sdk/client-config-service";
+import { IdentitystoreClient } from "@aws-sdk/client-identitystore";
+import { DescribeOrganizationCommand, OrganizationsClient } from "@aws-sdk/client-organizations";
 import {
   CreateBucketCommand,
   GetObjectCommand,
@@ -8,41 +30,26 @@ import {
   S3Client,
   S3ServiceException,
 } from "@aws-sdk/client-s3";
-import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
-import { ConfigServiceClient, PutConfigurationAggregatorCommand } from "@aws-sdk/client-config-service";
-import {
-  CloudTrailClient,
-  CreateTrailCommand,
-  GetTrailCommand,
-  StartLoggingCommand,
-  UpdateTrailCommand,
-} from "@aws-sdk/client-cloudtrail";
-import {
-  CloudFormationClient,
-  CreateStackSetCommand,
-  UpdateStackSetCommand,
-  CreateStackInstancesCommand,
-  DescribeStackSetCommand,
-  DescribeStackSetOperationCommand,
-} from "@aws-sdk/client-cloudformation";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { DescribeOrganizationCommand, OrganizationsClient } from "@aws-sdk/client-organizations";
 import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
-import { IdentitystoreClient } from "@aws-sdk/client-identitystore";
-import { AccountClient } from "@aws-sdk/client-account";
+import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import * as v from "valibot";
+
+import { executeOperation } from "../applyLogic.js";
+import { assertUnreachable } from "../helpers.js";
+import {
+  lambdaRequestSchema,
+  lambdaResponseSchema,
+  type LambdaResponsePayload,
+} from "../lambdaSchemas.js";
 import { operationSchema, type Operation } from "../operations.js";
+import { scanOrganization, scanIdentityCenter } from "../scanLogic.js";
 import {
   stateSchema,
   type StateFile,
   createWorkingState,
   materializeWorkingState,
 } from "../state.js";
-import { scanOrganization, scanIdentityCenter } from "../scanLogic.js";
-import { executeOperation } from "../applyLogic.js";
-import { assertUnreachable } from "../helpers.js";
-
-import { lambdaRequestSchema, lambdaResponseSchema, type LambdaResponsePayload } from "../lambdaSchemas.js";
 
 const assumedCredentialsSchema = v.strictObject({
   AccessKeyId: v.string(),
@@ -409,10 +416,12 @@ async function handleCreateConfigDeliveryBucket(props: {
     }),
   );
 
-  await targetS3.send(new PutBucketTaggingCommand({
-    Bucket: props.bucketName,
-    Tagging: { TagSet: [MANAGED_BY_TAG, { Key: "Purpose", Value: "config-delivery" }] },
-  }));
+  await targetS3.send(
+    new PutBucketTaggingCommand({
+      Bucket: props.bucketName,
+      Tagging: { TagSet: [MANAGED_BY_TAG, { Key: "Purpose", Value: "config-delivery" }] },
+    }),
+  );
 
   const bucketPolicy = JSON.stringify({
     Version: "2012-10-17",
@@ -503,13 +512,15 @@ async function handleCreateConfigAggregator(props: {
     },
   });
 
-  await configClient.send(new PutConfigurationAggregatorCommand({
-    ConfigurationAggregatorName: "OrganizationAggregator",
-    OrganizationAggregationSource: {
-      AllAwsRegions: true,
-      RoleArn: `arn:aws:iam::${props.targetAccountId}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig`,
-    },
-  }));
+  await configClient.send(
+    new PutConfigurationAggregatorCommand({
+      ConfigurationAggregatorName: "OrganizationAggregator",
+      OrganizationAggregationSource: {
+        AllAwsRegions: true,
+        RoleArn: `arn:aws:iam::${props.targetAccountId}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig`,
+      },
+    }),
+  );
 
   return { action: "createConfigAggregator" as const, success: true };
 }
@@ -567,10 +578,12 @@ async function handleCreateCloudTrailBucket(props: {
     }),
   );
 
-  await targetS3.send(new PutBucketTaggingCommand({
-    Bucket: props.bucketName,
-    Tagging: { TagSet: [MANAGED_BY_TAG, { Key: "Purpose", Value: "cloudtrail-logs" }] },
-  }));
+  await targetS3.send(
+    new PutBucketTaggingCommand({
+      Bucket: props.bucketName,
+      Tagging: { TagSet: [MANAGED_BY_TAG, { Key: "Purpose", Value: "cloudtrail-logs" }] },
+    }),
+  );
 
   const bucketPolicy = JSON.stringify({
     Version: "2012-10-17",
@@ -621,14 +634,18 @@ async function handleCreateOrgTrail(props: {
   const cloudTrailClient = new CloudTrailClient({ region: props.region });
 
   try {
-    const existing = await cloudTrailClient.send(new GetTrailCommand({ Name: "organization-trail" }));
-    await cloudTrailClient.send(new UpdateTrailCommand({
-      Name: "organization-trail",
-      S3BucketName: props.bucketName,
-      IsOrganizationTrail: true,
-      IsMultiRegionTrail: true,
-      EnableLogFileValidation: true,
-    }));
+    const existing = await cloudTrailClient.send(
+      new GetTrailCommand({ Name: "organization-trail" }),
+    );
+    await cloudTrailClient.send(
+      new UpdateTrailCommand({
+        Name: "organization-trail",
+        S3BucketName: props.bucketName,
+        IsOrganizationTrail: true,
+        IsMultiRegionTrail: true,
+        EnableLogFileValidation: true,
+      }),
+    );
     return {
       action: "createOrgTrail" as const,
       success: true,
@@ -642,13 +659,15 @@ async function handleCreateOrgTrail(props: {
     }
   }
 
-  const createResult = await cloudTrailClient.send(new CreateTrailCommand({
-    Name: "organization-trail",
-    S3BucketName: props.bucketName,
-    IsOrganizationTrail: true,
-    IsMultiRegionTrail: true,
-    EnableLogFileValidation: true,
-  }));
+  const createResult = await cloudTrailClient.send(
+    new CreateTrailCommand({
+      Name: "organization-trail",
+      S3BucketName: props.bucketName,
+      IsOrganizationTrail: true,
+      IsMultiRegionTrail: true,
+      EnableLogFileValidation: true,
+    }),
+  );
 
   await cloudTrailClient.send(new StartLoggingCommand({ Name: "organization-trail" }));
 
@@ -671,7 +690,9 @@ async function handleRecordDeployedStackSets(props: {
   );
   const state = JSON.parse(await stateObj.Body!.transformToString());
   state.deployedStackSets = props.stackSets;
-  state.pendingStackSetOperations = props.pendingOperations?.length ? props.pendingOperations : undefined;
+  state.pendingStackSetOperations = props.pendingOperations?.length
+    ? props.pendingOperations
+    : undefined;
   await props.s3Client.send(
     new PutObjectCommand({
       Bucket: props.bucket,

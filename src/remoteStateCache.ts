@@ -1,5 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
+
 import * as v from "valibot";
+
 import { validateState, type StateFile } from "./state.js";
 
 const stateCacheSchema = v.strictObject({
@@ -12,9 +14,7 @@ export type StateCacheFile = {
   state: StateFile;
 };
 
-export async function readStateCache(
-  cachePath: string,
-): Promise<StateCacheFile | null> {
+export async function readStateCache(cachePath: string): Promise<StateCacheFile | null> {
   try {
     const content = await readFile(cachePath, "utf8");
     const parsed = JSON.parse(content) as unknown;
@@ -26,10 +26,7 @@ export async function readStateCache(
   }
 }
 
-export async function writeStateCache(
-  cachePath: string,
-  state: StateFile,
-): Promise<void> {
+export async function writeStateCache(cachePath: string, state: StateFile): Promise<void> {
   const cacheFile: StateCacheFile = {
     fetchedAt: new Date().toISOString(),
     state,
@@ -38,10 +35,7 @@ export async function writeStateCache(
   await writeFile(cachePath, content, "utf8");
 }
 
-export function isCacheFresh(
-  cache: StateCacheFile,
-  ttlSeconds: number,
-): boolean {
+export function isCacheFresh(cache: StateCacheFile, ttlSeconds: number): boolean {
   const fetchedAt = new Date(cache.fetchedAt).getTime();
   const now = Date.now();
   const elapsedMs = now - fetchedAt;

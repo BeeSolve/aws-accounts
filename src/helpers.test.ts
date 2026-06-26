@@ -9,11 +9,7 @@ export async function createTestWorkspace(props: { prefix: string }): Promise<{
 }> {
   const projectPath = process.cwd();
   const workspacePath = await mkdtemp(join(tmpdir(), props.prefix));
-  await symlink(
-    join(projectPath, "node_modules"),
-    join(workspacePath, "node_modules"),
-    "dir",
-  );
+  await symlink(join(projectPath, "node_modules"), join(workspacePath, "node_modules"), "dir");
   return {
     workspacePath,
     cleanup: async () => {
@@ -29,15 +25,11 @@ type IamHelper = Record<string, IamActionFactory>;
 const configExpressionPattern =
   /const awsConfig = ([\s\S]*?)\s*satisfies AwsConfig;\s*export default awsConfig;/;
 
-export async function readConfigModelForTest<T>(props: {
-  configPath: string;
-}): Promise<T> {
+export async function readConfigModelForTest<T>(props: { configPath: string }): Promise<T> {
   const rawConfig = await readFile(props.configPath, "utf8");
   const matched = rawConfig.match(configExpressionPattern);
   if (matched?.[1] == null) {
-    throw new Error(
-      `Could not extract awsConfig object from test fixture ${props.configPath}.`,
-    );
+    throw new Error(`Could not extract awsConfig object from test fixture ${props.configPath}.`);
   }
 
   // Test fixtures only need the authored config object, not full TS bundling.

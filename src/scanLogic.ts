@@ -1,9 +1,12 @@
+import type { AccountClient } from "@aws-sdk/client-account";
+import { GetAlternateContactCommand } from "@aws-sdk/client-account";
+import type { IdentitystoreClient } from "@aws-sdk/client-identitystore";
 import {
   ListGroupMembershipsCommand,
-  IdentitystoreClient,
   ListGroupsCommand,
   ListUsersCommand,
 } from "@aws-sdk/client-identitystore";
+import type { OrganizationsClient } from "@aws-sdk/client-organizations";
 import {
   DescribeOrganizationCommand,
   DescribePolicyCommand,
@@ -16,8 +19,8 @@ import {
   ListRootsCommand,
   ListTagsForResourceCommand,
   ListTargetsForPolicyCommand,
-  OrganizationsClient,
 } from "@aws-sdk/client-organizations";
+import type { SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import {
   DescribePermissionSetCommand,
   GetInlinePolicyForPermissionSetCommand,
@@ -29,12 +32,8 @@ import {
   ListInstancesCommand,
   ListManagedPoliciesInPermissionSetCommand,
   ListPermissionSetsCommand,
-  SSOAdminClient,
 } from "@aws-sdk/client-sso-admin";
-import {
-  AccountClient,
-  GetAlternateContactCommand,
-} from "@aws-sdk/client-account";
+
 import {
   createAccessRoleName,
   type AccessControlAttributeState,
@@ -118,22 +117,20 @@ export async function scanOrganization(props: {
             },
           ];
         }),
-        alternateContacts:
-          alternateContacts.length > 0 ? alternateContacts : undefined,
+        alternateContacts: alternateContacts.length > 0 ? alternateContacts : undefined,
       });
     }
     nextToken = response.NextToken;
   } while (nextToken != null);
 
-  const [{ policies, policyAttachments }, delegatedAdministrators] =
-    await Promise.all([
-      scanOrganizationPolicies({
-        organizationsClient: props.organizationsClient,
-      }),
-      scanDelegatedAdministrators({
-        organizationsClient: props.organizationsClient,
-      }),
-    ]);
+  const [{ policies, policyAttachments }, delegatedAdministrators] = await Promise.all([
+    scanOrganizationPolicies({
+      organizationsClient: props.organizationsClient,
+    }),
+    scanDelegatedAdministrators({
+      organizationsClient: props.organizationsClient,
+    }),
+  ]);
 
   return {
     organizationId,
@@ -257,8 +254,7 @@ async function scanOrganizationPolicies(props: {
           if (target.TargetId == null || target.Type == null) {
             continue;
           }
-          const targetType =
-            target.Type as OrgPolicyAttachmentState["targetType"];
+          const targetType = target.Type as OrgPolicyAttachmentState["targetType"];
           if (
             targetType !== "ROOT" &&
             targetType !== "ORGANIZATIONAL_UNIT" &&
@@ -320,9 +316,7 @@ export async function scanIdentityCenter(props: {
   identityStoreClient: IdentitystoreClient;
   requestedInstanceArn?: string;
 }): Promise<StateFile["identityCenter"]> {
-  const instancesResponse = await props.ssoAdminClient.send(
-    new ListInstancesCommand({}),
-  );
+  const instancesResponse = await props.ssoAdminClient.send(new ListInstancesCommand({}));
   const instances = instancesResponse.Instances ?? [];
   if (instances.length === 0) {
     throw new Error("No IAM Identity Center instance found.");
@@ -333,25 +327,24 @@ export async function scanIdentityCenter(props: {
     requestedInstanceArn: props.requestedInstanceArn,
   });
 
-  const [users, groups, permissionSets, accessControlAttributes] =
-    await Promise.all([
-      listIdentityStoreUsers({
-        identityStoreClient: props.identityStoreClient,
-        identityStoreId: instance.identityStoreId,
-      }),
-      listIdentityStoreGroups({
-        identityStoreClient: props.identityStoreClient,
-        identityStoreId: instance.identityStoreId,
-      }),
-      listPermissionSets({
-        ssoAdminClient: props.ssoAdminClient,
-        instanceArn: instance.instanceArn,
-      }),
-      scanAccessControlAttributes({
-        ssoAdminClient: props.ssoAdminClient,
-        instanceArn: instance.instanceArn,
-      }),
-    ]);
+  const [users, groups, permissionSets, accessControlAttributes] = await Promise.all([
+    listIdentityStoreUsers({
+      identityStoreClient: props.identityStoreClient,
+      identityStoreId: instance.identityStoreId,
+    }),
+    listIdentityStoreGroups({
+      identityStoreClient: props.identityStoreClient,
+      identityStoreId: instance.identityStoreId,
+    }),
+    listPermissionSets({
+      ssoAdminClient: props.ssoAdminClient,
+      instanceArn: instance.instanceArn,
+    }),
+    scanAccessControlAttributes({
+      ssoAdminClient: props.ssoAdminClient,
+      instanceArn: instance.instanceArn,
+    }),
+  ]);
   const groupMemberships = await listGroupMemberships({
     identityStoreClient: props.identityStoreClient,
     identityStoreId: instance.identityStoreId,
@@ -404,8 +397,7 @@ async function scanAccessControlAttributes(props: {
     throw err;
   }
   const attributes =
-    response.InstanceAccessControlAttributeConfiguration
-      ?.AccessControlAttributes ?? [];
+    response.InstanceAccessControlAttributeConfiguration?.AccessControlAttributes ?? [];
   return attributes
     .filter((attr) => attr.Key != null)
     .map((attr) => ({
@@ -553,16 +545,12 @@ function resolveIdentityStoreUserEmail(props: {
   emails: Array<{ Value?: string; Primary?: boolean }>;
 }): string {
   const primaryEmail = props.emails.find(
-    (email) =>
-      email.Primary === true && email.Value != null && email.Value.length > 0,
+    (email) => email.Primary === true && email.Value != null && email.Value.length > 0,
   );
   if (primaryEmail?.Value != null) {
     return primaryEmail.Value;
   }
-  return (
-    props.emails.find((email) => email.Value != null && email.Value.length > 0)
-      ?.Value ?? ""
-  );
+  return props.emails.find((email) => email.Value != null && email.Value.length > 0)?.Value ?? "";
 }
 
 async function listPermissionSets(props: {
@@ -595,39 +583,32 @@ async function listPermissionSets(props: {
   const permissionSets = await Promise.all(
     describeResponses.map(async (response) => {
       const permissionSet = response.PermissionSet;
-      if (
-        permissionSet?.PermissionSetArn == null ||
-        permissionSet.Name == null
-      ) {
+      if (permissionSet?.PermissionSetArn == null || permissionSet.Name == null) {
         return undefined;
       }
-      const [
-        inlinePolicy,
-        awsManagedPolicies,
-        customerManagedPolicies,
-        permissionsBoundary,
-      ] = await Promise.all([
-        getInlinePolicyForPermissionSet({
-          ssoAdminClient: props.ssoAdminClient,
-          instanceArn: props.instanceArn,
-          permissionSetArn: permissionSet.PermissionSetArn,
-        }),
-        listManagedPoliciesInPermissionSet({
-          ssoAdminClient: props.ssoAdminClient,
-          instanceArn: props.instanceArn,
-          permissionSetArn: permissionSet.PermissionSetArn,
-        }),
-        listCustomerManagedPoliciesInPermissionSet({
-          ssoAdminClient: props.ssoAdminClient,
-          instanceArn: props.instanceArn,
-          permissionSetArn: permissionSet.PermissionSetArn,
-        }),
-        getPermissionsBoundaryForPermissionSet({
-          ssoAdminClient: props.ssoAdminClient,
-          instanceArn: props.instanceArn,
-          permissionSetArn: permissionSet.PermissionSetArn,
-        }),
-      ]);
+      const [inlinePolicy, awsManagedPolicies, customerManagedPolicies, permissionsBoundary] =
+        await Promise.all([
+          getInlinePolicyForPermissionSet({
+            ssoAdminClient: props.ssoAdminClient,
+            instanceArn: props.instanceArn,
+            permissionSetArn: permissionSet.PermissionSetArn,
+          }),
+          listManagedPoliciesInPermissionSet({
+            ssoAdminClient: props.ssoAdminClient,
+            instanceArn: props.instanceArn,
+            permissionSetArn: permissionSet.PermissionSetArn,
+          }),
+          listCustomerManagedPoliciesInPermissionSet({
+            ssoAdminClient: props.ssoAdminClient,
+            instanceArn: props.instanceArn,
+            permissionSetArn: permissionSet.PermissionSetArn,
+          }),
+          getPermissionsBoundaryForPermissionSet({
+            ssoAdminClient: props.ssoAdminClient,
+            instanceArn: props.instanceArn,
+            permissionSetArn: permissionSet.PermissionSetArn,
+          }),
+        ]);
       return {
         permissionSetArn: permissionSet.PermissionSetArn,
         name: permissionSet.Name,
@@ -641,9 +622,7 @@ async function listPermissionSets(props: {
     }),
   );
   return permissionSets.filter(
-    (
-      permissionSet,
-    ): permissionSet is StateFile["identityCenter"]["permissionSets"][number] =>
+    (permissionSet): permissionSet is StateFile["identityCenter"]["permissionSets"][number] =>
       permissionSet != null,
   );
 }
@@ -667,9 +646,7 @@ async function getPermissionsBoundaryForPermissionSet(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
   permissionSetArn: string;
-}): Promise<
-  StateFile["identityCenter"]["permissionSets"][number]["permissionsBoundary"]
-> {
+}): Promise<StateFile["identityCenter"]["permissionSets"][number]["permissionsBoundary"]> {
   try {
     const response = await props.ssoAdminClient.send(
       new GetPermissionsBoundaryForPermissionSetCommand({
@@ -720,8 +697,7 @@ async function listManagedPoliciesInPermissionSet(props: {
         NextToken: nextToken,
       }),
     );
-    for (const attachedManagedPolicy of response.AttachedManagedPolicies ??
-      []) {
+    for (const attachedManagedPolicy of response.AttachedManagedPolicies ?? []) {
       if (attachedManagedPolicy.Arn == null) {
         continue;
       }
@@ -736,9 +712,7 @@ async function listCustomerManagedPoliciesInPermissionSet(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
   permissionSetArn: string;
-}): Promise<
-  StateFile["identityCenter"]["permissionSets"][number]["customerManagedPolicies"]
-> {
+}): Promise<StateFile["identityCenter"]["permissionSets"][number]["customerManagedPolicies"]> {
   const customerManagedPolicies: StateFile["identityCenter"]["permissionSets"][number]["customerManagedPolicies"] =
     [];
   let nextToken: string | undefined;
@@ -750,8 +724,7 @@ async function listCustomerManagedPoliciesInPermissionSet(props: {
         NextToken: nextToken,
       }),
     );
-    for (const customerManagedPolicyReference of response.CustomerManagedPolicyReferences ??
-      []) {
+    for (const customerManagedPolicyReference of response.CustomerManagedPolicyReferences ?? []) {
       if (
         customerManagedPolicyReference.Name == null ||
         customerManagedPolicyReference.Path == null

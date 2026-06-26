@@ -1,9 +1,23 @@
+import type { AccountClient } from "@aws-sdk/client-account";
 import {
-  AccountClient,
   DeleteAlternateContactCommand,
   PutAccountNameCommand,
   PutAlternateContactCommand,
 } from "@aws-sdk/client-account";
+import type { IdentitystoreClient } from "@aws-sdk/client-identitystore";
+import {
+  CreateGroupMembershipCommand,
+  CreateGroupCommand,
+  CreateUserCommand,
+  DeleteGroupCommand,
+  DeleteGroupMembershipCommand,
+  DeleteUserCommand,
+  GetGroupMembershipIdCommand,
+  type AttributeOperation,
+  UpdateGroupCommand,
+  UpdateUserCommand,
+} from "@aws-sdk/client-identitystore";
+import type { OrganizationsClient } from "@aws-sdk/client-organizations";
 import {
   AttachPolicyCommand,
   CreateOrganizationalUnitCommand,
@@ -16,26 +30,13 @@ import {
   ListAccountsForParentCommand,
   ListOrganizationalUnitsForParentCommand,
   MoveAccountCommand,
-  OrganizationsClient,
   RegisterDelegatedAdministratorCommand,
   TagResourceCommand,
   UntagResourceCommand,
   UpdateOrganizationalUnitCommand,
   UpdatePolicyCommand,
 } from "@aws-sdk/client-organizations";
-import {
-  CreateGroupMembershipCommand,
-  CreateGroupCommand,
-  CreateUserCommand,
-  DeleteGroupCommand,
-  DeleteGroupMembershipCommand,
-  DeleteUserCommand,
-  GetGroupMembershipIdCommand,
-  IdentitystoreClient,
-  type AttributeOperation,
-  UpdateGroupCommand,
-  UpdateUserCommand,
-} from "@aws-sdk/client-identitystore";
+import type { SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import {
   CreateAccountAssignmentCommand,
   AttachCustomerManagedPolicyReferenceToPermissionSetCommand,
@@ -53,12 +54,13 @@ import {
   ProvisionPermissionSetCommand,
   PutInlinePolicyToPermissionSetCommand,
   PutPermissionsBoundaryToPermissionSetCommand,
-  SSOAdminClient,
   UpdateInstanceAccessControlAttributeConfigurationCommand,
   UpdatePermissionSetCommand,
 } from "@aws-sdk/client-sso-admin";
+
 import { createAccountAndMoveToOu } from "./accountCreation.js";
 import { assertUnreachable, delay } from "./helpers.js";
+import type { Logger } from "./logger.js";
 import type { Operation } from "./operations.js";
 import {
   addGroupMembershipToWorkingState,
@@ -85,7 +87,6 @@ import {
   upsertOrganizationalUnitInWorkingState,
   upsertOrgPolicyInWorkingState,
 } from "./state.js";
-import type { Logger } from "./logger.js";
 
 export type ExecuteOperationInput = {
   state: WorkingState;
@@ -117,9 +118,7 @@ export type ExecuteOperationInput = {
   operation: Operation;
 };
 
-export async function executeOperation(
-  props: ExecuteOperationInput,
-): Promise<WorkingState> {
+export async function executeOperation(props: ExecuteOperationInput): Promise<WorkingState> {
   if (props.operation.kind === "moveAccount") {
     props.logger.log(
       `Moving "${props.operation.accountName}" (${props.operation.accountId}): ${props.operation.fromOuName} -> ${props.operation.toOuName}`,
@@ -159,11 +158,7 @@ export async function executeOperation(
       }),
     );
     const createdOu = response.OrganizationalUnit;
-    if (
-      createdOu?.Id == null ||
-      createdOu.Arn == null ||
-      createdOu.Name == null
-    ) {
+    if (createdOu?.Id == null || createdOu.Arn == null || createdOu.Name == null) {
       throw new Error(
         `CreateOrganizationalUnit for "${props.operation.ouName}" returned incomplete OU data.`,
       );
@@ -250,16 +245,12 @@ export async function executeOperation(
         `Could not resolve account "${props.operation.accountName}" (${props.operation.accountId}) in working state.`,
       );
     }
-    const currentTags = new Map(
-      (account.tags ?? []).map((tag) => [tag.key, tag.value] as const),
-    );
+    const currentTags = new Map((account.tags ?? []).map((tag) => [tag.key, tag.value] as const));
     const desiredTags = new Map(Object.entries(props.operation.tags));
     const tagsToApply = [...desiredTags.entries()]
       .filter(([key, value]) => currentTags.get(key) !== value)
       .map(([Key, Value]) => ({ Key, Value }));
-    const tagKeysToRemove = [...currentTags.keys()].filter(
-      (key) => desiredTags.has(key) === false,
-    );
+    const tagKeysToRemove = [...currentTags.keys()].filter((key) => desiredTags.has(key) === false);
 
     props.logger.log(
       `Updating account tags "${props.operation.accountName}" (${props.operation.accountId})...`,
@@ -330,9 +321,7 @@ export async function executeOperation(
         DestinationParentId: props.operation.toOuId,
       }),
     );
-    props.logger.log(
-      `Done: "${props.operation.accountName}" -> ${props.operation.toOuName}`,
-    );
+    props.logger.log(`Done: "${props.operation.accountName}" -> ${props.operation.toOuName}`);
     return moveAccountInWorkingState({
       workingState: props.state,
       accountId: props.operation.accountId,
@@ -363,9 +352,7 @@ export async function executeOperation(
       }),
     );
     if (response.UserId == null) {
-      throw new Error(
-        `CreateUser for "${props.operation.userName}" returned no user id.`,
-      );
+      throw new Error(`CreateUser for "${props.operation.userName}" returned no user id.`);
     }
     props.logger.log(`Done: "${props.operation.userName}"`);
     return upsertIdcUserInWorkingState({
@@ -455,9 +442,7 @@ export async function executeOperation(
         IdentityStoreId: props.state.identityCenter.identityStoreId,
         DisplayName: props.operation.groupDisplayName,
         Description:
-          props.operation.description.trim().length > 0
-            ? props.operation.description
-            : undefined,
+          props.operation.description.trim().length > 0 ? props.operation.description : undefined,
       }),
     );
     if (response.GroupId == null) {
@@ -480,9 +465,7 @@ export async function executeOperation(
       state: props.state,
       groupDisplayName: props.operation.groupDisplayName,
     });
-    props.logger.log(
-      `Updating IdC group description for "${props.operation.groupDisplayName}"...`,
-    );
+    props.logger.log(`Updating IdC group description for "${props.operation.groupDisplayName}"...`);
     await props.identityStoreClient.send(
       new UpdateGroupCommand({
         IdentityStoreId: props.state.identityCenter.identityStoreId,
@@ -558,9 +541,7 @@ export async function executeOperation(
     });
   }
   if (props.operation.kind === "createIdcPermissionSet") {
-    props.logger.log(
-      `Creating IdC permission set "${props.operation.permissionSetName}"...`,
-    );
+    props.logger.log(`Creating IdC permission set "${props.operation.permissionSetName}"...`);
     const response = await props.ssoAdminClient.send(
       new CreatePermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
@@ -604,9 +585,7 @@ export async function executeOperation(
         InstanceArn: props.state.identityCenter.instanceArn,
         PermissionSetArn: permissionSet.permissionSetArn,
         Description:
-          props.operation.description.trim().length > 0
-            ? props.operation.description
-            : undefined,
+          props.operation.description.trim().length > 0 ? props.operation.description : undefined,
       }),
     );
     props.logger.log(`Done: "${props.operation.permissionSetName}"`);
@@ -647,9 +626,7 @@ export async function executeOperation(
       state: props.state,
       permissionSetName: props.operation.permissionSetName,
     });
-    props.logger.log(
-      `Deleting IdC permission set "${props.operation.permissionSetName}"...`,
-    );
+    props.logger.log(`Deleting IdC permission set "${props.operation.permissionSetName}"...`);
     await props.ssoAdminClient.send(
       new DeletePermissionSetCommand({
         InstanceArn: props.state.identityCenter.instanceArn,
@@ -734,10 +711,7 @@ export async function executeOperation(
       permissionSetName: props.operation.permissionSetName,
       update: (currentPermissionSet) => ({
         ...currentPermissionSet,
-        awsManagedPolicies: [
-          ...currentPermissionSet.awsManagedPolicies,
-          managedPolicyArn,
-        ],
+        awsManagedPolicies: [...currentPermissionSet.awsManagedPolicies, managedPolicyArn],
       }),
     });
   }
@@ -769,11 +743,8 @@ export async function executeOperation(
       }),
     });
   }
-  if (
-    props.operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet"
-  ) {
-    const { customerManagedPolicyName, customerManagedPolicyPath } =
-      props.operation;
+  if (props.operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet") {
+    const { customerManagedPolicyName, customerManagedPolicyPath } = props.operation;
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
       permissionSetName: props.operation.permissionSetName,
@@ -807,12 +778,8 @@ export async function executeOperation(
       }),
     });
   }
-  if (
-    props.operation.kind ===
-    "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
-  ) {
-    const { customerManagedPolicyName, customerManagedPolicyPath } =
-      props.operation;
+  if (props.operation.kind === "detachIdcCustomerManagedPolicyReferenceFromPermissionSet") {
+    const { customerManagedPolicyName, customerManagedPolicyPath } = props.operation;
     const permissionSet = resolvePermissionSetByName({
       state: props.state,
       permissionSetName: props.operation.permissionSetName,
@@ -836,12 +803,10 @@ export async function executeOperation(
       permissionSetName: props.operation.permissionSetName,
       update: (currentPermissionSet) => ({
         ...currentPermissionSet,
-        customerManagedPolicies:
-          currentPermissionSet.customerManagedPolicies.filter(
-            (policy) =>
-              policy.name !== customerManagedPolicyName ||
-              policy.path !== customerManagedPolicyPath,
-          ),
+        customerManagedPolicies: currentPermissionSet.customerManagedPolicies.filter(
+          (policy) =>
+            policy.name !== customerManagedPolicyName || policy.path !== customerManagedPolicyPath,
+        ),
       }),
     });
   }
@@ -860,8 +825,7 @@ export async function executeOperation(
         TargetType: props.operation.targetScope,
       }),
     );
-    const requestId =
-      response.PermissionSetProvisioningStatus?.RequestId ?? undefined;
+    const requestId = response.PermissionSetProvisioningStatus?.RequestId ?? undefined;
     if (requestId == null) {
       throw new Error(
         `ProvisionPermissionSet for "${props.operation.permissionSetName}" returned no request id.`,
@@ -873,8 +837,7 @@ export async function executeOperation(
       instanceArn: props.state.identityCenter.instanceArn,
       requestId,
       timeoutInMs: props.runtime.permissionSetProvisioning.timeoutInMs,
-      pollIntervalInMs:
-        props.runtime.permissionSetProvisioning.pollIntervalInMs,
+      pollIntervalInMs: props.runtime.permissionSetProvisioning.pollIntervalInMs,
       operationLabel: `"${props.operation.permissionSetName}"`,
     });
     props.logger.log(`Done: "${props.operation.permissionSetName}"`);
@@ -971,12 +934,10 @@ export async function executeOperation(
       principalName: props.operation.principalName,
     });
     props.logger.log(
-      `Granting IdC assignment "${props.operation.permissionSetName}" to ${formatPrincipalLabel(
-        {
-          principalType: props.operation.principalType,
-          principalName: props.operation.principalName,
-        },
-      )} on "${props.operation.accountName}"...`,
+      `Granting IdC assignment "${props.operation.permissionSetName}" to ${formatPrincipalLabel({
+        principalType: props.operation.principalType,
+        principalName: props.operation.principalName,
+      })} on "${props.operation.accountName}"...`,
     );
     const response = await props.ssoAdminClient.send(
       new CreateAccountAssignmentCommand({
@@ -1025,12 +986,10 @@ export async function executeOperation(
       principalName: props.operation.principalName,
     });
     props.logger.log(
-      `Revoking IdC assignment "${props.operation.permissionSetName}" from ${formatPrincipalLabel(
-        {
-          principalType: props.operation.principalType,
-          principalName: props.operation.principalName,
-        },
-      )} on "${props.operation.accountName}"...`,
+      `Revoking IdC assignment "${props.operation.permissionSetName}" from ${formatPrincipalLabel({
+        principalType: props.operation.principalType,
+        principalName: props.operation.principalName,
+      })} on "${props.operation.accountName}"...`,
     );
     const response = await props.ssoAdminClient.send(
       new DeleteAccountAssignmentCommand({
@@ -1086,9 +1045,7 @@ export async function executeOperation(
     );
     const policy = response.Policy?.PolicySummary;
     if (policy?.Id == null || policy.Arn == null) {
-      throw new Error(
-        `CreatePolicy for "${props.operation.policyName}" returned incomplete data.`,
-      );
+      throw new Error(`CreatePolicy for "${props.operation.policyName}" returned incomplete data.`);
     }
     props.logger.log(`Done: "${props.operation.policyName}"`);
     return upsertOrgPolicyInWorkingState({
@@ -1104,9 +1061,7 @@ export async function executeOperation(
     });
   }
   if (props.operation.kind === "updateOrgPolicyContent") {
-    props.logger.log(
-      `Updating org policy content "${props.operation.policyName}"...`,
-    );
+    props.logger.log(`Updating org policy content "${props.operation.policyName}"...`);
     await props.organizationsClient.send(
       new UpdatePolicyCommand({
         PolicyId: props.operation.policyId,
@@ -1114,8 +1069,7 @@ export async function executeOperation(
       }),
     );
     props.logger.log(`Done: "${props.operation.policyName}"`);
-    const currentPolicy =
-      props.state.organization.policiesById[props.operation.policyId];
+    const currentPolicy = props.state.organization.policiesById[props.operation.policyId];
     if (currentPolicy == null) {
       return props.state;
     }
@@ -1125,9 +1079,7 @@ export async function executeOperation(
     });
   }
   if (props.operation.kind === "updateOrgPolicyDescription") {
-    props.logger.log(
-      `Updating org policy description "${props.operation.policyName}"...`,
-    );
+    props.logger.log(`Updating org policy description "${props.operation.policyName}"...`);
     await props.organizationsClient.send(
       new UpdatePolicyCommand({
         PolicyId: props.operation.policyId,
@@ -1135,8 +1087,7 @@ export async function executeOperation(
       }),
     );
     props.logger.log(`Done: "${props.operation.policyName}"`);
-    const currentPolicy =
-      props.state.organization.policiesById[props.operation.policyId];
+    const currentPolicy = props.state.organization.policiesById[props.operation.policyId];
     if (currentPolicy == null) {
       return props.state;
     }
@@ -1160,15 +1111,11 @@ export async function executeOperation(
         TargetId: props.operation.targetId,
       }),
     );
-    props.logger.log(
-      `Done: "${props.operation.policyName}" -> "${props.operation.targetName}"`,
-    );
+    props.logger.log(`Done: "${props.operation.policyName}" -> "${props.operation.targetName}"`);
     const targetType =
       props.operation.targetId === props.context.organization.rootId
         ? ("ROOT" as const)
-        : props.state.organization.organizationalUnitsById[
-              props.operation.targetId
-            ] != null
+        : props.state.organization.organizationalUnitsById[props.operation.targetId] != null
           ? ("ORGANIZATIONAL_UNIT" as const)
           : ("ACCOUNT" as const);
     return addOrgPolicyAttachmentToWorkingState({
@@ -1190,9 +1137,7 @@ export async function executeOperation(
         TargetId: props.operation.targetId,
       }),
     );
-    props.logger.log(
-      `Done: "${props.operation.policyName}" x "${props.operation.targetName}"`,
-    );
+    props.logger.log(`Done: "${props.operation.policyName}" x "${props.operation.targetName}"`);
     return removeOrgPolicyAttachmentFromWorkingState({
       workingState: props.state,
       policyId: props.operation.policyId,
@@ -1225,19 +1170,13 @@ export async function executeOperation(
         Title: props.operation.title,
       }),
     );
-    props.logger.log(
-      `Done: ${contactType} contact for "${props.operation.accountName}"`,
-    );
+    props.logger.log(`Done: ${contactType} contact for "${props.operation.accountName}"`);
     const account = props.state.organization.accountsById[props.operation.accountId];
     if (account == null) {
-      throw new Error(
-        `Could not resolve account (${props.operation.accountId}) in working state.`,
-      );
+      throw new Error(`Could not resolve account (${props.operation.accountId}) in working state.`);
     }
     const updatedContacts = [
-      ...(account.alternateContacts ?? []).filter(
-        (c) => c.contactType !== contactType,
-      ),
+      ...(account.alternateContacts ?? []).filter((c) => c.contactType !== contactType),
       {
         contactType,
         name: props.operation.name,
@@ -1262,14 +1201,10 @@ export async function executeOperation(
         AlternateContactType: contactType,
       }),
     );
-    props.logger.log(
-      `Done: removed ${contactType} contact for "${props.operation.accountName}"`,
-    );
+    props.logger.log(`Done: removed ${contactType} contact for "${props.operation.accountName}"`);
     const account = props.state.organization.accountsById[props.operation.accountId];
     if (account == null) {
-      throw new Error(
-        `Could not resolve account (${props.operation.accountId}) in working state.`,
-      );
+      throw new Error(`Could not resolve account (${props.operation.accountId}) in working state.`);
     }
     return upsertAccountInWorkingState({
       workingState: props.state,
@@ -1367,24 +1302,18 @@ function resolveAssignmentDependencies(props: {
 } {
   const account = props.state.organization.accountsByName[props.accountName];
   if (account == null) {
-    throw new Error(
-      `Could not resolve account "${props.accountName}" in working state.`,
-    );
+    throw new Error(`Could not resolve account "${props.accountName}" in working state.`);
   }
-  const permissionSet =
-    props.state.identityCenter.permissionSetsByName[props.permissionSetName];
+  const permissionSet = props.state.identityCenter.permissionSetsByName[props.permissionSetName];
   if (permissionSet == null) {
     throw new Error(
       `Could not resolve permission set "${props.permissionSetName}" in working state.`,
     );
   }
   if (props.principalType === "GROUP") {
-    const group =
-      props.state.identityCenter.groupsByDisplayName[props.principalName];
+    const group = props.state.identityCenter.groupsByDisplayName[props.principalName];
     if (group == null) {
-      throw new Error(
-        `Could not resolve group "${props.principalName}" in working state.`,
-      );
+      throw new Error(`Could not resolve group "${props.principalName}" in working state.`);
     }
     return {
       accountId: account.id,
@@ -1395,9 +1324,7 @@ function resolveAssignmentDependencies(props: {
   }
   const user = props.state.identityCenter.usersByUserName[props.principalName];
   if (user == null) {
-    throw new Error(
-      `Could not resolve user "${props.principalName}" in working state.`,
-    );
+    throw new Error(`Could not resolve user "${props.principalName}" in working state.`);
   }
   return {
     accountId: account.id,
@@ -1410,23 +1337,15 @@ function resolveAssignmentDependencies(props: {
 function resolveUserByName(props: { state: WorkingState; userName: string }) {
   const user = props.state.identityCenter.usersByUserName[props.userName];
   if (user == null) {
-    throw new Error(
-      `Could not resolve user "${props.userName}" in working state.`,
-    );
+    throw new Error(`Could not resolve user "${props.userName}" in working state.`);
   }
   return user;
 }
 
-function resolveGroupByDisplayName(props: {
-  state: WorkingState;
-  groupDisplayName: string;
-}) {
-  const group =
-    props.state.identityCenter.groupsByDisplayName[props.groupDisplayName];
+function resolveGroupByDisplayName(props: { state: WorkingState; groupDisplayName: string }) {
+  const group = props.state.identityCenter.groupsByDisplayName[props.groupDisplayName];
   if (group == null) {
-    throw new Error(
-      `Could not resolve group "${props.groupDisplayName}" in working state.`,
-    );
+    throw new Error(`Could not resolve group "${props.groupDisplayName}" in working state.`);
   }
   return group;
 }
@@ -1439,13 +1358,11 @@ function resolveOrganizationalUnitId(props: {
   if (props.organizationalUnitId !== "__pending_creation__") {
     return props.organizationalUnitId;
   }
-  const ou = Object.values(
-    props.state.organization.organizationalUnitsById,
-  ).find((ou) => ou.name === props.organizationalUnitName);
+  const ou = Object.values(props.state.organization.organizationalUnitsById).find(
+    (ou) => ou.name === props.organizationalUnitName,
+  );
   if (ou == null) {
-    throw new Error(
-      `Could not resolve OU "${props.organizationalUnitName}" in working state.`,
-    );
+    throw new Error(`Could not resolve OU "${props.organizationalUnitName}" in working state.`);
   }
   return ou.id;
 }
@@ -1458,19 +1375,13 @@ function resolvePolicyId(props: {
   if (props.policyId !== "__pending_creation__") return props.policyId;
   const policy = props.state.organization.policiesByName[props.policyName];
   if (policy == null) {
-    throw new Error(
-      `Could not resolve policy "${props.policyName}" in working state.`,
-    );
+    throw new Error(`Could not resolve policy "${props.policyName}" in working state.`);
   }
   return policy.id;
 }
 
-function resolvePermissionSetByName(props: {
-  state: WorkingState;
-  permissionSetName: string;
-}) {
-  const permissionSet =
-    props.state.identityCenter.permissionSetsByName[props.permissionSetName];
+function resolvePermissionSetByName(props: { state: WorkingState; permissionSetName: string }) {
+  const permissionSet = props.state.identityCenter.permissionSetsByName[props.permissionSetName];
   if (permissionSet == null) {
     throw new Error(
       `Could not resolve permission set "${props.permissionSetName}" in working state.`,
@@ -1495,33 +1406,29 @@ function upsertPermissionSetPolicyState(props: {
     workingState: props.state,
     permissionSet: {
       ...nextPermissionSet,
-      awsManagedPolicies: [
-        ...new Set(nextPermissionSet.awsManagedPolicies),
-      ].sort((left, right) => left.localeCompare(right)),
-      customerManagedPolicies: [
-        ...nextPermissionSet.customerManagedPolicies,
-      ].sort((left, right) => {
-        const pathComparison = left.path.localeCompare(right.path);
-        if (pathComparison !== 0) {
-          return pathComparison;
-        }
-        return left.name.localeCompare(right.name);
-      }),
+      awsManagedPolicies: [...new Set(nextPermissionSet.awsManagedPolicies)].sort((left, right) =>
+        left.localeCompare(right),
+      ),
+      customerManagedPolicies: [...nextPermissionSet.customerManagedPolicies].sort(
+        (left, right) => {
+          const pathComparison = left.path.localeCompare(right.path);
+          if (pathComparison !== 0) {
+            return pathComparison;
+          }
+          return left.name.localeCompare(right.name);
+        },
+      ),
     },
   });
 }
 
-function buildIdentityStoreUserName(props: {
-  userName: string;
-  displayName: string;
-}): {
+function buildIdentityStoreUserName(props: { userName: string; displayName: string }): {
   Formatted: string;
   GivenName: string;
   FamilyName: string;
 } {
   const normalizedDisplayName = props.displayName.trim();
-  const fallbackName =
-    normalizedDisplayName.length > 0 ? normalizedDisplayName : props.userName;
+  const fallbackName = normalizedDisplayName.length > 0 ? normalizedDisplayName : props.userName;
   const [givenName, ...familyNameParts] = fallbackName
     .split(/\s+/)
     .filter((part) => part.length > 0);
@@ -1766,18 +1673,13 @@ function resolveGroupMembershipDependencies(props: {
   groupId: string;
   userId: string;
 } {
-  const group =
-    props.state.identityCenter.groupsByDisplayName[props.groupDisplayName];
+  const group = props.state.identityCenter.groupsByDisplayName[props.groupDisplayName];
   if (group == null) {
-    throw new Error(
-      `Could not resolve group "${props.groupDisplayName}" in working state.`,
-    );
+    throw new Error(`Could not resolve group "${props.groupDisplayName}" in working state.`);
   }
   const user = props.state.identityCenter.usersByUserName[props.userName];
   if (user == null) {
-    throw new Error(
-      `Could not resolve user "${props.userName}" in working state.`,
-    );
+    throw new Error(`Could not resolve user "${props.userName}" in working state.`);
   }
   return {
     groupId: group.groupId,

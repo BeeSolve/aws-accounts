@@ -1,5 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+
 import { getStandardTags, MANAGED_BY_TAG_VALUE } from "./tags.js";
 
 test("MANAGED_BY_TAG_VALUE is beesolve-aws-accounts", () => {
@@ -15,10 +16,7 @@ test("getStandardTags returns correct tags for a given purpose", () => {
 });
 
 test("getStandardTags throws on empty purpose", () => {
-  assert.throws(
-    () => getStandardTags(""),
-    { message: "A non-empty purpose is required" },
-  );
+  assert.throws(() => getStandardTags(""), { message: "A non-empty purpose is required" });
 });
 
 test("getStandardTags returns exactly 2 tags", () => {

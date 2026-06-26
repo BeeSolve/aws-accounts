@@ -1,8 +1,12 @@
-import { CreateRoleCommand, GetRoleCommand, IAMClient, TagRoleCommand } from "@aws-sdk/client-iam";
+import { writeFile } from "node:fs/promises";
+import { createInterface } from "node:readline/promises";
+
+import type { IAMClient } from "@aws-sdk/client-iam";
+import { CreateRoleCommand, GetRoleCommand, TagRoleCommand } from "@aws-sdk/client-iam";
+import type { LambdaClient } from "@aws-sdk/client-lambda";
 import {
   CreateFunctionCommand,
   GetFunctionCommand,
-  LambdaClient,
   PutFunctionConcurrencyCommand,
   ResourceNotFoundException,
   TagResourceCommand,
@@ -13,19 +17,19 @@ import {
   CreateOrganizationCommand,
   DescribeOrganizationCommand,
 } from "@aws-sdk/client-organizations";
+import type { BucketLocationConstraint } from "@aws-sdk/client-s3";
 import {
-  BucketLocationConstraint,
   CreateBucketCommand,
   PutBucketTaggingCommand,
   type S3ServiceException,
 } from "@aws-sdk/client-s3";
+import type { SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import {
   CreatePermissionSetCommand,
   DescribePermissionSetCommand,
   ListInstancesCommand,
   ListPermissionSetsCommand,
   PutInlinePolicyToPermissionSetCommand,
-  SSOAdminClient,
   TagResourceCommand as SsoTagResourceCommand,
   UpdatePermissionSetCommand,
 } from "@aws-sdk/client-sso-admin";
@@ -39,8 +43,7 @@ import {
   sso,
   sts,
 } from "@beesolve/iam-policy-ts";
-import { writeFile } from "node:fs/promises";
-import { createInterface } from "node:readline/promises";
+
 import type { AwsContextFile, Deployment } from "../awsConfig.js";
 import { readAwsContextFromFile, readPackageVersion } from "../awsConfig.js";
 import { toPreconditionError } from "../error.js";

@@ -18,16 +18,16 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
     - Export all pure functions for testability
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3_
 
-  - [~]* 1.2 Write property test for `buildProfileCombinations`
+  - [~]\* 1.2 Write property test for `buildProfileCombinations`
     - Not worth implementing: the target functions (`buildProfileEntries`, `renderProfileBlock`, `toKebabCase`) are private and not exported. Testing through the public API (`runProfileCommand`) requires file I/O and stdin mocking per fast-check iteration, which is slow and fragile. The unit tests in 1.5 cover the same behaviors deterministically.
 
-  - [~]* 1.3 Write property test for `generateProfileBlock`
+  - [~]\* 1.3 Write property test for `generateProfileBlock`
     - Not worth implementing: same reason as 1.2 — `renderProfileBlock` is private.
 
-  - [~]* 1.4 Write property test for profile name uniqueness
+  - [~]\* 1.4 Write property test for profile name uniqueness
     - Not worth implementing: same reason as 1.2 — `toKebabCase` is private.
 
-  - [x]* 1.5 Write unit tests for profile pure functions
+  - [x]\* 1.5 Write unit tests for profile pure functions
     - Test `toKebabCase` with spaces, special chars, consecutive separators, uppercase
     - Test `deriveStartUrl` with various identity store IDs
     - Test `generateProfileBlock` output format matches INI spec (key = value with spaces)
@@ -47,7 +47,7 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
     - Handle empty combinations case (log message, exit cleanly)
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 3.1, 3.2, 3.3, 3.4, 3.5_
 
-  - [x]* 2.2 Write unit tests for `runProfileCommand`
+  - [x]\* 2.2 Write unit tests for `runProfileCommand`
     - Test error when state cache is missing
     - Test error when context file is missing
     - Test error when stdin is not TTY
@@ -70,14 +70,14 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
     - Handle missing state cache error
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 8.1, 8.2, 8.3_
 
-  - [x]* 4.2 Write property test for graveyard close safety
+  - [x]\* 4.2 Write property test for graveyard close safety
     - **Property 4: Graveyard close safety**
     - Generate arbitrary accounts with mixed statuses in graveyard OU
     - Assert only ACTIVE accounts produce closure commands
     - Assert SUSPENDED accounts never appear in output
     - **Validates: Requirements 8.1, 8.2**
 
-  - [x]* 4.3 Write unit tests for `runGraveyardCloseCommand`
+  - [x]\* 4.3 Write unit tests for `runGraveyardCloseCommand`
     - Test with ACTIVE accounts in graveyard — outputs closure commands
     - Test with SUSPENDED accounts — skipped
     - Test with mixed ACTIVE/SUSPENDED — only ACTIVE output
@@ -98,10 +98,10 @@ Add two CLI capabilities: a `profile` command with interactive picker for genera
     - Update `printHelp` to include `profile` and `graveyard close`
     - _Requirements: 3.1, 9.1, 9.2, 9.3_
 
-  - [~]* 5.2 Write property test for backward compatibility
+  - [~]\* 5.2 Write property test for backward compatibility
     - Not worth implementing: `cli.ts` exports nothing, so routing cannot be tested without either exporting the router function (a refactor) or spawning a subprocess (an integration test). The routing behaviour is covered implicitly by the command-level tests.
 
-  - [~]* 5.3 Write unit tests for CLI routing
+  - [~]\* 5.3 Write unit tests for CLI routing
     - Not worth implementing: same reason as 5.2 — `cli.ts` has no exports to test against.
 
 - [x] 6. Final checkpoint

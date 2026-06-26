@@ -1,6 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+
 import fc from "fast-check";
+
 import { getStandardTags, MANAGED_BY_TAG_VALUE } from "./tags.js";
 
 /**
@@ -35,4 +37,3 @@ test("Feature: bootstrap-enhancements, Property 1: Tag generation produces corre
     { numRuns: 100 },
   );
 });
-

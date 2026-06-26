@@ -89,16 +89,17 @@ local/
 
 **Responsibility**: Create a complete, self-contained copy of the local execution code.
 
-| Action | Details |
-|--------|---------|
-| Create `local/package.json` | Include all dependencies needed for local execution: @aws-sdk/client-organizations, @aws-sdk/client-sso-admin, @aws-sdk/client-identitystore, @aws-sdk/client-account, @aws-sdk/client-sts, @aws-sdk/credential-providers, @beesolve/iam-policy-ts, esbuild, valibot, typescript, @types/node |
-| Create `local/tsconfig.json` | Standalone config: `target: ES2022`, `module: NodeNext`, `moduleResolution: NodeNext`, `noEmit: true`, `allowImportingTsExtensions: true`, `strict: true` |
-| Copy shared modules | All modules listed in Requirement 1.2 into `local/src/` |
-| Copy local commands | All 7 local command files + their test files into `local/src/commands/` |
-| Create local CLI | Modified `cli.ts` that only registers scan, bootstrap, init, regenerate, plan, apply, graveyard — no remote subcommand |
-| Exclude remote code | No lambda/, lambdaClient.ts, remoteStateCache.ts, remote.ts, buildLambda.ts |
+| Action                       | Details                                                                                                                                                                                                                                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create `local/package.json`  | Include all dependencies needed for local execution: @aws-sdk/client-organizations, @aws-sdk/client-sso-admin, @aws-sdk/client-identitystore, @aws-sdk/client-account, @aws-sdk/client-sts, @aws-sdk/credential-providers, @beesolve/iam-policy-ts, esbuild, valibot, typescript, @types/node |
+| Create `local/tsconfig.json` | Standalone config: `target: ES2022`, `module: NodeNext`, `moduleResolution: NodeNext`, `noEmit: true`, `allowImportingTsExtensions: true`, `strict: true`                                                                                                                                     |
+| Copy shared modules          | All modules listed in Requirement 1.2 into `local/src/`                                                                                                                                                                                                                                       |
+| Copy local commands          | All 7 local command files + their test files into `local/src/commands/`                                                                                                                                                                                                                       |
+| Create local CLI             | Modified `cli.ts` that only registers scan, bootstrap, init, regenerate, plan, apply, graveyard — no remote subcommand                                                                                                                                                                        |
+| Exclude remote code          | No lambda/, lambdaClient.ts, remoteStateCache.ts, remote.ts, buildLambda.ts                                                                                                                                                                                                                   |
 
 **Build script in `local/package.json`**:
+
 ```json
 {
   "scripts": {
@@ -112,38 +113,49 @@ local/
 
 **Responsibility**: Remove local-specific code and promote remote commands.
 
-| Action | Details |
-|--------|---------|
-| Delete local command files | `src/commands/{scan,bootstrap,init,plan,apply}.ts` — retain `regenerate.ts` and `graveyard.ts` |
-| Delete local test files | `src/commands/{scan,bootstrap,init,plan,apply}.test.ts` — retain `regenerate.test.ts` and `graveyard.test.ts` |
-| Rewrite `src/cli.ts` | Remove local command imports for deleted commands, remove `remote` namespace, promote remote commands to top-level, retain `regenerate` and `graveyard` as top-level commands |
-| Rename/refactor `src/commands/remote.ts` | Keep the implementation but remove the `remote` subcommand routing; each function becomes a direct top-level command handler |
-| Update `graveyard.ts` | Change state source from `state.json` to `.remote-state-cache.json` since the cache is updated after every `scan` and `apply` |
-| Update help text | List: bootstrap, scan, init, regenerate, graveyard, plan, apply, upgrade |
-| Update `package.json` description | Change from "Local-first AWS Organizations..." to "AWS Organizations and IAM Identity Center management CLI" |
-| Retain `local/` folder | Not deleted in this phase |
+| Action                                   | Details                                                                                                                                                                       |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delete local command files               | `src/commands/{scan,bootstrap,init,plan,apply}.ts` — retain `regenerate.ts` and `graveyard.ts`                                                                                |
+| Delete local test files                  | `src/commands/{scan,bootstrap,init,plan,apply}.test.ts` — retain `regenerate.test.ts` and `graveyard.test.ts`                                                                 |
+| Rewrite `src/cli.ts`                     | Remove local command imports for deleted commands, remove `remote` namespace, promote remote commands to top-level, retain `regenerate` and `graveyard` as top-level commands |
+| Rename/refactor `src/commands/remote.ts` | Keep the implementation but remove the `remote` subcommand routing; each function becomes a direct top-level command handler                                                  |
+| Update `graveyard.ts`                    | Change state source from `state.json` to `.remote-state-cache.json` since the cache is updated after every `scan` and `apply`                                                 |
+| Update help text                         | List: bootstrap, scan, init, regenerate, graveyard, plan, apply, upgrade                                                                                                      |
+| Update `package.json` description        | Change from "Local-first AWS Organizations..." to "AWS Organizations and IAM Identity Center management CLI"                                                                  |
+| Retain `local/` folder                   | Not deleted in this phase                                                                                                                                                     |
 
 **New CLI command routing** (post-removal):
+
 ```typescript
-const commands = ["bootstrap", "scan", "init", "regenerate", "graveyard", "plan", "apply", "upgrade"] as const;
+const commands = [
+  "bootstrap",
+  "scan",
+  "init",
+  "regenerate",
+  "graveyard",
+  "plan",
+  "apply",
+  "upgrade",
+] as const;
 ```
 
 ### Phase 3: Cleanup Component
 
 **Responsibility**: Remove dead code, unused dependencies, and update documentation.
 
-| Action | Details |
-|--------|---------|
-| Analyze imports | Static analysis of remaining `src/` to find unused exports in shared modules |
+| Action              | Details                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| Analyze imports     | Static analysis of remaining `src/` to find unused exports in shared modules             |
 | Remove dead exports | Functions/types/constants with zero import references from remote path or Lambda handler |
-| Remove unused deps | Dependencies with zero import references in `src/` or `scripts/` |
-| Create ADR | `docs/adr/001-remove-local-execution-model.md` with commit hash, rationale, file list |
-| Update README | Remove local references, update command examples, update IAM permissions section |
-| Update docs/ | Annotate any files referencing local model as current architecture |
+| Remove unused deps  | Dependencies with zero import references in `src/` or `scripts/`                         |
+| Create ADR          | `docs/adr/001-remove-local-execution-model.md` with commit hash, rationale, file list    |
+| Update README       | Remove local references, update command examples, update IAM permissions section         |
+| Update docs/        | Annotate any files referencing local model as current architecture                       |
 
 ### Shared Module Retention Analysis
 
 Modules imported by Lambda handler (`src/lambda/handler.ts`):
+
 - `operations.ts` (operationSchema, Operation)
 - `state.ts` (stateSchema, StateFile, createWorkingState, materializeWorkingState)
 - `scanLogic.ts` (scanOrganization, scanIdentityCenter)
@@ -151,6 +163,7 @@ Modules imported by Lambda handler (`src/lambda/handler.ts`):
 - `helpers.ts` (assertUnreachable)
 
 Modules imported by remote commands (`src/commands/remote.ts`):
+
 - `awsConfig.ts` (loadAwsConfigModelFromTsFile, mapAwsConfigToState, readAwsContextFromFile, regenerateTypesFromState, writeAwsConfigFromState, AwsContextFile, Deployment)
 - `awsClientConfig.ts` (buildAwsClientConfig)
 - `tags.ts` (getStandardTags, AwsTag)
@@ -174,7 +187,7 @@ The only data change is the `package.json` description field update (Requirement
 
 ## Correctness Properties
 
-*Property-based testing is NOT applicable for this feature.* This is a code restructuring task — file moves, deletions, CLI rewiring, and documentation updates. There are no pure functions with varying inputs, no data transformations, and no parsers or serializers being introduced. The correctness criteria are structural (files exist, imports resolve, commands route correctly) rather than behavioral across an input space.
+_Property-based testing is NOT applicable for this feature._ This is a code restructuring task — file moves, deletions, CLI rewiring, and documentation updates. There are no pure functions with varying inputs, no data transformations, and no parsers or serializers being introduced. The correctness criteria are structural (files exist, imports resolve, commands route correctly) rather than behavioral across an input space.
 
 The following structural invariants serve as verifiable correctness checks for the restructuring:
 
@@ -205,26 +218,30 @@ The Lambda handler (`src/lambda/handler.ts`) SHALL continue to function identica
 ## Error Handling
 
 ### Phase 1 Validation
+
 - `tsc --noEmit` in `local/` must pass — catches missing imports or broken references
 - `npm install && npm run build` in `local/` must succeed — catches missing dependencies
 - CLI `--help` must exit 0 — catches broken entry point
 
 ### Phase 2 Validation
+
 - `npm run typecheck` must pass — catches dangling imports to deleted files
 - `npm run build` must succeed — catches build script issues
 - `npm run test` must pass — catches broken test imports or logic
 
 ### Phase 3 Validation
+
 - Same as Phase 2, plus `npm run build:lambda` must succeed
 - No import statements referencing deleted files
 
 ### Error Scenarios
-| Scenario | Mitigation |
-|----------|-----------|
-| Shared module has local-only exports mixed with remote-used exports | Phase 3 removes only unused exports, not entire files |
-| Test file imports a deleted command | Phase 2 deletes local test files; remote test files are updated |
-| Circular dependency in extraction | Copy all shared modules wholesale; no selective extraction |
-| Missing dependency in `local/package.json` | Validate with `npm install && tsc --noEmit` before committing |
+
+| Scenario                                                            | Mitigation                                                      |
+| ------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Shared module has local-only exports mixed with remote-used exports | Phase 3 removes only unused exports, not entire files           |
+| Test file imports a deleted command                                 | Phase 2 deletes local test files; remote test files are updated |
+| Circular dependency in extraction                                   | Copy all shared modules wholesale; no selective extraction      |
+| Missing dependency in `local/package.json`                          | Validate with `npm install && tsc --noEmit` before committing   |
 
 ## Testing Strategy
 
@@ -233,6 +250,7 @@ The Lambda handler (`src/lambda/handler.ts`) SHALL continue to function identica
 **Testing approach**:
 
 ### Phase 1 Tests (Extraction Integrity)
+
 - **Compilation check**: `tsc --noEmit` passes in `local/` (verifies all imports resolve)
 - **Build check**: `npm run build` produces `dist/cli.js` in `local/`
 - **CLI smoke test**: `node dist/cli.js --help` exits 0
@@ -240,6 +258,7 @@ The Lambda handler (`src/lambda/handler.ts`) SHALL continue to function identica
 - **No remote references**: grep for `remote`, `lambda`, `lambdaClient` in `local/src/` returns no hits
 
 ### Phase 2 Tests (Removal Integrity)
+
 - **Compilation check**: `npm run typecheck` passes
 - **Build check**: `npm run build` succeeds
 - **Existing remote tests pass**: `npm test` runs remote.test.ts, remote.permissionset.test.ts, remote.tagging.test.ts successfully
@@ -248,6 +267,7 @@ The Lambda handler (`src/lambda/handler.ts`) SHALL continue to function identica
 - **No local command references**: No imports of deleted files in remaining `src/`
 
 ### Phase 3 Tests (Cleanup Integrity)
+
 - **Full test suite**: `npm test` passes
 - **Lambda build**: `npm run build:lambda` succeeds
 - **Type check**: `npm run typecheck` passes

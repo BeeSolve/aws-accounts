@@ -68,6 +68,7 @@ export function getStandardTags(purpose: string): AwsTag[];
 ### 2. Remote Bootstrap Extensions (`src/commands/remote.ts`)
 
 Extended `runRemoteBootstrap` with:
+
 - Tag application on S3 bucket creation (via `PutBucketTagging` for existing buckets, `CreateBucket` doesn't support tags directly — use `PutBucketTagging` after creation)
 - Tag application on IAM role creation (via `TagRole` / `CreateRole` Tags parameter)
 - Tag application on Lambda function creation (via `CreateFunction` Tags parameter / `TagResource` for existing)
@@ -95,6 +96,7 @@ async function ensureOrganizationRemoteManagementPermissionSet(props: {
 ### 3. Local Bootstrap Extensions (`src/commands/bootstrap.ts`)
 
 Extended `createMissingRequiredOus` and the existing-OU path to apply tags:
+
 - `CreateOrganizationalUnitCommand` with `Tags` parameter for new OUs
 - `TagResourceCommand` for existing Graveyard OU
 
@@ -114,6 +116,7 @@ async function regenerateTypesFromState(props: {
 ```
 
 This function:
+
 - Maps the state to an `AwsConfigModel` using existing `mapStateToAwsConfig`
 - Renders the types file using existing `renderAwsConfigTypesTs`
 - Compares with current file content
@@ -125,13 +128,13 @@ This function:
 
 Code quality improvements across files:
 
-| File | Change |
-|------|--------|
-| `src/lambda/handler.ts` | Remove `as const` on literal booleans, pass AWS clients through props, parallelize scan calls, use `assertUnreachable` |
+| File                     | Change                                                                                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lambda/handler.ts`  | Remove `as const` on literal booleans, pass AWS clients through props, parallelize scan calls, use `assertUnreachable`                                                                                  |
 | `src/commands/remote.ts` | Infer `RemoteCommandInput` type from valibot, align cache/state config, extract lambda zip reading helper, pass AWS clients as props, remove `as any`, parallelize Promise.all, use `assertUnreachable` |
-| `src/lambdaClient.ts` | Refactor `let` patterns to early-return or IIFE, use `assertUnreachable` |
-| `src/cli.ts` | Use `assertUnreachable` for remote subcommands |
-| `src/awsConfig.ts` | Remove unnecessary `await` in `readAwsContextFromFile` |
+| `src/lambdaClient.ts`    | Refactor `let` patterns to early-return or IIFE, use `assertUnreachable`                                                                                                                                |
+| `src/cli.ts`             | Use `assertUnreachable` for remote subcommands                                                                                                                                                          |
+| `src/awsConfig.ts`       | Remove unnecessary `await` in `readAwsContextFromFile`                                                                                                                                                  |
 
 ## Data Models
 
@@ -143,68 +146,74 @@ type AwsTag = { Key: string; Value: string };
 // Example output of getStandardTags("state-storage"):
 [
   { Key: "ManagedBy", Value: "beesolve-aws-accounts" },
-  { Key: "Purpose", Value: "state-storage" }
-]
+  { Key: "Purpose", Value: "state-storage" },
+];
 ```
 
 ### Purpose Values by Resource
 
-| Resource | Purpose Value |
-|----------|--------------|
-| S3 state bucket | `state-storage` |
-| IAM execution role | `execution-role` |
-| Lambda function | `remote-execution` |
-| Graveyard OU | `graveyard` |
-| OrganizationManagement permission set | `organization-management` |
-| OrganizationRemoteManagement permission set | `remote-invocation` |
+| Resource                                    | Purpose Value             |
+| ------------------------------------------- | ------------------------- |
+| S3 state bucket                             | `state-storage`           |
+| IAM execution role                          | `execution-role`          |
+| Lambda function                             | `remote-execution`        |
+| Graveyard OU                                | `graveyard`               |
+| OrganizationManagement permission set       | `organization-management` |
+| OrganizationRemoteManagement permission set | `remote-invocation`       |
 
 ### Permission Set Configurations
 
 **OrganizationManagement:**
+
 ```json
 {
   "sessionDuration": "PT4H",
   "description": "Full organization management access for AWS Organizations, IAM Identity Center, and IAM",
   "inlinePolicy": {
     "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": ["organizations:*", "sso:*", "identitystore:*", "account:*", "iam:*"],
-      "Resource": "*"
-    }]
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": ["organizations:*", "sso:*", "identitystore:*", "account:*", "iam:*"],
+        "Resource": "*"
+      }
+    ]
   }
 }
 ```
 
 **OrganizationRemoteManagement:**
+
 ```json
 {
   "sessionDuration": "PT1H",
   "description": "Minimal access to invoke the beesolve-aws-accounts remote management Lambda",
   "inlinePolicy": {
     "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": ["lambda:InvokeFunction"],
-      "Resource": "<lambdaArn from context>"
-    }]
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": ["lambda:InvokeFunction"],
+        "Resource": "<lambdaArn from context>"
+      }
+    ]
   }
 }
 ```
 
 ## Correctness Properties
 
-*A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+_A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees._
 
 ### Property 1: Tag generation produces correct structure and content
 
-*For any* non-empty string `purpose` with length between 1 and 64 characters, calling `getStandardTags(purpose)` SHALL return an array of exactly 2 elements where the first has `Key: "ManagedBy"` and `Value: "beesolve-aws-accounts"`, and the second has `Key: "Purpose"` and `Value` equal to the provided `purpose` string.
+_For any_ non-empty string `purpose` with length between 1 and 64 characters, calling `getStandardTags(purpose)` SHALL return an array of exactly 2 elements where the first has `Key: "ManagedBy"` and `Value: "beesolve-aws-accounts"`, and the second has `Key: "Purpose"` and `Value` equal to the provided `purpose` string.
 
 **Validates: Requirements 1.4, 4.1, 4.3**
 
 ### Property 2: Empty purpose string is rejected
 
-*For any* string that is empty (length 0), calling `getStandardTags` with that string SHALL throw an Error.
+_For any_ string that is empty (length 0), calling `getStandardTags` with that string SHALL throw an Error.
 
 **Validates: Requirements 4.5**
 
@@ -262,6 +271,7 @@ Tag format: `Feature: bootstrap-enhancements, Property 1: Tag generation produce
 ### Refactoring Verification
 
 Each TODO resolution is verified by:
+
 1. TypeScript type-checking passes (`npm run typecheck`)
 2. Full test suite passes (`npm run test`)
 3. No behavioral changes — only internal code quality improvements

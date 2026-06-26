@@ -18,6 +18,7 @@ retried.
 Move the delivery bucket section (~lines 900-920) and aggregator section
 (~lines 925-949) to after the closing `}` of the StackSet block. Keep them
 gated on their own conditions:
+
 - `config.securityBaseline?.configDeliveryBucket` for bucket
 - `config.delegatedAdministrators` containing `config.amazonaws.com` for aggregator
 
@@ -40,6 +41,7 @@ The confirmation prompt and Lambda apply call are already gated on
 **File:** `src/commands/remote.test.ts`
 
 Add a test that:
+
 - Sets up state with `deployedStackSets` already populated (matching config)
 - Config declares `configRecorder` with a delegated admin
 - Mocks the Lambda client to track invocations

@@ -1,7 +1,8 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import type { Logger } from "../logger.js";
 
 const moduleDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -33,5 +34,7 @@ export async function runConfigRevealCommand(input: {
   if (skippedCount > 0) {
     input.logger.log(`Use --force to overwrite existing files.`);
   }
-  input.logger.log("Edit these files to customize. Local copies take precedence over package defaults.");
+  input.logger.log(
+    "Edit these files to customize. Local copies take precedence over package defaults.",
+  );
 }

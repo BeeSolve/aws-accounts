@@ -1,11 +1,7 @@
 import * as v from "valibot";
+
+import { planSchema, type Operation, type Plan, type UnsupportedDiff } from "./operations.js";
 import type { StateFile } from "./state.js";
-import {
-  planSchema,
-  type Operation,
-  type Plan,
-  type UnsupportedDiff,
-} from "./operations.js";
 
 const pendingCreationId = "__pending_creation__" as const;
 const operationExecutionPriority: Record<Operation["kind"], number> = {
@@ -66,17 +62,11 @@ type NormalizedOrganizationView = {
   rootId: string;
   organizationalUnits: StateFile["organization"]["organizationalUnits"];
   accounts: StateFile["organization"]["accounts"];
-  organizationalUnitByName: Map<
-    string,
-    StateFile["organization"]["organizationalUnits"][number]
-  >;
+  organizationalUnitByName: Map<string, StateFile["organization"]["organizationalUnits"][number]>;
   accountByName: Map<string, StateFile["organization"]["accounts"][number]>;
   accountById: Map<string, StateFile["organization"]["accounts"][number]>;
   organizationalUnitNameById: Map<string, string>;
-  organizationalUnitsByParentId: Map<
-    string,
-    StateFile["organization"]["organizationalUnits"]
-  >;
+  organizationalUnitsByParentId: Map<string, StateFile["organization"]["organizationalUnits"]>;
   accountsByParentId: Map<string, number>;
   organizationalUnitDepthById: Map<string, number>;
 };
@@ -95,15 +85,9 @@ type NormalizedIdcMembership = {
 
 type NormalizedIdcView = {
   usersByUserName: Map<string, StateFile["identityCenter"]["users"][number]>;
-  groupsByDisplayName: Map<
-    string,
-    StateFile["identityCenter"]["groups"][number]
-  >;
+  groupsByDisplayName: Map<string, StateFile["identityCenter"]["groups"][number]>;
   membershipsByKey: Map<string, NormalizedIdcMembership>;
-  permissionSetsByName: Map<
-    string,
-    StateFile["identityCenter"]["permissionSets"][number]
-  >;
+  permissionSetsByName: Map<string, StateFile["identityCenter"]["permissionSets"][number]>;
   assignmentsByKey: Map<string, NormalizedIdcAssignment>;
 };
 
@@ -127,9 +111,7 @@ export function diffStates(props: DiffStatesProps): Plan {
 
   const ouNamesBeingCreated = new Set(
     nextOrganization.organizationalUnits
-      .filter(
-        (ou) => !currentOrganization.organizationalUnitByName.has(ou.name),
-      )
+      .filter((ou) => !currentOrganization.organizationalUnitByName.has(ou.name))
       .map((ou) => ou.name),
   );
 
@@ -141,16 +123,14 @@ export function diffStates(props: DiffStatesProps): Plan {
     if (currentAccount == null) {
       if (nextAccount.id === pendingCreationId) {
         const targetOuName = resolveOrganizationalUnitName({
-          organizationalUnitNameById:
-            nextOrganization.organizationalUnitNameById,
+          organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
           rootId: nextOrganization.rootId,
           organizationalUnitId: nextAccount.parentId,
         });
         if (
           isResolvableOrganizationalUnitId({
             rootId: nextOrganization.rootId,
-            organizationalUnitNameById:
-              nextOrganization.organizationalUnitNameById,
+            organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
             organizationalUnitId: nextAccount.parentId,
           }) === false
         ) {
@@ -197,9 +177,7 @@ export function diffStates(props: DiffStatesProps): Plan {
           kind: "updateAccountTags",
           accountId: nextAccount.id,
           accountName: nextAccount.name,
-          tags: Object.fromEntries(
-            (nextTags ?? []).map((tag) => [tag.key, tag.value] as const),
-          ),
+          tags: Object.fromEntries((nextTags ?? []).map((tag) => [tag.key, tag.value] as const)),
         });
       }
       if (currentAccount.email !== nextAccount.email) {
@@ -226,8 +204,7 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     const fromOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById:
-        currentOrganization.organizationalUnitNameById,
+      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
       rootId: currentOrganization.rootId,
       organizationalUnitId: currentAccount.parentId,
     });
@@ -297,13 +274,9 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
-  const graveyardOrganizationalUnit =
-    currentOrganization.organizationalUnitByName.get("Graveyard");
+  const graveyardOrganizationalUnit = currentOrganization.organizationalUnitByName.get("Graveyard");
   for (const currentAccount of currentOrganization.accounts) {
-    if (
-      currentAccount.id !== pendingCreationId &&
-      nextAccountIds.has(currentAccount.id)
-    ) {
+    if (currentAccount.id !== pendingCreationId && nextAccountIds.has(currentAccount.id)) {
       continue;
     }
     if (graveyardOrganizationalUnit == null) {
@@ -318,8 +291,7 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     const fromOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById:
-        currentOrganization.organizationalUnitNameById,
+      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
       rootId: currentOrganization.rootId,
       organizationalUnitId: currentAccount.parentId,
     });
@@ -335,21 +307,17 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const nextOrganizationalUnit of nextOrganization.organizationalUnits) {
-    const currentOrganizationalUnit =
-      currentOrganization.organizationalUnitByName.get(
-        nextOrganizationalUnit.name,
-      );
+    const currentOrganizationalUnit = currentOrganization.organizationalUnitByName.get(
+      nextOrganizationalUnit.name,
+    );
     if (currentOrganizationalUnit == null) {
       continue;
     }
-    if (
-      currentOrganizationalUnit.parentId === nextOrganizationalUnit.parentId
-    ) {
+    if (currentOrganizationalUnit.parentId === nextOrganizationalUnit.parentId) {
       continue;
     }
     const fromParentOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById:
-        currentOrganization.organizationalUnitNameById,
+      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
       rootId: currentOrganization.rootId,
       organizationalUnitId: currentOrganizationalUnit.parentId,
     });
@@ -365,26 +333,16 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
-  const addedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] =
-    [];
-  const removedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] =
-    [];
+  const addedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] = [];
+  const removedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] = [];
   for (const nextOrganizationalUnit of nextOrganization.organizationalUnits) {
-    if (
-      currentOrganization.organizationalUnitByName.has(
-        nextOrganizationalUnit.name,
-      )
-    ) {
+    if (currentOrganization.organizationalUnitByName.has(nextOrganizationalUnit.name)) {
       continue;
     }
     addedOrganizationalUnits.push(nextOrganizationalUnit);
   }
   for (const currentOrganizationalUnit of currentOrganization.organizationalUnits) {
-    if (
-      nextOrganization.organizationalUnitByName.has(
-        currentOrganizationalUnit.name,
-      )
-    ) {
+    if (nextOrganization.organizationalUnitByName.has(currentOrganizationalUnit.name)) {
       continue;
     }
     removedOrganizationalUnits.push(currentOrganizationalUnit);
@@ -402,20 +360,15 @@ export function diffStates(props: DiffStatesProps): Plan {
   const consumedAddedOrganizationalUnitNames = new Set<string>();
   const consumedRemovedOrganizationalUnitNames = new Set<string>();
 
-  const parentIds = new Set<string>([
-    ...addedByParentId.keys(),
-    ...removedByParentId.keys(),
-  ]);
+  const parentIds = new Set<string>([...addedByParentId.keys(), ...removedByParentId.keys()]);
   for (const parentId of parentIds) {
     const parentAdded = (addedByParentId.get(parentId) ?? []).filter(
       (organizationalUnit) =>
-        consumedAddedOrganizationalUnitNames.has(organizationalUnit.name) ===
-        false,
+        consumedAddedOrganizationalUnitNames.has(organizationalUnit.name) === false,
     );
     const parentRemoved = (removedByParentId.get(parentId) ?? []).filter(
       (organizationalUnit) =>
-        consumedRemovedOrganizationalUnitNames.has(organizationalUnit.name) ===
-        false,
+        consumedRemovedOrganizationalUnitNames.has(organizationalUnit.name) === false,
     );
 
     if (parentAdded.length === 1 && parentRemoved.length === 1) {
@@ -467,9 +420,7 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const addedOrganizationalUnit of addedOrganizationalUnits) {
-    if (
-      consumedAddedOrganizationalUnitNames.has(addedOrganizationalUnit.name)
-    ) {
+    if (consumedAddedOrganizationalUnitNames.has(addedOrganizationalUnit.name)) {
       continue;
     }
     const parentOuName = resolveOrganizationalUnitName({
@@ -484,10 +435,7 @@ export function diffStates(props: DiffStatesProps): Plan {
         organizationalUnitId: addedOrganizationalUnit.parentId,
       }) === false
     ) {
-      if (
-        ouNamesBeingCreated.has(parentOuName) &&
-        parentOuName !== addedOrganizationalUnit.name
-      ) {
+      if (ouNamesBeingCreated.has(parentOuName) && parentOuName !== addedOrganizationalUnit.name) {
         operations.push({
           kind: "createOu",
           ouName: addedOrganizationalUnit.name,
@@ -512,27 +460,22 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
   const pendingRemovedOrganizationalUnits = removedOrganizationalUnits.filter(
     (organizationalUnit) =>
-      consumedRemovedOrganizationalUnitNames.has(organizationalUnit.name) ===
-      false,
+      consumedRemovedOrganizationalUnitNames.has(organizationalUnit.name) === false,
   );
   const pendingRemovedOrganizationalUnitIds = new Set(
-    pendingRemovedOrganizationalUnits.map(
-      (organizationalUnit) => organizationalUnit.id,
-    ),
+    pendingRemovedOrganizationalUnits.map((organizationalUnit) => organizationalUnit.id),
   );
   const deleteEligibilityByOuId = createDeleteEligibilityByOuId({
     removedOrganizationalUnits: pendingRemovedOrganizationalUnits,
     removedOrganizationalUnitIds: pendingRemovedOrganizationalUnitIds,
-    currentOrganizationalUnitsByParentId:
-      currentOrganization.organizationalUnitsByParentId,
+    currentOrganizationalUnitsByParentId: currentOrganization.organizationalUnitsByParentId,
     currentAccountsByParentId: currentOrganization.accountsByParentId,
     plannedMoveAccountDeparturesByOuId,
   });
   for (const removedOrganizationalUnit of pendingRemovedOrganizationalUnits) {
     if (deleteEligibilityByOuId.get(removedOrganizationalUnit.id) === true) {
       const parentOuName = resolveOrganizationalUnitName({
-        organizationalUnitNameById:
-          currentOrganization.organizationalUnitNameById,
+        organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
         rootId: currentOrganization.rootId,
         organizationalUnitId: removedOrganizationalUnit.parentId,
       });
@@ -576,12 +519,8 @@ export function diffStates(props: DiffStatesProps): Plan {
     if (currentUser == null) {
       continue;
     }
-    const emailWouldChange =
-      currentUser.email !== nextUser.email && nextUser.email.length > 0;
-    if (
-      currentUser.displayName === nextUser.displayName &&
-      emailWouldChange === false
-    ) {
+    const emailWouldChange = currentUser.email !== nextUser.email && nextUser.email.length > 0;
+    if (currentUser.displayName === nextUser.displayName && emailWouldChange === false) {
       continue;
     }
     operations.push({
@@ -604,9 +543,7 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const nextGroup of props.next.identityCenter.groups) {
-    const currentGroup = currentIdcView.groupsByDisplayName.get(
-      nextGroup.displayName,
-    );
+    const currentGroup = currentIdcView.groupsByDisplayName.get(nextGroup.displayName);
     if (currentGroup == null) {
       continue;
     }
@@ -622,31 +559,21 @@ export function diffStates(props: DiffStatesProps): Plan {
 
   const removedUserNames = new Set(
     props.current.identityCenter.users
-      .filter(
-        (user) => nextIdcView.usersByUserName.has(user.userName) === false,
-      )
+      .filter((user) => nextIdcView.usersByUserName.has(user.userName) === false)
       .map((user) => user.userName),
   );
   const removedGroupDisplayNames = new Set(
     props.current.identityCenter.groups
-      .filter(
-        (group) =>
-          nextIdcView.groupsByDisplayName.has(group.displayName) === false,
-      )
+      .filter((group) => nextIdcView.groupsByDisplayName.has(group.displayName) === false)
       .map((group) => group.displayName),
   );
   const removedPermissionSetNames = new Set(
     props.current.identityCenter.permissionSets
-      .filter(
-        (permissionSet) =>
-          nextIdcView.permissionSetsByName.has(permissionSet.name) === false,
-      )
+      .filter((permissionSet) => nextIdcView.permissionSetsByName.has(permissionSet.name) === false)
       .map((permissionSet) => permissionSet.name),
   );
   const permissionSetNamesWithDesiredAssignments = new Set(
-    [...nextIdcView.assignmentsByKey.values()].map(
-      (assignment) => assignment.permissionSetName,
-    ),
+    [...nextIdcView.assignmentsByKey.values()].map((assignment) => assignment.permissionSetName),
   );
 
   for (const nextMembership of nextIdcView.membershipsByKey.values()) {
@@ -681,9 +608,7 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const nextPermissionSet of props.next.identityCenter.permissionSets) {
-    const currentPermissionSet = currentIdcView.permissionSetsByName.get(
-      nextPermissionSet.name,
-    );
+    const currentPermissionSet = currentIdcView.permissionSetsByName.get(nextPermissionSet.name);
     if (currentPermissionSet == null) {
       operations.push({
         kind: "createIdcPermissionSet",
@@ -702,10 +627,7 @@ export function diffStates(props: DiffStatesProps): Plan {
           description: nextPermissionSet.description,
         });
       }
-      if (
-        currentPermissionSet.sessionDuration !==
-        nextPermissionSet.sessionDuration
-      ) {
+      if (currentPermissionSet.sessionDuration !== nextPermissionSet.sessionDuration) {
         operations.push({
           kind: "updateIdcPermissionSetSessionDuration",
           permissionSetName: nextPermissionSet.name,
@@ -717,9 +639,7 @@ export function diffStates(props: DiffStatesProps): Plan {
     const currentInlinePolicy = normalizeInlinePolicyString(
       currentPermissionSet?.inlinePolicy ?? null,
     );
-    const nextInlinePolicy = normalizeInlinePolicyString(
-      nextPermissionSet.inlinePolicy,
-    );
+    const nextInlinePolicy = normalizeInlinePolicyString(nextPermissionSet.inlinePolicy);
     if (nextInlinePolicy != null && nextInlinePolicy !== currentInlinePolicy) {
       operations.push({
         kind: "putIdcPermissionSetInlinePolicy",
@@ -734,12 +654,8 @@ export function diffStates(props: DiffStatesProps): Plan {
       });
     }
 
-    const currentAwsManagedPolicies = new Set(
-      currentPermissionSet?.awsManagedPolicies ?? [],
-    );
-    const nextAwsManagedPolicies = new Set(
-      nextPermissionSet.awsManagedPolicies,
-    );
+    const currentAwsManagedPolicies = new Set(currentPermissionSet?.awsManagedPolicies ?? []);
+    const nextAwsManagedPolicies = new Set(nextPermissionSet.awsManagedPolicies);
     for (const managedPolicyArn of nextAwsManagedPolicies) {
       if (currentAwsManagedPolicies.has(managedPolicyArn)) {
         continue;
@@ -773,10 +689,7 @@ export function diffStates(props: DiffStatesProps): Plan {
         policy,
       ]),
     );
-    for (const [
-      policyKey,
-      customerManagedPolicy,
-    ] of nextCustomerManagedPolicies) {
+    for (const [policyKey, customerManagedPolicy] of nextCustomerManagedPolicies) {
       if (currentCustomerManagedPolicies.has(policyKey)) {
         continue;
       }
@@ -787,10 +700,7 @@ export function diffStates(props: DiffStatesProps): Plan {
         customerManagedPolicyPath: customerManagedPolicy.path,
       });
     }
-    for (const [
-      policyKey,
-      customerManagedPolicy,
-    ] of currentCustomerManagedPolicies) {
+    for (const [policyKey, customerManagedPolicy] of currentCustomerManagedPolicies) {
       if (nextCustomerManagedPolicies.has(policyKey)) {
         continue;
       }
@@ -857,12 +767,10 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
     if (
       nextIdcView.assignmentsByKey.has(assignmentKey) &&
-      removedPermissionSetNames.has(currentAssignment.permissionSetName) ===
-        false &&
+      removedPermissionSetNames.has(currentAssignment.permissionSetName) === false &&
       (currentAssignment.principalType === "USER"
         ? removedUserNames.has(currentAssignment.principalName) === false
-        : removedGroupDisplayNames.has(currentAssignment.principalName) ===
-          false)
+        : removedGroupDisplayNames.has(currentAssignment.principalName) === false)
     ) {
       continue;
     }
@@ -893,21 +801,13 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
-  const currentAccessControlAttributes =
-    props.current.identityCenter.accessControlAttributes ?? [];
-  const nextAccessControlAttributes =
-    props.next.identityCenter.accessControlAttributes ?? [];
+  const currentAccessControlAttributes = props.current.identityCenter.accessControlAttributes ?? [];
+  const nextAccessControlAttributes = props.next.identityCenter.accessControlAttributes ?? [];
   if (
     JSON.stringify(
-      [...currentAccessControlAttributes].sort((a, b) =>
-        a.key.localeCompare(b.key),
-      ),
+      [...currentAccessControlAttributes].sort((a, b) => a.key.localeCompare(b.key)),
     ) !==
-    JSON.stringify(
-      [...nextAccessControlAttributes].sort((a, b) =>
-        a.key.localeCompare(b.key),
-      ),
-    )
+    JSON.stringify([...nextAccessControlAttributes].sort((a, b) => a.key.localeCompare(b.key)))
   ) {
     operations.push({
       kind: "setIdcAccessControlAttributes",
@@ -916,36 +816,22 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   const nextAccountNameById = new Map(
-    props.next.organization.accounts.map((account) => [
-      account.id,
-      account.name,
-    ]),
+    props.next.organization.accounts.map((account) => [account.id, account.name]),
   );
   const currentAccountNameById = new Map(
-    props.current.organization.accounts.map((account) => [
-      account.id,
-      account.name,
-    ]),
+    props.current.organization.accounts.map((account) => [account.id, account.name]),
   );
 
-  const currentDelegatedAdmins =
-    props.current.organization.delegatedAdministrators ?? [];
-  const nextDelegatedAdmins =
-    props.next.organization.delegatedAdministrators ?? [];
+  const currentDelegatedAdmins = props.current.organization.delegatedAdministrators ?? [];
+  const nextDelegatedAdmins = props.next.organization.delegatedAdministrators ?? [];
   const nextDelegatedAdminKeys = new Set(
     nextDelegatedAdmins.map((da) => `${da.accountId}|${da.servicePrincipal}`),
   );
   const currentDelegatedAdminKeys = new Set(
-    currentDelegatedAdmins.map(
-      (da) => `${da.accountId}|${da.servicePrincipal}`,
-    ),
+    currentDelegatedAdmins.map((da) => `${da.accountId}|${da.servicePrincipal}`),
   );
   for (const nextDa of nextDelegatedAdmins) {
-    if (
-      currentDelegatedAdminKeys.has(
-        `${nextDa.accountId}|${nextDa.servicePrincipal}`,
-      )
-    ) {
+    if (currentDelegatedAdminKeys.has(`${nextDa.accountId}|${nextDa.servicePrincipal}`)) {
       continue;
     }
     operations.push({
@@ -956,11 +842,7 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
   for (const currentDa of currentDelegatedAdmins) {
-    if (
-      nextDelegatedAdminKeys.has(
-        `${currentDa.accountId}|${currentDa.servicePrincipal}`,
-      )
-    ) {
+    if (nextDelegatedAdminKeys.has(`${currentDa.accountId}|${currentDa.servicePrincipal}`)) {
       continue;
     }
     operations.push({
@@ -973,30 +855,20 @@ export function diffStates(props: DiffStatesProps): Plan {
 
   const currentPolicies = props.current.organization.policies ?? [];
   const nextPolicies = props.next.organization.policies ?? [];
-  const currentPolicyAttachments =
-    props.current.organization.policyAttachments ?? [];
+  const currentPolicyAttachments = props.current.organization.policyAttachments ?? [];
   const nextPolicyAttachments = props.next.organization.policyAttachments ?? [];
 
-  const currentPoliciesByName = new Map(
-    currentPolicies.map((p) => [`${p.type}|${p.name}`, p]),
-  );
-  const nextPoliciesByName = new Map(
-    nextPolicies.map((p) => [`${p.type}|${p.name}`, p]),
-  );
+  const currentPoliciesByName = new Map(currentPolicies.map((p) => [`${p.type}|${p.name}`, p]));
+  const nextPoliciesByName = new Map(nextPolicies.map((p) => [`${p.type}|${p.name}`, p]));
 
   const currentAttachmentsByKey = new Set(
     currentPolicyAttachments.map((a) => `${a.policyId}|${a.targetId}`),
   );
 
-  const nextPoliciesByPendingId = new Map<
-    string,
-    (typeof nextPolicies)[number]
-  >();
+  const nextPoliciesByPendingId = new Map<string, (typeof nextPolicies)[number]>();
 
   for (const nextPolicy of nextPolicies) {
-    const currentPolicy = currentPoliciesByName.get(
-      `${nextPolicy.type}|${nextPolicy.name}`,
-    );
+    const currentPolicy = currentPoliciesByName.get(`${nextPolicy.type}|${nextPolicy.name}`);
     if (currentPolicy == null) {
       operations.push({
         kind: "createOrgPolicy",
@@ -1009,10 +881,7 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
 
-    if (
-      normalizeJsonContent(currentPolicy.content) !==
-      normalizeJsonContent(nextPolicy.content)
-    ) {
+    if (normalizeJsonContent(currentPolicy.content) !== normalizeJsonContent(nextPolicy.content)) {
       operations.push({
         kind: "updateOrgPolicyContent",
         policyId: currentPolicy.id,
@@ -1037,26 +906,18 @@ export function diffStates(props: DiffStatesProps): Plan {
     props.next.organization.organizationalUnits.map((ou) => [ou.id, ou.name]),
   );
   const currentOuNameById = new Map(
-    props.current.organization.organizationalUnits.map((ou) => [
-      ou.id,
-      ou.name,
-    ]),
+    props.current.organization.organizationalUnits.map((ou) => [ou.id, ou.name]),
   );
 
   function resolveNextTargetName(targetId: string, targetType: string): string {
     if (targetType === "ROOT") return "root";
-    if (targetType === "ORGANIZATIONAL_UNIT")
-      return nextOuNameById.get(targetId) ?? "unknown";
+    if (targetType === "ORGANIZATIONAL_UNIT") return nextOuNameById.get(targetId) ?? "unknown";
     return nextAccountNameById.get(targetId) ?? "unknown";
   }
 
-  function resolveCurrentTargetName(
-    targetId: string,
-    targetType: string,
-  ): string {
+  function resolveCurrentTargetName(targetId: string, targetType: string): string {
     if (targetType === "ROOT") return "root";
-    if (targetType === "ORGANIZATIONAL_UNIT")
-      return currentOuNameById.get(targetId) ?? "unknown";
+    if (targetType === "ORGANIZATIONAL_UNIT") return currentOuNameById.get(targetId) ?? "unknown";
     return currentAccountNameById.get(targetId) ?? "unknown";
   }
 
@@ -1082,19 +943,13 @@ export function diffStates(props: DiffStatesProps): Plan {
       policyId: nextAttachment.policyId,
       policyName: policy.name,
       targetId: nextAttachment.targetId,
-      targetName: resolveNextTargetName(
-        nextAttachment.targetId,
-        nextAttachment.targetType,
-      ),
+      targetName: resolveNextTargetName(nextAttachment.targetId, nextAttachment.targetType),
     });
   }
 
   const nextAttachmentKeys = new Set(
     nextPolicyAttachments
-      .filter(
-        (a) =>
-          a.policyId !== pendingCreationId && a.targetId !== pendingCreationId,
-      )
+      .filter((a) => a.policyId !== pendingCreationId && a.targetId !== pendingCreationId)
       .map((a) => `${a.policyId}|${a.targetId}`),
   );
   const nextPolicyIds = new Set(
@@ -1138,8 +993,7 @@ export function diffStates(props: DiffStatesProps): Plan {
 
   operations.sort((left, right) => {
     const priorityComparison =
-      getOperationExecutionPriority(left) -
-      getOperationExecutionPriority(right);
+      getOperationExecutionPriority(left) - getOperationExecutionPriority(right);
     if (priorityComparison !== 0) {
       return priorityComparison;
     }
@@ -1157,8 +1011,7 @@ export function diffStates(props: DiffStatesProps): Plan {
   // Topo-sort createOu ops so parent OUs are always created before children.
   // Only the subset where parentOuId is pendingCreationId has ordering constraints.
   const createOuOps = operations.filter(
-    (op): op is Extract<Operation, { kind: "createOu" }> =>
-      op.kind === "createOu",
+    (op): op is Extract<Operation, { kind: "createOu" }> => op.kind === "createOu",
   );
   const otherOps = operations.filter((op) => op.kind !== "createOu");
   if (createOuOps.some((op) => op.parentOuId === pendingCreationId)) {
@@ -1195,10 +1048,7 @@ export function diffStates(props: DiffStatesProps): Plan {
 function groupOrganizationalUnitsByParentId(
   props: GroupOrganizationalUnitsByParentIdProps,
 ): Map<string, StateFile["organization"]["organizationalUnits"]> {
-  const grouped = new Map<
-    string,
-    StateFile["organization"]["organizationalUnits"]
-  >();
+  const grouped = new Map<string, StateFile["organization"]["organizationalUnits"]>();
   for (const organizationalUnit of props.organizationalUnits) {
     const existing = grouped.get(organizationalUnit.parentId) ?? [];
     existing.push(organizationalUnit);
@@ -1217,9 +1067,7 @@ function countChildrenByParentId(props: {
   return counts;
 }
 
-function countMoveAccountDeparturesByOuId(props: {
-  operations: Operation[];
-}): Map<string, number> {
+function countMoveAccountDeparturesByOuId(props: { operations: Operation[] }): Map<string, number> {
   const counts = new Map<string, number>();
   for (const operation of props.operations) {
     if (operation.kind !== "moveAccount") {
@@ -1249,10 +1097,7 @@ function normalizeOrganizationState(props: {
   const accountByName = new Map(
     props.state.organization.accounts.map((account) => [account.name, account]),
   );
-  const accountById = new Map<
-    string,
-    StateFile["organization"]["accounts"][number]
-  >();
+  const accountById = new Map<string, StateFile["organization"]["accounts"][number]>();
   for (const account of props.state.organization.accounts) {
     if (account.id !== pendingCreationId) {
       accountById.set(account.id, account);
@@ -1309,13 +1154,9 @@ function createDeleteEligibilityByOuId(props: {
     }
 
     const currentChildren =
-      props.currentOrganizationalUnitsByParentId.get(organizationalUnitId) ??
-      [];
+      props.currentOrganizationalUnitsByParentId.get(organizationalUnitId) ?? [];
     for (const childOrganizationalUnit of currentChildren) {
-      if (
-        props.removedOrganizationalUnitIds.has(childOrganizationalUnit.id) ===
-        false
-      ) {
+      if (props.removedOrganizationalUnitIds.has(childOrganizationalUnit.id) === false) {
         eligibilityByOuId.set(organizationalUnitId, false);
         return false;
       }
@@ -1342,10 +1183,7 @@ function createDeleteEligibilityByOuId(props: {
 
 function createOrganizationalUnitDepthById(props: {
   rootId: string;
-  organizationalUnitById: Map<
-    string,
-    StateFile["organization"]["organizationalUnits"][number]
-  >;
+  organizationalUnitById: Map<string, StateFile["organization"]["organizationalUnits"][number]>;
 }): Map<string, number> {
   const depthById = new Map<string, number>();
 
@@ -1355,8 +1193,7 @@ function createOrganizationalUnitDepthById(props: {
       return cachedDepth;
     }
 
-    const organizationalUnit =
-      props.organizationalUnitById.get(organizationalUnitId);
+    const organizationalUnit = props.organizationalUnitById.get(organizationalUnitId);
     if (organizationalUnit == null) {
       return 0;
     }
@@ -1424,10 +1261,7 @@ function getOperationSortKey(operation: Operation): string {
   if (operation.kind === "deleteIdcGroup") {
     return `${operation.kind}|${operation.groupDisplayName}`;
   }
-  if (
-    operation.kind === "addIdcGroupMembership" ||
-    operation.kind === "removeIdcGroupMembership"
-  ) {
+  if (operation.kind === "addIdcGroupMembership" || operation.kind === "removeIdcGroupMembership") {
     return `${operation.kind}|${operation.groupDisplayName}|${operation.userName}`;
   }
   if (operation.kind === "createIdcPermissionSet") {
@@ -1448,17 +1282,11 @@ function getOperationSortKey(operation: Operation): string {
     operation.kind === "attachIdcManagedPolicyToPermissionSet" ||
     operation.kind === "detachIdcManagedPolicyFromPermissionSet"
   ) {
-    return [
-      operation.kind,
-      operation.permissionSetName,
-      operation.managedPolicyArn,
-    ].join("|");
+    return [operation.kind, operation.permissionSetName, operation.managedPolicyArn].join("|");
   }
   if (
-    operation.kind ===
-      "attachIdcCustomerManagedPolicyReferenceToPermissionSet" ||
-    operation.kind ===
-      "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
+    operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet" ||
+    operation.kind === "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
   ) {
     return [
       operation.kind,
@@ -1489,21 +1317,11 @@ function getOperationSortKey(operation: Operation): string {
   ) {
     return `${operation.kind}|${operation.policyName}`;
   }
-  if (
-    operation.kind === "attachOrgPolicy" ||
-    operation.kind === "detachOrgPolicy"
-  ) {
-    return [operation.kind, operation.policyName, operation.targetName].join(
-      "|",
-    );
+  if (operation.kind === "attachOrgPolicy" || operation.kind === "detachOrgPolicy") {
+    return [operation.kind, operation.policyName, operation.targetName].join("|");
   }
-  if (
-    operation.kind === "putAlternateContact" ||
-    operation.kind === "deleteAlternateContact"
-  ) {
-    return [operation.kind, operation.accountName, operation.contactType].join(
-      "|",
-    );
+  if (operation.kind === "putAlternateContact" || operation.kind === "deleteAlternateContact") {
+    return [operation.kind, operation.accountName, operation.contactType].join("|");
   }
   if (operation.kind === "setIdcAccessControlAttributes") {
     return operation.kind;
@@ -1512,11 +1330,7 @@ function getOperationSortKey(operation: Operation): string {
     operation.kind === "registerDelegatedAdministrator" ||
     operation.kind === "deregisterDelegatedAdministrator"
   ) {
-    return [
-      operation.kind,
-      operation.accountName,
-      operation.servicePrincipal,
-    ].join("|");
+    return [operation.kind, operation.accountName, operation.servicePrincipal].join("|");
   }
   return "zzzz";
 }
@@ -1536,35 +1350,22 @@ function normalizeAccountTags(
     return [];
   }
   return [...tags].sort((left, right) =>
-    [left.key, left.value]
-      .join("|")
-      .localeCompare([right.key, right.value].join("|")),
+    [left.key, left.value].join("|").localeCompare([right.key, right.value].join("|")),
   );
 }
 
-function normalizeIdentityCenterState(props: {
-  state: StateFile;
-}): NormalizedIdcView {
+function normalizeIdentityCenterState(props: { state: StateFile }): NormalizedIdcView {
   const usersByUserName = new Map(
     props.state.identityCenter.users.map((user) => [user.userName, user]),
   );
   const groupsByDisplayName = new Map(
-    props.state.identityCenter.groups.map((group) => [
-      group.displayName,
-      group,
-    ]),
+    props.state.identityCenter.groups.map((group) => [group.displayName, group]),
   );
   const groupDisplayNameById = new Map(
-    props.state.identityCenter.groups.map((group) => [
-      group.groupId,
-      group.displayName,
-    ]),
+    props.state.identityCenter.groups.map((group) => [group.groupId, group.displayName]),
   );
   const userNameById = new Map(
-    props.state.identityCenter.users.map((user) => [
-      user.userId,
-      user.userName,
-    ]),
+    props.state.identityCenter.users.map((user) => [user.userId, user.userName]),
   );
   const membershipsByKey = new Map<string, NormalizedIdcMembership>();
   for (const groupMembership of props.state.identityCenter.groupMemberships) {
@@ -1598,10 +1399,7 @@ function normalizeIdentityCenterState(props: {
     ]),
   );
   const accountNameById = new Map(
-    props.state.organization.accounts.map((account) => [
-      account.id,
-      account.name,
-    ]),
+    props.state.organization.accounts.map((account) => [account.id, account.name]),
   );
   const permissionSetNameByArn = new Map(
     props.state.identityCenter.permissionSets.map((permissionSet) => [
@@ -1610,17 +1408,14 @@ function normalizeIdentityCenterState(props: {
     ]),
   );
   const assignmentsByKey = new Map<string, NormalizedIdcAssignment>();
-  for (const accountAssignment of props.state.identityCenter
-    .accountAssignments) {
+  for (const accountAssignment of props.state.identityCenter.accountAssignments) {
     const accountName = accountNameById.get(accountAssignment.accountId);
     if (accountName == null) {
       throw new Error(
         `Could not resolve account name for IdC assignment accountId "${accountAssignment.accountId}".`,
       );
     }
-    const permissionSetName = permissionSetNameByArn.get(
-      accountAssignment.permissionSetArn,
-    );
+    const permissionSetName = permissionSetNameByArn.get(accountAssignment.permissionSetArn);
     if (permissionSetName == null) {
       throw new Error(
         `Could not resolve permission set name for IdC assignment permissionSetArn "${accountAssignment.permissionSetArn}".`,
@@ -1654,12 +1449,8 @@ function normalizeIdentityCenterState(props: {
   };
 }
 
-function createNormalizedIdcMembershipKey(props: {
-  membership: NormalizedIdcMembership;
-}): string {
-  return [props.membership.groupDisplayName, props.membership.userName].join(
-    "|",
-  );
+function createNormalizedIdcMembershipKey(props: { membership: NormalizedIdcMembership }): string {
+  return [props.membership.groupDisplayName, props.membership.userName].join("|");
 }
 
 function resolveAssignmentPrincipalName(props: {
@@ -1686,9 +1477,7 @@ function resolveAssignmentPrincipalName(props: {
   return userName;
 }
 
-function createNormalizedIdcAssignmentKey(props: {
-  assignment: NormalizedIdcAssignment;
-}): string {
+function createNormalizedIdcAssignmentKey(props: { assignment: NormalizedIdcAssignment }): string {
   return [
     props.assignment.accountName,
     props.assignment.permissionSetName,
@@ -1697,10 +1486,7 @@ function createNormalizedIdcAssignmentKey(props: {
   ].join("|");
 }
 
-function createCustomerManagedPolicyReferenceKey(props: {
-  name: string;
-  path: string;
-}): string {
+function createCustomerManagedPolicyReferenceKey(props: { name: string; path: string }): string {
   return [props.path, props.name].join("|");
 }
 
@@ -1737,10 +1523,7 @@ function resolveOrganizationalUnitName(props: {
   if (props.organizationalUnitId === props.rootId) {
     return "root";
   }
-  return (
-    props.organizationalUnitNameById.get(props.organizationalUnitId) ??
-    "unknown"
-  );
+  return props.organizationalUnitNameById.get(props.organizationalUnitId) ?? "unknown";
 }
 
 function isResolvableOrganizationalUnitId(props: {
@@ -1768,9 +1551,7 @@ function diffAlternateContacts(props: {
   currentContacts: AlternateContact[];
   nextContacts: AlternateContact[];
 }): void {
-  const currentByType = new Map(
-    props.currentContacts.map((c) => [c.contactType, c]),
-  );
+  const currentByType = new Map(props.currentContacts.map((c) => [c.contactType, c]));
   const nextByType = new Map(props.nextContacts.map((c) => [c.contactType, c]));
   for (const next of props.nextContacts) {
     const current = currentByType.get(next.contactType);

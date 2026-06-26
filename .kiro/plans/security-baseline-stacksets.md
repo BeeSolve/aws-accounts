@@ -27,6 +27,7 @@ aws.config.ts                    Remote Lambda
 Export path: `@beesolve/aws-accounts/security`
 
 The file contains:
+
 - `toPolicies<T, A>()` — SCP, backup policy, and permission set pattern builders
 - `withSecurityBaseline()` — config wrapper for security infrastructure
 
@@ -62,7 +63,13 @@ const awsConfig = withSecurityBaseline(
     policies: {
       serviceControlPolicies: [
         scp.blockExpensiveResources({
-          allowedEc2InstanceTypes: ["t3.micro", "t3.small", "t4g.medium", "m8g.medium", "m8g.large"],
+          allowedEc2InstanceTypes: [
+            "t3.micro",
+            "t3.small",
+            "t4g.medium",
+            "m8g.medium",
+            "m8g.large",
+          ],
           targets: ["root"],
         }),
         scp.protectSecurityServices({ targets: ["root"] }),
@@ -134,9 +141,14 @@ type SecurityBaselineOptions<T extends string, A extends string> = {
     delegatedAdminAccount: A;
     deliveryBucketAccount: A;
     targets: T[];
-    recordAllResourceTypes?: boolean;       // default: true
-    includeGlobalResources?: boolean;       // default: true
-    deliveryFrequency?: "One_Hour" | "Three_Hours" | "Six_Hours" | "Twelve_Hours" | "TwentyFour_Hours";
+    recordAllResourceTypes?: boolean; // default: true
+    includeGlobalResources?: boolean; // default: true
+    deliveryFrequency?:
+      | "One_Hour"
+      | "Three_Hours"
+      | "Six_Hours"
+      | "Twelve_Hours"
+      | "TwentyFour_Hours";
   };
   guardDuty?: {
     enabled: boolean;
@@ -239,6 +251,7 @@ npx aws-accounts config reveal
 ```
 
 Copies default templates to `./templates/` in the user's project. The tool resolves templates as:
+
 1. Check `./templates/<key>.yaml` (user override)
 2. Fall back to package default `templates/<key>.yaml`
 
@@ -264,11 +277,13 @@ const deployStackSetRequestSchema = v.strictObject({
   action: v.literal("deployStackSet"),
   stackSetName: v.string(),
   templateS3Key: v.string(),
-  targets: v.array(v.string()),       // resolved OU IDs
-  parameters: v.array(v.strictObject({
-    key: v.string(),
-    value: v.string(),
-  })),
+  targets: v.array(v.string()), // resolved OU IDs
+  parameters: v.array(
+    v.strictObject({
+      key: v.string(),
+      value: v.string(),
+    }),
+  ),
   regions: v.array(v.string()),
 });
 ```
@@ -300,6 +315,7 @@ Edit these files to customize. Local copies take precedence over package default
 ## Task Breakdown
 
 ### Task 1: Rename `policies.ts` → `security.ts`, update exports
+
 - Rename file
 - Update `package.json` exports: `"./security"` replaces `"./policies"`
 - Keep `"./policies"` as deprecated alias pointing to same file
@@ -307,54 +323,64 @@ Edit these files to customize. Local copies take precedence over package default
 - Update generated types codegen to import from new path
 
 ### Task 2: Implement `withSecurityBaseline()` function
+
 - Define `SecurityBaselineOptions<T, A>` and `SecurityBaselineConfig` types
 - Implement config enhancement logic (add delegated admins, record StackSet metadata)
 - Validate referenced account names exist in config
 - Unit tests
 
 ### Task 3: Extend `AwsConfigModel` with optional `securityBaseline` field
+
 - Add to schema (optional, not required for existing users)
 - Update `mapAwsConfigToState` to handle StackSet declarations
 - Update state schema with StackSet state tracking
 - Update diff logic to detect StackSet changes
 
 ### Task 4: Create default CloudFormation templates
+
 - `templates/config-recorder.yaml`
 - `templates/guardduty-member.yaml`
 - Add `"templates"` to `files` array in `package.json`
 - Template resolution helper (user override > package default)
 
 ### Task 5: Implement `config reveal` CLI command
+
 - New command in `src/commands/`
 - Copies templates from package to `./templates/`
 - Register in CLI dispatcher
 
 ### Task 6: Add `getUploadUrl` Lambda action
+
 - New handler branch for presigned PUT URLs
 - CLI uploads template content to S3 via presigned URL
 
 ### Task 7: Add `deployStackSet` Lambda action
+
 - Lambda handler: `CreateStackSet` / `UpdateStackSet` + `CreateStackInstances`
 - Uses service-managed permissions (Organizations integration)
 - Handles idempotency (update if exists, create if not)
 
 ### Task 8: Add StackSet operation types to plan/apply
+
 - New operation kinds: `createStackSet`, `updateStackSet`, `deleteStackSet`
 - Diff logic: compare desired vs deployed StackSets
 - Apply flow: upload template → invoke `deployStackSet`
 - State tracking for deployed StackSets
 
 ### Task 9: Extend Lambda IAM role permissions
+
 - Add to bootstrap: `cloudformation:Create*StackSet*`, `cloudformation:Update*`, `cloudformation:Delete*`, `cloudformation:Describe*`, `cloudformation:List*`
 - Add Organizations permissions for service-managed StackSets
 
 ### Task 10: Update README and docs
+
 - Document `withSecurityBaseline()` with ready-to-copy Security OU snippet
 - Document `config reveal` command
 - Document template override mechanism
 - Document StackSet parameters
 
 ### Task 11: Integration tests
+
 - `withSecurityBaseline` enhances config correctly
 - Plan shows StackSet operations
 - Template resolution (user override vs default)
