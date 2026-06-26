@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import * as v from "valibot";
 
-import { toRecordByProperty } from "./helpers.js";
+import { sortJsonValue, toRecordByProperty } from "./helpers.js";
 
 const nonEmptyString = v.pipe(v.string(), v.minLength(1));
 const principalTypeSchema = v.picklist(["GROUP", "USER"]);
@@ -1043,18 +1043,4 @@ function normalizeAccountTags(
   return [...tags].sort((left, right) =>
     compareByKeys(left.key, right.key, left.value, right.value),
   );
-}
-
-function sortJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((entry) => sortJsonValue(entry));
-  }
-  if (value != null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
-        .map(([key, nestedValue]) => [key, sortJsonValue(nestedValue)]),
-    );
-  }
-  return value;
 }

@@ -831,14 +831,21 @@ export async function executeOperation(props: ExecuteOperationInput): Promise<Wo
         `ProvisionPermissionSet for "${props.operation.permissionSetName}" returned no request id.`,
       );
     }
-    await waitForPermissionSetProvisioningSuccess({
-      ssoAdminClient: props.ssoAdminClient,
+    await pollAsyncOperation({
+      pollFn: async () => {
+        const response = await props.ssoAdminClient.send(
+          new DescribePermissionSetProvisioningStatusCommand({
+            InstanceArn: props.state.identityCenter.instanceArn,
+            ProvisionPermissionSetRequestId: requestId,
+          }),
+        );
+        const s = response.PermissionSetProvisioningStatus;
+        return { status: s?.Status, failureReason: s?.FailureReason };
+      },
       logger: props.logger,
-      instanceArn: props.state.identityCenter.instanceArn,
-      requestId,
       timeoutInMs: props.runtime.permissionSetProvisioning.timeoutInMs,
       pollIntervalInMs: props.runtime.permissionSetProvisioning.pollIntervalInMs,
-      operationLabel: `"${props.operation.permissionSetName}"`,
+      operationLabel: `ProvisionPermissionSet "${props.operation.permissionSetName}"`,
     });
     props.logger.log(`Done: "${props.operation.permissionSetName}"`);
     return props.state;
@@ -955,14 +962,21 @@ export async function executeOperation(props: ExecuteOperationInput): Promise<Wo
         `CreateAccountAssignment for "${props.operation.permissionSetName}" on "${props.operation.accountName}" returned no request id.`,
       );
     }
-    await waitForAccountAssignmentCreationSuccess({
-      ssoAdminClient: props.ssoAdminClient,
+    await pollAsyncOperation({
+      pollFn: async () => {
+        const response = await props.ssoAdminClient.send(
+          new DescribeAccountAssignmentCreationStatusCommand({
+            InstanceArn: props.state.identityCenter.instanceArn,
+            AccountAssignmentCreationRequestId: requestId,
+          }),
+        );
+        const s = response.AccountAssignmentCreationStatus;
+        return { status: s?.Status, failureReason: s?.FailureReason };
+      },
       logger: props.logger,
-      instanceArn: props.state.identityCenter.instanceArn,
-      requestId,
       timeoutInMs: props.runtime.accountAssignment.timeoutInMs,
       pollIntervalInMs: props.runtime.accountAssignment.pollIntervalInMs,
-      operationLabel: `"${props.operation.permissionSetName}" on "${props.operation.accountName}"`,
+      operationLabel: `CreateAccountAssignment "${props.operation.permissionSetName}" on "${props.operation.accountName}"`,
     });
     props.logger.log(
       `Done: "${props.operation.permissionSetName}" -> "${props.operation.accountName}"`,
@@ -1007,14 +1021,21 @@ export async function executeOperation(props: ExecuteOperationInput): Promise<Wo
         `DeleteAccountAssignment for "${props.operation.permissionSetName}" on "${props.operation.accountName}" returned no request id.`,
       );
     }
-    await waitForAccountAssignmentDeletionSuccess({
-      ssoAdminClient: props.ssoAdminClient,
+    await pollAsyncOperation({
+      pollFn: async () => {
+        const response = await props.ssoAdminClient.send(
+          new DescribeAccountAssignmentDeletionStatusCommand({
+            InstanceArn: props.state.identityCenter.instanceArn,
+            AccountAssignmentDeletionRequestId: requestId,
+          }),
+        );
+        const s = response.AccountAssignmentDeletionStatus;
+        return { status: s?.Status, failureReason: s?.FailureReason };
+      },
       logger: props.logger,
-      instanceArn: props.state.identityCenter.instanceArn,
-      requestId,
       timeoutInMs: props.runtime.accountAssignment.timeoutInMs,
       pollIntervalInMs: props.runtime.accountAssignment.pollIntervalInMs,
-      operationLabel: `"${props.operation.permissionSetName}" on "${props.operation.accountName}"`,
+      operationLabel: `DeleteAccountAssignment "${props.operation.permissionSetName}" on "${props.operation.accountName}"`,
     });
     props.logger.log(
       `Done: "${props.operation.permissionSetName}" x "${props.operation.accountName}"`,
@@ -1538,11 +1559,9 @@ async function listFirstAccountForParent(props: {
   return undefined;
 }
 
-async function waitForAccountAssignmentCreationSuccess(props: {
-  ssoAdminClient: SSOAdminClient;
+async function pollAsyncOperation(props: {
+  pollFn: () => Promise<{ status: string | undefined; failureReason: string | undefined }>;
   logger: Logger;
-  instanceArn: string;
-  requestId: string;
   timeoutInMs: number;
   pollIntervalInMs: number;
   operationLabel: string;
@@ -1550,109 +1569,21 @@ async function waitForAccountAssignmentCreationSuccess(props: {
   const startedAt = Date.now();
   let lastStatus: string | undefined;
   while (Date.now() - startedAt < props.timeoutInMs) {
-    const response = await props.ssoAdminClient.send(
-      new DescribeAccountAssignmentCreationStatusCommand({
-        InstanceArn: props.instanceArn,
-        AccountAssignmentCreationRequestId: props.requestId,
-      }),
-    );
-    const status = response.AccountAssignmentCreationStatus;
-    const state = status?.Status ?? "UNKNOWN";
+    const { status, failureReason } = await props.pollFn();
+    const state = status ?? "UNKNOWN";
     if (state !== lastStatus) {
-      props.logger.log(`CreateAccountAssignment status: ${state}`);
+      props.logger.log(`${props.operationLabel} status: ${state}`);
       lastStatus = state;
     }
     if (state === "SUCCEEDED") {
       return;
     }
     if (state === "FAILED") {
-      throw new Error(
-        `CreateAccountAssignment failed for ${props.operationLabel}: ${status?.FailureReason ?? "unknown reason"}.`,
-      );
+      throw new Error(`${props.operationLabel} failed: ${failureReason ?? "unknown reason"}.`);
     }
     await delay(props.pollIntervalInMs);
   }
-  throw new Error(
-    `CreateAccountAssignment timed out after ${props.timeoutInMs}ms for ${props.operationLabel}.`,
-  );
-}
-
-async function waitForAccountAssignmentDeletionSuccess(props: {
-  ssoAdminClient: SSOAdminClient;
-  logger: Logger;
-  instanceArn: string;
-  requestId: string;
-  timeoutInMs: number;
-  pollIntervalInMs: number;
-  operationLabel: string;
-}): Promise<void> {
-  const startedAt = Date.now();
-  let lastStatus: string | undefined;
-  while (Date.now() - startedAt < props.timeoutInMs) {
-    const response = await props.ssoAdminClient.send(
-      new DescribeAccountAssignmentDeletionStatusCommand({
-        InstanceArn: props.instanceArn,
-        AccountAssignmentDeletionRequestId: props.requestId,
-      }),
-    );
-    const status = response.AccountAssignmentDeletionStatus;
-    const state = status?.Status ?? "UNKNOWN";
-    if (state !== lastStatus) {
-      props.logger.log(`DeleteAccountAssignment status: ${state}`);
-      lastStatus = state;
-    }
-    if (state === "SUCCEEDED") {
-      return;
-    }
-    if (state === "FAILED") {
-      throw new Error(
-        `DeleteAccountAssignment failed for ${props.operationLabel}: ${status?.FailureReason ?? "unknown reason"}.`,
-      );
-    }
-    await delay(props.pollIntervalInMs);
-  }
-  throw new Error(
-    `DeleteAccountAssignment timed out after ${props.timeoutInMs}ms for ${props.operationLabel}.`,
-  );
-}
-
-async function waitForPermissionSetProvisioningSuccess(props: {
-  ssoAdminClient: SSOAdminClient;
-  logger: Logger;
-  instanceArn: string;
-  requestId: string;
-  timeoutInMs: number;
-  pollIntervalInMs: number;
-  operationLabel: string;
-}): Promise<void> {
-  const startedAt = Date.now();
-  let lastStatus: string | undefined;
-  while (Date.now() - startedAt < props.timeoutInMs) {
-    const response = await props.ssoAdminClient.send(
-      new DescribePermissionSetProvisioningStatusCommand({
-        InstanceArn: props.instanceArn,
-        ProvisionPermissionSetRequestId: props.requestId,
-      }),
-    );
-    const status = response.PermissionSetProvisioningStatus;
-    const state = status?.Status ?? "UNKNOWN";
-    if (state !== lastStatus) {
-      props.logger.log(`ProvisionPermissionSet status: ${state}`);
-      lastStatus = state;
-    }
-    if (state === "SUCCEEDED") {
-      return;
-    }
-    if (state === "FAILED") {
-      throw new Error(
-        `ProvisionPermissionSet failed for ${props.operationLabel}: ${status?.FailureReason ?? "unknown reason"}.`,
-      );
-    }
-    await delay(props.pollIntervalInMs);
-  }
-  throw new Error(
-    `ProvisionPermissionSet timed out after ${props.timeoutInMs}ms for ${props.operationLabel}.`,
-  );
+  throw new Error(`${props.operationLabel} timed out after ${props.timeoutInMs}ms.`);
 }
 
 function formatPrincipalLabel(props: {

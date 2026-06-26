@@ -12,7 +12,7 @@ import {
 import { build as esbuildBuild } from "esbuild";
 import * as v from "valibot";
 
-import { assertUnreachable, toRecordByProperty } from "./helpers.js";
+import { assertUnreachable, sortJsonValue, toRecordByProperty } from "./helpers.js";
 import type { Logger } from "./logger.js";
 import {
   createAccessRoleName,
@@ -1833,16 +1833,6 @@ function sortJsonRecord<T extends Record<string, unknown>>(input: T): T {
       .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
       .map(([key, value]) => [key, sortJsonValue(value)]),
   ) as T;
-}
-
-function sortJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((entry) => sortJsonValue(entry));
-  }
-  if (isJsonRecord(value)) {
-    return sortJsonRecord(value);
-  }
-  return value;
 }
 
 function isJsonRecord(value: unknown): value is Record<string, unknown> {

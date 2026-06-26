@@ -59,6 +59,24 @@ const assumedCredentialsSchema = v.strictObject({
 
 type LambdaResponse = LambdaResponsePayload;
 
+async function assumeRoleIntoAccount(props: {
+  targetAccountId: string;
+  sessionName: string;
+}): Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken: string }> {
+  const assumeResult = await stsClient.send(
+    new AssumeRoleCommand({
+      RoleArn: `arn:aws:iam::${props.targetAccountId}:role/BeesolveSecuritySetupRole`,
+      RoleSessionName: props.sessionName,
+    }),
+  );
+  const credentials = v.parse(assumedCredentialsSchema, assumeResult.Credentials);
+  return {
+    accessKeyId: credentials.AccessKeyId,
+    secretAccessKey: credentials.SecretAccessKey,
+    sessionToken: credentials.SessionToken,
+  };
+}
+
 const stateKey = "state.json";
 const managedByTag = { Key: "ManagedBy", Value: "beesolve-aws-accounts" };
 const presignedUrlExpirySeconds = 3600;
@@ -369,21 +387,14 @@ async function handleCreateConfigDeliveryBucket(props: {
     throw new Error("Could not determine organization ID.");
   }
 
-  const assumeResult = await stsClient.send(
-    new AssumeRoleCommand({
-      RoleArn: `arn:aws:iam::${props.targetAccountId}:role/BeesolveSecuritySetupRole`,
-      RoleSessionName: "beesolve-aws-accounts-config-bucket",
-    }),
-  );
-  const credentials = v.parse(assumedCredentialsSchema, assumeResult.Credentials);
+  const credentials = await assumeRoleIntoAccount({
+    targetAccountId: props.targetAccountId,
+    sessionName: "beesolve-aws-accounts-config-bucket",
+  });
 
   const targetS3 = new S3Client({
     region: props.region,
-    credentials: {
-      accessKeyId: credentials.AccessKeyId,
-      secretAccessKey: credentials.SecretAccessKey,
-      sessionToken: credentials.SessionToken,
-    },
+    credentials,
   });
 
   let created = false;
@@ -495,21 +506,14 @@ async function handleCreateConfigAggregator(props: {
   targetAccountId: string;
   region: string;
 }): Promise<LambdaResponse> {
-  const assumeResult = await stsClient.send(
-    new AssumeRoleCommand({
-      RoleArn: `arn:aws:iam::${props.targetAccountId}:role/BeesolveSecuritySetupRole`,
-      RoleSessionName: "beesolve-aws-accounts-config-aggregator",
-    }),
-  );
-  const credentials = v.parse(assumedCredentialsSchema, assumeResult.Credentials);
+  const credentials = await assumeRoleIntoAccount({
+    targetAccountId: props.targetAccountId,
+    sessionName: "beesolve-aws-accounts-config-aggregator",
+  });
 
   const configClient = new ConfigServiceClient({
     region: props.region,
-    credentials: {
-      accessKeyId: credentials.AccessKeyId,
-      secretAccessKey: credentials.SecretAccessKey,
-      sessionToken: credentials.SessionToken,
-    },
+    credentials,
   });
 
   await configClient.send(
@@ -531,21 +535,14 @@ async function handleCreateCloudTrailBucket(props: {
   region: string;
   organizationId: string;
 }): Promise<LambdaResponse> {
-  const assumeResult = await stsClient.send(
-    new AssumeRoleCommand({
-      RoleArn: `arn:aws:iam::${props.targetAccountId}:role/BeesolveSecuritySetupRole`,
-      RoleSessionName: "beesolve-aws-accounts-cloudtrail-bucket",
-    }),
-  );
-  const credentials = v.parse(assumedCredentialsSchema, assumeResult.Credentials);
+  const credentials = await assumeRoleIntoAccount({
+    targetAccountId: props.targetAccountId,
+    sessionName: "beesolve-aws-accounts-cloudtrail-bucket",
+  });
 
   const targetS3 = new S3Client({
     region: props.region,
-    credentials: {
-      accessKeyId: credentials.AccessKeyId,
-      secretAccessKey: credentials.SecretAccessKey,
-      sessionToken: credentials.SessionToken,
-    },
+    credentials,
   });
 
   let created = false;
