@@ -92,8 +92,8 @@ type NormalizedIdcView = {
 };
 
 export function diffStates(props: DiffStatesProps): Plan {
-  const operations: Operation[] = [];
-  const unsupported: UnsupportedDiff[] = [];
+  const operations: Array<Operation> = [];
+  const unsupported: Array<UnsupportedDiff> = [];
 
   const currentOrganization = normalizeOrganizationState({
     state: props.current,
@@ -1067,7 +1067,9 @@ function countChildrenByParentId(props: {
   return counts;
 }
 
-function countMoveAccountDeparturesByOuId(props: { operations: Operation[] }): Map<string, number> {
+function countMoveAccountDeparturesByOuId(props: {
+  operations: Array<Operation>;
+}): Map<string, number> {
   const counts = new Map<string, number>();
   for (const operation of props.operations) {
     if (operation.kind !== "moveAccount") {
@@ -1545,11 +1547,11 @@ type AlternateContact = NonNullable<
 >[number];
 
 function diffAlternateContacts(props: {
-  operations: Operation[];
+  operations: Array<Operation>;
   accountId: string;
   accountName: string;
-  currentContacts: AlternateContact[];
-  nextContacts: AlternateContact[];
+  currentContacts: Array<AlternateContact>;
+  nextContacts: Array<AlternateContact>;
 }): void {
   const currentByType = new Map(props.currentContacts.map((c) => [c.contactType, c]));
   const nextByType = new Map(props.nextContacts.map((c) => [c.contactType, c]));

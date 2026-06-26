@@ -60,7 +60,7 @@ export async function runProfileCommand(input: ProfileCommandInput): Promise<voi
 }
 
 async function selectEntry(props: {
-  entries: ProfileEntry[];
+  entries: Array<ProfileEntry>;
   logger: Logger;
   isTty: boolean | undefined;
 }): Promise<ProfileEntry | null> {
@@ -97,14 +97,14 @@ async function selectEntry(props: {
   }
 }
 
-function buildProfileEntries(state: StateFile): ProfileEntry[] {
+function buildProfileEntries(state: StateFile): Array<ProfileEntry> {
   const accountById: Record<string, StateFile["organization"]["accounts"][number]> =
     Object.fromEntries(state.organization.accounts.map((a) => [a.id, a]));
   const permissionSetByArn: Record<string, StateFile["identityCenter"]["permissionSets"][number]> =
     Object.fromEntries(state.identityCenter.permissionSets.map((ps) => [ps.permissionSetArn, ps]));
 
   const seen = new Set<string>();
-  const entries: ProfileEntry[] = [];
+  const entries: Array<ProfileEntry> = [];
 
   for (const assignment of state.identityCenter.accountAssignments) {
     const key = `${assignment.accountId}|${assignment.permissionSetArn}`;

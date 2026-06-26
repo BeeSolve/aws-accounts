@@ -20,9 +20,9 @@ export function toPolicies<T extends string, A extends string>() {
 }
 
 type BlockExpensiveResourcesOptions<T extends string, A extends string> = {
-  exemptAccounts?: A[];
-  allowedEc2InstanceTypes: string[];
-  targets?: T[];
+  exemptAccounts?: Array<A>;
+  allowedEc2InstanceTypes: Array<string>;
+  targets?: Array<T>;
   name?: string;
 };
 
@@ -30,7 +30,7 @@ type PolicyEntry<T extends string> = {
   name: string;
   description: string;
   content: Record<string, unknown>;
-  targets: T[];
+  targets: Array<T>;
 };
 
 function blockExpensiveResources<T extends string, A extends string>(
@@ -38,7 +38,7 @@ function blockExpensiveResources<T extends string, A extends string>(
 ): PolicyEntry<T> {
   const exempt = options.exemptAccounts ?? [];
   const condition = toExtemptAccountsCondition(exempt);
-  const statements: Record<string, unknown>[] = [
+  const statements: Array<Record<string, unknown>> = [
     {
       Sid: "DenyBedrock",
       Effect: "Deny",
@@ -108,13 +108,13 @@ function blockExpensiveResources<T extends string, A extends string>(
     description:
       "Prevents expensive resource creation (GPU/accelerator instances, Bedrock, SageMaker, ECS, and expensive purchases). Exempt accounts by adding their IDs to exemptAccounts.",
     content: { Version: "2012-10-17", Statement: statements },
-    targets: options.targets ?? (["root"] as T[]),
+    targets: options.targets ?? (["root"] as Array<T>),
   };
 }
 
 type ProtectSecurityServicesOptions<T extends string, A extends string> = {
-  exemptAccounts?: A[];
-  targets?: T[];
+  exemptAccounts?: Array<A>;
+  targets?: Array<T>;
   name?: string;
   protect?: {
     cloudTrail?: boolean;
@@ -183,12 +183,12 @@ function protectSecurityServices<T extends string, A extends string>(
     name: options.name ?? "ProtectSecurityServices",
     description: "Prevents member accounts from disabling CloudTrail, AWS Config, and GuardDuty.",
     content: { Version: "2012-10-17", Statement: statements },
-    targets: options.targets ?? (["root"] as T[]),
+    targets: options.targets ?? (["root"] as Array<T>),
   };
 }
 
 type DenyRootWithoutMfaOptions<T extends string> = {
-  targets?: T[];
+  targets?: Array<T>;
   name?: string;
 };
 
@@ -213,16 +213,16 @@ function denyRootWithoutMfa<T extends string>(
         },
       ],
     },
-    targets: options.targets ?? (["root"] as T[]),
+    targets: options.targets ?? (["root"] as Array<T>),
   };
 }
 
 type DailyBackupPolicyOptions<T extends string> = {
   retentionDays?: number;
-  regions: string[];
+  regions: Array<string>;
   backupVaultName?: string;
   iamRoleName?: string;
-  targets?: T[];
+  targets?: Array<T>;
   name?: string;
 };
 
@@ -267,7 +267,7 @@ function dailyWithRetention<T extends string>(
         },
       },
     },
-    targets: options.targets ?? (["root"] as T[]),
+    targets: options.targets ?? (["root"] as Array<T>),
   };
 }
 
@@ -281,8 +281,8 @@ type PermissionSetEntry = {
   description: string;
   sessionDuration?: string;
   inlinePolicy?: IamPolicyDocument;
-  awsManagedPolicies: string[];
-  customerManagedPolicies: { name: string; path: string }[];
+  awsManagedPolicies: Array<string>;
+  customerManagedPolicies: Array<{ name: string; path: string }>;
 };
 
 function readOnlyAuditor(options: PermissionSetOptions = {}): PermissionSetEntry {
@@ -457,7 +457,9 @@ function securityInvestigator(options: PermissionSetOptions = {}): PermissionSet
   };
 }
 
-function toExtemptAccountsCondition(exemptAccounts: string[]): Record<string, unknown> | undefined {
+function toExtemptAccountsCondition(
+  exemptAccounts: Array<string>,
+): Record<string, unknown> | undefined {
   if (exemptAccounts.length === 0) return undefined;
   return { StringNotEquals: { "aws:PrincipalAccount": exemptAccounts } };
 }
@@ -477,7 +479,7 @@ export type SecurityBaselineOptions<T extends string, A extends string> = {
         enabled: true;
         delegatedAdminAccount: A;
         deliveryBucketAccount: A;
-        targets: T[];
+        targets: Array<T>;
         recordAllResourceTypes?: boolean;
         includeGlobalResources?: boolean;
         deliveryFrequency?:
@@ -492,7 +494,7 @@ export type SecurityBaselineOptions<T extends string, A extends string> = {
     | {
         enabled: true;
         delegatedAdminAccount: A;
-        targets?: T[];
+        targets?: Array<T>;
         findingPublishingFrequency?: "FIFTEEN_MINUTES" | "ONE_HOUR" | "SIX_HOURS";
       };
   rootAccessManagement?: { enabled: false } | { enabled: true; delegatedAdminAccount?: A };
@@ -501,13 +503,13 @@ export type SecurityBaselineOptions<T extends string, A extends string> = {
 type StackSetDeclaration = {
   name: string;
   templateKey: string;
-  targets: string[];
+  targets: Array<string>;
   parameters: Array<{ key: string; value: string }>;
 };
 
 type SecurityBaselineExtension = {
   securityBaseline?: {
-    stackSets: StackSetDeclaration[];
+    stackSets: Array<StackSetDeclaration>;
     configDeliveryBucket?: {
       accountName: string;
     };
@@ -538,7 +540,7 @@ export function toSecurityBaseline<
   }
 
   const delegatedAdmins = [...config.delegatedAdministrators];
-  const stackSets: StackSetDeclaration[] = [];
+  const stackSets: Array<StackSetDeclaration> = [];
 
   if (options.cloudTrail?.enabled) {
     const { cloudTrail } = options;

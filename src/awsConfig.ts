@@ -244,26 +244,26 @@ type WriteAwsConfigFromStateInput = {
   configPath: string;
   typesPath: string;
   logger: Logger;
-  overwriteConfirmation: (props: { fileSummaries: string[] }) => Promise<boolean>;
+  overwriteConfirmation: (props: { fileSummaries: Array<string> }) => Promise<boolean>;
 };
 
 type WriteAwsConfigFromStateResult = {
   configPath: string;
   typesPath: string;
-  files: FileWriteResult[];
+  files: Array<FileWriteResult>;
 };
 
 type RegenerateAwsConfigTypesInput = {
   configPath: string;
   typesPath: string;
   logger: Logger;
-  overwriteConfirmation: (props: { fileSummaries: string[] }) => Promise<boolean>;
+  overwriteConfirmation: (props: { fileSummaries: Array<string> }) => Promise<boolean>;
 };
 
 type RegenerateAwsConfigTypesResult = {
   typesPath: string;
   changed: boolean;
-  files: FileWriteResult[];
+  files: Array<FileWriteResult>;
 };
 
 type AwsConfigTypesModule = {
@@ -323,7 +323,7 @@ export async function writeAwsConfigFromState(
     readIfExists(props.typesPath),
   ]);
 
-  const changedFiles: ChangedFile[] = [];
+  const changedFiles: Array<ChangedFile> = [];
   if (currentConfigContent !== nextConfigContent) {
     changedFiles.push({
       path: props.configPath,
@@ -538,7 +538,7 @@ export function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel
   const userById = toRecordByProperty(props.state.identityCenter.users, "userId");
   const accountById = toRecordByProperty(props.state.organization.accounts, "id");
   const membersByGroupDisplayName = new Map(
-    props.state.identityCenter.groups.map((group) => [group.displayName, [] as string[]]),
+    props.state.identityCenter.groups.map((group) => [group.displayName, [] as Array<string>]),
   );
 
   const assignmentsByKey = new Map<string, AwsConfigModel["assignments"][number]>();
@@ -623,7 +623,7 @@ export function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel
     return null;
   }
 
-  const attachmentsByPolicyId = new Map<string, string[]>();
+  const attachmentsByPolicyId = new Map<string, Array<string>>();
   for (const attachment of orgPolicyAttachments) {
     const targetName = resolveTargetName(attachment.targetId, attachment.targetType);
     if (targetName == null) {
@@ -650,7 +650,7 @@ export function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel
     ),
   }));
 
-  const policiesByType = new Map<OrgPolicyState["type"], ConfigPolicyEntry[]>();
+  const policiesByType = new Map<OrgPolicyState["type"], Array<ConfigPolicyEntry>>();
   for (const policy of mappedOrgPolicies) {
     const bucket = policiesByType.get(policy.type) ?? new Array<ConfigPolicyEntry>();
     bucket.push({
@@ -1193,10 +1193,10 @@ type ConfigPolicyEntry = {
   name: string;
   description?: string;
   content: Record<string, unknown>;
-  targets: string[];
+  targets: Array<string>;
 };
 
-function sortConfigPolicies(policies: ConfigPolicyEntry[]): ConfigPolicyEntry[] {
+function sortConfigPolicies(policies: Array<ConfigPolicyEntry>): Array<ConfigPolicyEntry> {
   return [...policies]
     .map((p) => ({
       ...p,
@@ -1226,7 +1226,7 @@ function sortAwsConfigModel(props: { config: AwsConfigModel }): AwsConfigModel {
     accounts: [...root.accounts].sort((left, right) => left.name.localeCompare(right.name)),
   });
 
-  const queue: string[] = [root.name];
+  const queue: Array<string> = [root.name];
   while (queue.length > 0) {
     const currentParentName = queue.shift();
     if (currentParentName == null) {
@@ -1387,7 +1387,7 @@ function renderTsStringValue(
 }
 
 function renderTsArray(
-  value: unknown[],
+  value: Array<unknown>,
   props: {
     indentLevel: number;
     withinInlinePolicy: boolean;
@@ -1451,7 +1451,7 @@ function renderPolicyActionString(value: string): string {
   const servicePrefix = value.slice(0, separatorIndex);
   const actionName = value.slice(separatorIndex + 1);
   const knownActions = iamActionCatalog[servicePrefix as keyof typeof iamActionCatalog] as
-    | readonly string[]
+    | ReadonlyArray<string>
     | undefined;
   if (knownActions == null || knownActions.includes(actionName) === false) {
     return JSON.stringify(value);
@@ -1740,7 +1740,7 @@ function assertStateMatchesContext(props: { state: StateFile; context: AwsContex
   }
 }
 
-function assertUniqueNames(props: { values: string[]; entityName: string }): void {
+function assertUniqueNames(props: { values: Array<string>; entityName: string }): void {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   for (const value of props.values) {
@@ -1849,7 +1849,7 @@ function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === "object" && Array.isArray(value) === false;
 }
 
-function compareStringKeys(...values: string[]): number {
+function compareStringKeys(...values: Array<string>): number {
   for (let index = 0; index < values.length; index += 2) {
     const left = values[index] ?? "";
     const right = values[index + 1] ?? "";
@@ -1875,7 +1875,7 @@ function resolveOrganizationalUnitId(props: {
   return props.matchedOrganizationalUnit?.id ?? pendingCreationId;
 }
 
-function renderPicklistSchema(props: { values: string[] }): string {
+function renderPicklistSchema(props: { values: Array<string> }): string {
   if (props.values.length === 0) {
     return 'v.picklist(["__EMPTY_PICKLIST__"])';
   }
@@ -1909,7 +1909,7 @@ export async function readAwsContextFromFile(path: string): Promise<AwsContextFi
   return readAwsContextFile(path);
 }
 
-const VERSION_CHECK_TTL_MS = 24 * 60 * 60 * 1000;
+const versionCheckTtlMs = 24 * 60 * 60 * 1000;
 
 export async function checkForNewVersionIfNeeded(props: {
   contextPath: string;
@@ -1931,7 +1931,7 @@ export async function checkForNewVersionIfNeeded(props: {
 
     if (lastCheckedAt != null) {
       const elapsed = Date.now() - new Date(lastCheckedAt).getTime();
-      if (elapsed < VERSION_CHECK_TTL_MS) return;
+      if (elapsed < versionCheckTtlMs) return;
     }
 
     const [currentVersion, latestVersion] = await Promise.all([
@@ -2095,7 +2095,7 @@ function resolveAccountNamesInPolicyContent(
   content: Record<string, unknown>,
   accountByName: Record<string, { id: string }>,
 ): Record<string, unknown> {
-  const statements = (content as { Statement?: unknown[] }).Statement;
+  const statements = (content as { Statement?: Array<unknown> }).Statement;
   if (!Array.isArray(statements)) return content;
   return {
     ...content,
@@ -2126,7 +2126,7 @@ function resolveAccountIdsInPolicyContent(
   content: Record<string, unknown>,
   accountById: Record<string, { name: string }>,
 ): Record<string, unknown> {
-  const statements = (content as { Statement?: unknown[] }).Statement;
+  const statements = (content as { Statement?: Array<unknown> }).Statement;
   if (!Array.isArray(statements)) return content;
   return {
     ...content,

@@ -59,11 +59,11 @@ const assumedCredentialsSchema = v.strictObject({
 
 type LambdaResponse = LambdaResponsePayload;
 
-const STATE_KEY = "state.json";
-const MANAGED_BY_TAG = { Key: "ManagedBy", Value: "beesolve-aws-accounts" };
-const PRESIGNED_URL_EXPIRY_SECONDS = 3600;
+const stateKey = "state.json";
+const managedByTag = { Key: "ManagedBy", Value: "beesolve-aws-accounts" };
+const presignedUrlExpirySeconds = 3600;
 
-const RUNTIME_DEFAULTS = {
+const runtimeDefaults = {
   createAccount: {
     timeoutInMs: 300_000,
     pollIntervalInMs: 5_000,
@@ -79,12 +79,12 @@ const RUNTIME_DEFAULTS = {
 };
 
 const lambdaLogger = {
-  log: (...args: unknown[]) => console.log(...args),
-  info: (...args: unknown[]) => console.info(...args),
-  warn: (...args: unknown[]) => console.warn(...args),
-  error: (...args: unknown[]) => console.error(...args),
-  debug: (...args: unknown[]) => console.debug(...args),
-  trace: (...args: unknown[]) => console.trace(...args),
+  log: (...args: Array<unknown>) => console.log(...args),
+  info: (...args: Array<unknown>) => console.info(...args),
+  warn: (...args: Array<unknown>) => console.warn(...args),
+  error: (...args: Array<unknown>) => console.error(...args),
+  debug: (...args: Array<unknown>) => console.debug(...args),
+  trace: (...args: Array<unknown>) => console.trace(...args),
 };
 
 const s3Client = new S3Client({});
@@ -223,7 +223,7 @@ export async function handler(event: unknown): Promise<LambdaResponse> {
   }
 }
 
-const UPLOAD_URL_EXPIRY_SECONDS = 60;
+const uploadUrlExpirySeconds = 60;
 
 function toTemplateS3Key(stackSetName: string): string {
   return `stackset-templates/${stackSetName}.yaml`;
@@ -239,13 +239,13 @@ async function handleGetUploadUrl(props: {
     Key: toTemplateS3Key(props.stackSetName),
   });
   const url = await getSignedUrl(props.s3Client, command, {
-    expiresIn: UPLOAD_URL_EXPIRY_SECONDS,
+    expiresIn: uploadUrlExpirySeconds,
   });
   return {
     action: "getUploadUrl" as const,
     success: true,
     url,
-    expiresInSeconds: UPLOAD_URL_EXPIRY_SECONDS,
+    expiresInSeconds: uploadUrlExpirySeconds,
   };
 }
 
@@ -254,9 +254,9 @@ async function handleDeployStackSet(props: {
   cloudFormationClient: CloudFormationClient;
   bucket: string;
   stackSetName: string;
-  targets: string[];
+  targets: Array<string>;
   parameters: Array<{ key: string; value: string }>;
-  regions: string[];
+  regions: Array<string>;
   waitForCompletion: boolean;
 }): Promise<LambdaResponse> {
   const templateObj = await props.s3Client.send(
@@ -313,7 +313,7 @@ async function handleDeployStackSet(props: {
           PermissionModel: "SERVICE_MANAGED",
           AutoDeployment: { Enabled: true, RetainStacksOnAccountRemoval: false },
           Capabilities: ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"],
-          Tags: [MANAGED_BY_TAG],
+          Tags: [managedByTag],
         }),
       );
       stackSetId = createResult.StackSetId ?? props.stackSetName;
@@ -419,7 +419,7 @@ async function handleCreateConfigDeliveryBucket(props: {
   await targetS3.send(
     new PutBucketTaggingCommand({
       Bucket: props.bucketName,
-      Tagging: { TagSet: [MANAGED_BY_TAG, { Key: "Purpose", Value: "config-delivery" }] },
+      Tagging: { TagSet: [managedByTag, { Key: "Purpose", Value: "config-delivery" }] },
     }),
   );
 
@@ -581,7 +581,7 @@ async function handleCreateCloudTrailBucket(props: {
   await targetS3.send(
     new PutBucketTaggingCommand({
       Bucket: props.bucketName,
-      Tagging: { TagSet: [MANAGED_BY_TAG, { Key: "Purpose", Value: "cloudtrail-logs" }] },
+      Tagging: { TagSet: [managedByTag, { Key: "Purpose", Value: "cloudtrail-logs" }] },
     }),
   );
 
@@ -682,11 +682,11 @@ async function handleCreateOrgTrail(props: {
 async function handleRecordDeployedStackSets(props: {
   s3Client: S3Client;
   bucket: string;
-  stackSets: Array<{ name: string; targets: string[] }>;
+  stackSets: Array<{ name: string; targets: Array<string> }>;
   pendingOperations?: Array<{ stackSetName: string; operationId: string; startedAt: string }>;
 }): Promise<LambdaResponse> {
   const stateObj = await props.s3Client.send(
-    new GetObjectCommand({ Bucket: props.bucket, Key: STATE_KEY }),
+    new GetObjectCommand({ Bucket: props.bucket, Key: stateKey }),
   );
   const state = JSON.parse(await stateObj.Body!.transformToString());
   state.deployedStackSets = props.stackSets;
@@ -696,7 +696,7 @@ async function handleRecordDeployedStackSets(props: {
   await props.s3Client.send(
     new PutObjectCommand({
       Bucket: props.bucket,
-      Key: STATE_KEY,
+      Key: stateKey,
       Body: JSON.stringify(state, null, 2),
       ContentType: "application/json",
     }),
@@ -711,7 +711,7 @@ function buildErrorResponse(
     failedOperation?: number;
     operationsCompleted?: number;
     partialState?: StateFile;
-    validationIssues?: string[];
+    validationIssues?: Array<string>;
   },
 ): LambdaResponse {
   return {
@@ -750,7 +750,7 @@ async function readStateFromS3(props: {
   const response = await props.s3Client.send(
     new GetObjectCommand({
       Bucket: props.bucket,
-      Key: STATE_KEY,
+      Key: stateKey,
     }),
   );
   const body = await response.Body?.transformToString();
@@ -772,7 +772,7 @@ async function writeStateToS3(props: {
   await props.s3Client.send(
     new PutObjectCommand({
       Bucket: props.bucket,
-      Key: STATE_KEY,
+      Key: stateKey,
       Body: JSON.stringify(props.state, null, 2),
       ContentType: "application/json",
       IfMatch: props.ifMatch,
@@ -845,25 +845,25 @@ async function handleGetStateUrl(props: {
 }): Promise<LambdaResponse> {
   const command = new GetObjectCommand({
     Bucket: props.bucket,
-    Key: STATE_KEY,
+    Key: stateKey,
   });
 
   const url = await getSignedUrl(props.s3Client, command, {
-    expiresIn: PRESIGNED_URL_EXPIRY_SECONDS,
+    expiresIn: presignedUrlExpirySeconds,
   });
 
   return {
     action: "getStateUrl" as const,
     success: true,
     url,
-    expiresInSeconds: PRESIGNED_URL_EXPIRY_SECONDS,
+    expiresInSeconds: presignedUrlExpirySeconds,
   };
 }
 
 async function handleApply(props: {
   s3Client: S3Client;
   bucket: string;
-  operations: Operation[];
+  operations: Array<Operation>;
   allowDestructive: boolean;
   organizationsClient: OrganizationsClient;
   ssoAdminClient: SSOAdminClient;
@@ -898,7 +898,7 @@ async function handleApply(props: {
             rootId: workingState.organization.rootId,
           },
         },
-        runtime: RUNTIME_DEFAULTS,
+        runtime: runtimeDefaults,
         operation,
       });
       operationsCompleted++;

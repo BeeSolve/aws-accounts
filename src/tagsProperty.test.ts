@@ -3,7 +3,7 @@ import test from "node:test";
 
 import fc from "fast-check";
 
-import { getStandardTags, MANAGED_BY_TAG_VALUE } from "./tags.js";
+import { getStandardTags, managedByTagValue } from "./tags.js";
 
 /**
  * Feature: bootstrap-enhancements, Property 1: Tag generation produces correct structure and content
@@ -27,7 +27,7 @@ test("Feature: bootstrap-enhancements, Property 1: Tag generation produces corre
 
       // First tag is ManagedBy with the constant value
       assert.equal(tags[0].Key, "ManagedBy");
-      assert.equal(tags[0].Value, MANAGED_BY_TAG_VALUE);
+      assert.equal(tags[0].Value, managedByTagValue);
       assert.equal(tags[0].Value, "beesolve-aws-accounts");
 
       // Second tag is Purpose with the provided purpose string

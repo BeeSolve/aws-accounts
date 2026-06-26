@@ -264,8 +264,8 @@ type BuildOverwriteConfirmationProps = {
 
 function buildOverwriteConfirmation(
   props: BuildOverwriteConfirmationProps,
-): (props: { fileSummaries: string[] }) => Promise<boolean> {
-  return async (overwriteProps: { fileSummaries: string[] }): Promise<boolean> => {
+): (props: { fileSummaries: Array<string> }) => Promise<boolean> {
+  return async (overwriteProps: { fileSummaries: Array<string> }): Promise<boolean> => {
     if (overwriteProps.fileSummaries.length === 0) {
       return true;
     }

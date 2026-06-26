@@ -741,7 +741,7 @@ test("Property 7: Operation schema validation reuses existing schema — valid o
       // that means it passed validation and moved on to execution.
       if (response.success === false) {
         const errorResponse = response as {
-          error: { kind: string; details?: { validationIssues?: string[] } };
+          error: { kind: string; details?: { validationIssues?: Array<string> } };
         };
         assert.notEqual(
           errorResponse.error.kind,

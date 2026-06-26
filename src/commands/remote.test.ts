@@ -16,9 +16,9 @@ import {
 
 // --- Helpers ---
 
-function createCollectingLogger(): Logger & { logs: string[] } {
-  const logs: string[] = [];
-  const write = (...args: any[]): void => {
+function createCollectingLogger(): Logger & { logs: Array<string> } {
+  const logs: Array<string> = [];
+  const write = (...args: Array<any>): void => {
     logs.push(args.map((arg) => String(arg)).join(" "));
   };
   return {

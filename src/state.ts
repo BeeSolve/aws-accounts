@@ -192,18 +192,18 @@ export type StateFile = v.InferOutput<typeof stateSchema>;
 type WorkingIdentityCenterState = {
   instanceArn: StateFile["identityCenter"]["instanceArn"];
   identityStoreId: StateFile["identityCenter"]["identityStoreId"];
-  users: UserState[];
+  users: Array<UserState>;
   usersByUserName: Record<string, UserState>;
-  groups: GroupState[];
+  groups: Array<GroupState>;
   groupsByDisplayName: Record<string, GroupState>;
-  groupMemberships: GroupMembershipState[];
+  groupMemberships: Array<GroupMembershipState>;
   groupMembershipsByKey: Record<string, GroupMembershipState>;
-  permissionSets: PermissionSetState[];
+  permissionSets: Array<PermissionSetState>;
   permissionSetsByName: Record<string, PermissionSetState>;
-  accountAssignments: AccountAssignmentState[];
+  accountAssignments: Array<AccountAssignmentState>;
   accountAssignmentsByKey: Record<string, AccountAssignmentState>;
-  accessRoles: AccessRoleState[];
-  accessControlAttributes: AccessControlAttributeState[];
+  accessRoles: Array<AccessRoleState>;
+  accessControlAttributes: Array<AccessControlAttributeState>;
 };
 
 export type WorkingState = {
@@ -217,9 +217,9 @@ export type WorkingState = {
     accountsByName: Record<string, AccountState>;
     policiesById: Record<string, OrgPolicyState>;
     policiesByName: Record<string, OrgPolicyState>;
-    policyAttachments: OrgPolicyAttachmentState[];
+    policyAttachments: Array<OrgPolicyAttachmentState>;
     policyAttachmentsByKey: Record<string, OrgPolicyAttachmentState>;
-    delegatedAdministrators: DelegatedAdministratorState[];
+    delegatedAdministrators: Array<DelegatedAdministratorState>;
     delegatedAdministratorsByKey: Record<string, DelegatedAdministratorState>;
   };
   identityCenter: WorkingIdentityCenterState;
@@ -1000,8 +1000,8 @@ function materializeWorkingIdentityCenterState(props: {
 }
 
 function createAccessRoles(props: {
-  accountAssignments: AccountAssignmentState[];
-}): AccessRoleState[] {
+  accountAssignments: Array<AccountAssignmentState>;
+}): Array<AccessRoleState> {
   return props.accountAssignments.map((accountAssignment) => ({
     accountId: accountAssignment.accountId,
     permissionSetArn: accountAssignment.permissionSetArn,
@@ -1011,7 +1011,7 @@ function createAccessRoles(props: {
   }));
 }
 
-function compareByKeys(...values: string[]): number {
+function compareByKeys(...values: Array<string>): number {
   for (let index = 0; index < values.length; index += 2) {
     const left = values[index] ?? "";
     const right = values[index + 1] ?? "";

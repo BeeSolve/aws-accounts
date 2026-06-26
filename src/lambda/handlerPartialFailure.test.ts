@@ -252,7 +252,7 @@ test("Property 5: Apply partial failure reports correct completed count — when
       executeCallCount = 0;
 
       // Generate N operations
-      const operations: Operation[] = Array.from({ length: n }, (_, i) => ({
+      const operations: Array<Operation> = Array.from({ length: n }, (_, i) => ({
         kind: "moveAccount" as const,
         accountId: `acct-${i}`,
         accountName: `Account ${i}`,

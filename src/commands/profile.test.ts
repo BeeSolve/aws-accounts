@@ -8,8 +8,8 @@ import { createTestWorkspace } from "../helpers.test.js";
 import type { Logger } from "../logger.js";
 import { runProfileCommand } from "./profile.js";
 
-const DEFAULT_SSO_START_URL = "https://d-test123.awsapps.com/start";
-const DEFAULT_SSO_SESSION = "beesolve";
+const defaultSsoStartUrl = "https://d-test123.awsapps.com/start";
+const defaultSsoSession = "beesolve";
 
 test("runProfileCommand throws when state cache is missing", async () => {
   const workspace = await createTestWorkspace({ prefix: "profile-test-" });
@@ -24,8 +24,8 @@ test("runProfileCommand throws when state cache is missing", async () => {
           logger,
           cachePath,
           contextPath,
-          ssoStartUrl: DEFAULT_SSO_START_URL,
-          ssoSession: DEFAULT_SSO_SESSION,
+          ssoStartUrl: defaultSsoStartUrl,
+          ssoSession: defaultSsoSession,
           isTty: true,
         }),
       (error: Error) => {
@@ -63,8 +63,8 @@ test("runProfileCommand throws when stdin is not a TTY", async () => {
           logger,
           cachePath,
           contextPath,
-          ssoStartUrl: DEFAULT_SSO_START_URL,
-          ssoSession: DEFAULT_SSO_SESSION,
+          ssoStartUrl: defaultSsoStartUrl,
+          ssoSession: defaultSsoSession,
           isTty: false,
         }),
       (error: Error) => {
@@ -88,8 +88,8 @@ test("runProfileCommand logs message when no account assignments exist", async (
       logger,
       cachePath,
       contextPath,
-      ssoStartUrl: DEFAULT_SSO_START_URL,
-      ssoSession: DEFAULT_SSO_SESSION,
+      ssoStartUrl: defaultSsoStartUrl,
+      ssoSession: defaultSsoSession,
       isTty: true,
     });
     assert.ok(logger.logs.some((line) => line.includes("No account assignments found")));
@@ -121,8 +121,8 @@ test("runProfileCommand outputs profile block with all required INI fields", asy
         logger,
         cachePath,
         contextPath,
-        ssoStartUrl: DEFAULT_SSO_START_URL,
-        ssoSession: DEFAULT_SSO_SESSION,
+        ssoStartUrl: defaultSsoStartUrl,
+        ssoSession: defaultSsoSession,
         isTty: true,
       });
     });
@@ -163,17 +163,17 @@ test("runProfileCommand profile block contains correct values from input", async
         logger,
         cachePath,
         contextPath,
-        ssoStartUrl: DEFAULT_SSO_START_URL,
-        ssoSession: DEFAULT_SSO_SESSION,
+        ssoStartUrl: defaultSsoStartUrl,
+        ssoSession: defaultSsoSession,
         isTty: true,
       });
     });
     const output = logger.logs.join("\n");
     assert.ok(output.includes("sso_account_id = 222222222222"));
     assert.ok(output.includes("sso_role_name = ReadOnlyAccess"));
-    assert.ok(output.includes(`sso_start_url = ${DEFAULT_SSO_START_URL}`));
-    assert.ok(output.includes(`sso_session = ${DEFAULT_SSO_SESSION}`));
-    assert.ok(output.includes(`[sso-session ${DEFAULT_SSO_SESSION}]`));
+    assert.ok(output.includes(`sso_start_url = ${defaultSsoStartUrl}`));
+    assert.ok(output.includes(`sso_session = ${defaultSsoSession}`));
+    assert.ok(output.includes(`[sso-session ${defaultSsoSession}]`));
     assert.ok(output.includes("sso_region = eu-central-1"));
     assert.ok(output.includes("sso_registration_scopes = sso:account:access"));
   } finally {
@@ -204,8 +204,8 @@ test("runProfileCommand derives kebab-case profile name from account and permiss
         logger,
         cachePath,
         contextPath,
-        ssoStartUrl: DEFAULT_SSO_START_URL,
-        ssoSession: DEFAULT_SSO_SESSION,
+        ssoStartUrl: defaultSsoStartUrl,
+        ssoSession: defaultSsoSession,
         isTty: true,
       });
     });
@@ -242,8 +242,8 @@ test("runProfileCommand derives kebab-case profile name from camelCase permissio
         logger,
         cachePath,
         contextPath,
-        ssoStartUrl: DEFAULT_SSO_START_URL,
-        ssoSession: DEFAULT_SSO_SESSION,
+        ssoStartUrl: defaultSsoStartUrl,
+        ssoSession: defaultSsoSession,
         isTty: true,
       });
     });
@@ -292,8 +292,8 @@ test("runProfileCommand lists entries sorted alphabetically by account then perm
         logger,
         cachePath,
         contextPath,
-        ssoStartUrl: DEFAULT_SSO_START_URL,
-        ssoSession: DEFAULT_SSO_SESSION,
+        ssoStartUrl: defaultSsoStartUrl,
+        ssoSession: defaultSsoSession,
         isTty: true,
       });
     });
@@ -344,8 +344,8 @@ test("runProfileCommand deduplicates entries with the same account and permissio
         logger,
         cachePath,
         contextPath,
-        ssoStartUrl: DEFAULT_SSO_START_URL,
-        ssoSession: DEFAULT_SSO_SESSION,
+        ssoStartUrl: defaultSsoStartUrl,
+        ssoSession: defaultSsoSession,
         isTty: true,
       });
     });
@@ -356,7 +356,7 @@ test("runProfileCommand deduplicates entries with the same account and permissio
   }
 });
 
-async function withFakeStdin<T>(lines: string | string[], fn: () => Promise<T>): Promise<T> {
+async function withFakeStdin<T>(lines: string | Array<string>, fn: () => Promise<T>): Promise<T> {
   const lineQueue = typeof lines === "string" ? [lines] : [...lines];
   let index = 0;
   const originalStdin = process.stdin;
@@ -393,7 +393,7 @@ type AssignmentFixture = {
 async function writeProfileFixture(props: {
   cachePath: string;
   contextPath: string;
-  assignments: AssignmentFixture[];
+  assignments: Array<AssignmentFixture>;
 }): Promise<void> {
   const accountsById = new Map<string, { id: string; name: string }>();
   const permissionSetsByArn = new Map<string, { arn: string; name: string }>();
@@ -520,9 +520,9 @@ async function writeContextFile(contextPath: string): Promise<void> {
   await writeFile(contextPath, `${JSON.stringify(context, null, 2)}\n`, "utf8");
 }
 
-function createCollectingLogger(): Logger & { logs: string[] } {
-  const logs: string[] = [];
-  const write = (...args: unknown[]): void => {
+function createCollectingLogger(): Logger & { logs: Array<string> } {
+  const logs: Array<string> = [];
+  const write = (...args: Array<unknown>): void => {
     logs.push(args.map((arg) => String(arg)).join(" "));
   };
   return { log: write, info: write, warn: write, error: write, debug: write, trace: write, logs };

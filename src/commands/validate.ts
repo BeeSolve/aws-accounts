@@ -7,8 +7,8 @@ type ValidateCommandInput = {
   typesPath?: string;
 };
 
-const INLINE_POLICY_MAX_CHARS = 10_240;
-const ORG_POLICY_CONTENT_MAX_BYTES = 5_120;
+const inlinePolicyMaxChars = 10_240;
+const orgPolicyContentMaxBytes = 5_120;
 
 export async function runValidateCommand(input: ValidateCommandInput): Promise<boolean> {
   const configPath = input.configPath ?? "aws.config.ts";
@@ -22,7 +22,7 @@ export async function runValidateCommand(input: ValidateCommandInput): Promise<b
     return false;
   }
 
-  const errors: string[] = [];
+  const errors: Array<string> = [];
 
   checkCircularOuReferences(config, errors);
   checkAssignmentPrincipals(config, errors);
@@ -43,7 +43,7 @@ export async function runValidateCommand(input: ValidateCommandInput): Promise<b
   return true;
 }
 
-function checkCircularOuReferences(config: AwsConfigModel, errors: string[]): void {
+function checkCircularOuReferences(config: AwsConfigModel, errors: Array<string>): void {
   const parentByName = new Map<string, string | null>(
     config.organizationalUnits.map((ou) => [ou.name, ou.parentName]),
   );
@@ -69,7 +69,7 @@ function checkCircularOuReferences(config: AwsConfigModel, errors: string[]): vo
   }
 }
 
-function checkAssignmentPrincipals(config: AwsConfigModel, errors: string[]): void {
+function checkAssignmentPrincipals(config: AwsConfigModel, errors: Array<string>): void {
   for (const assignment of config.assignments) {
     const hasGroup = assignment.group != null;
     const hasUser = assignment.user != null;
@@ -85,34 +85,34 @@ function checkAssignmentPrincipals(config: AwsConfigModel, errors: string[]): vo
   }
 }
 
-function checkOrgPolicySizes(config: AwsConfigModel, errors: string[]): void {
+function checkOrgPolicySizes(config: AwsConfigModel, errors: Array<string>): void {
   for (const policy of config.policies.serviceControlPolicies) {
     const contentBytes = Buffer.byteLength(JSON.stringify(policy.content), "utf8");
-    if (contentBytes > ORG_POLICY_CONTENT_MAX_BYTES) {
+    if (contentBytes > orgPolicyContentMaxBytes) {
       errors.push(
-        `Service control policy "${policy.name}" content is ${contentBytes} bytes (limit: ${ORG_POLICY_CONTENT_MAX_BYTES}).`,
+        `Service control policy "${policy.name}" content is ${contentBytes} bytes (limit: ${orgPolicyContentMaxBytes}).`,
       );
     }
   }
   for (const policy of config.policies.resourceControlPolicies) {
     const contentBytes = Buffer.byteLength(JSON.stringify(policy.content), "utf8");
-    if (contentBytes > ORG_POLICY_CONTENT_MAX_BYTES) {
+    if (contentBytes > orgPolicyContentMaxBytes) {
       errors.push(
-        `Resource control policy "${policy.name}" content is ${contentBytes} bytes (limit: ${ORG_POLICY_CONTENT_MAX_BYTES}).`,
+        `Resource control policy "${policy.name}" content is ${contentBytes} bytes (limit: ${orgPolicyContentMaxBytes}).`,
       );
     }
   }
   for (const policy of config.policies.backupPolicies) {
     const contentBytes = Buffer.byteLength(JSON.stringify(policy.content), "utf8");
-    if (contentBytes > ORG_POLICY_CONTENT_MAX_BYTES) {
+    if (contentBytes > orgPolicyContentMaxBytes) {
       errors.push(
-        `Backup policy "${policy.name}" content is ${contentBytes} bytes (limit: ${ORG_POLICY_CONTENT_MAX_BYTES}).`,
+        `Backup policy "${policy.name}" content is ${contentBytes} bytes (limit: ${orgPolicyContentMaxBytes}).`,
       );
     }
   }
 }
 
-function checkOrgPolicyTargets(config: AwsConfigModel, errors: string[]): void {
+function checkOrgPolicyTargets(config: AwsConfigModel, errors: Array<string>): void {
   const ouNames = new Set(config.organizationalUnits.map((ou) => ou.name));
   const accountNames = new Set(
     config.organizationalUnits.flatMap((ou) => ou.accounts.map((a) => a.name)),
@@ -145,7 +145,10 @@ function checkOrgPolicyTargets(config: AwsConfigModel, errors: string[]): void {
   }
 }
 
-function checkDelegatedAdministratorDuplicates(config: AwsConfigModel, errors: string[]): void {
+function checkDelegatedAdministratorDuplicates(
+  config: AwsConfigModel,
+  errors: Array<string>,
+): void {
   const seen = new Set<string>();
   for (const da of config.delegatedAdministrators) {
     const key = `${da.account}|${da.servicePrincipal}`;
@@ -158,15 +161,15 @@ function checkDelegatedAdministratorDuplicates(config: AwsConfigModel, errors: s
   }
 }
 
-function checkInlinePolicySizes(config: AwsConfigModel, errors: string[]): void {
+function checkInlinePolicySizes(config: AwsConfigModel, errors: Array<string>): void {
   for (const ps of config.permissionSets) {
     if (ps.inlinePolicy == null) {
       continue;
     }
     const length = JSON.stringify(ps.inlinePolicy).length;
-    if (length > INLINE_POLICY_MAX_CHARS) {
+    if (length > inlinePolicyMaxChars) {
       errors.push(
-        `Permission set "${ps.name}" inline policy is ${length} characters (limit: ${INLINE_POLICY_MAX_CHARS}).`,
+        `Permission set "${ps.name}" inline policy is ${length} characters (limit: ${inlinePolicyMaxChars}).`,
       );
     }
   }

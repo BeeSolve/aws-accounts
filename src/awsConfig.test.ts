@@ -618,7 +618,7 @@ test("permission set policy state round-trips between state and config", async (
           name: string;
           description: string;
           inlinePolicy: string | null;
-          awsManagedPolicies: string[];
+          awsManagedPolicies: Array<string>;
           customerManagedPolicies: Array<{ name: string; path: string }>;
         }>;
       };
@@ -1004,19 +1004,19 @@ async function updateConfigModel(props: {
       }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string; members: string[] }>;
+    groups: Array<{ displayName: string; members: Array<string> }>;
     permissionSets: Array<{
       name: string;
       description: string;
       inlinePolicy?: Record<string, unknown>;
-      awsManagedPolicies: string[];
+      awsManagedPolicies: Array<string>;
       customerManagedPolicies: Array<{ name: string; path: string }>;
     }>;
     assignments: Array<{
       permissionSet: string;
       group?: string;
       user?: string;
-      accounts: string[];
+      accounts: Array<string>;
     }>;
   }) => void;
 }): Promise<void> {
@@ -1035,19 +1035,19 @@ async function updateConfigModel(props: {
       }>;
     }>;
     users: Array<{ userName: string; displayName: string; email: string }>;
-    groups: Array<{ displayName: string; members: string[] }>;
+    groups: Array<{ displayName: string; members: Array<string> }>;
     permissionSets: Array<{
       name: string;
       description: string;
       inlinePolicy?: Record<string, unknown>;
-      awsManagedPolicies: string[];
+      awsManagedPolicies: Array<string>;
       customerManagedPolicies: Array<{ name: string; path: string }>;
     }>;
     assignments: Array<{
       permissionSet: string;
       group?: string;
       user?: string;
-      accounts: string[];
+      accounts: Array<string>;
     }>;
   };
   props.update(parsedConfig);

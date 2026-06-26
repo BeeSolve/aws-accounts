@@ -146,7 +146,7 @@ export async function scanOrganization(props: {
 
 async function scanDelegatedAdministrators(props: {
   organizationsClient: OrganizationsClient;
-}): Promise<DelegatedAdministratorState[]> {
+}): Promise<Array<DelegatedAdministratorState>> {
   const accountIds = new Array<string>();
   let nextToken: string | undefined;
   do {
@@ -162,7 +162,7 @@ async function scanDelegatedAdministrators(props: {
     nextToken = response.NextToken;
   } while (nextToken != null);
 
-  const results: DelegatedAdministratorState[] = [];
+  const results: Array<DelegatedAdministratorState> = [];
   for (const accountId of accountIds) {
     let servicesNextToken: string | undefined;
     do {
@@ -184,7 +184,7 @@ async function scanDelegatedAdministrators(props: {
   return results;
 }
 
-const ORG_POLICY_TYPES = [
+const orgPolicyTypes = [
   "SERVICE_CONTROL_POLICY",
   "RESOURCE_CONTROL_POLICY",
   "TAG_POLICY",
@@ -195,15 +195,15 @@ const ORG_POLICY_TYPES = [
 async function scanOrganizationPolicies(props: {
   organizationsClient: OrganizationsClient;
 }): Promise<{
-  policies: OrgPolicyState[];
-  policyAttachments: OrgPolicyAttachmentState[];
+  policies: Array<OrgPolicyState>;
+  policyAttachments: Array<OrgPolicyAttachmentState>;
 }> {
-  const policies: OrgPolicyState[] = [];
-  const policyAttachments: OrgPolicyAttachmentState[] = [];
+  const policies: Array<OrgPolicyState> = [];
+  const policyAttachments: Array<OrgPolicyAttachmentState> = [];
 
-  for (const policyType of ORG_POLICY_TYPES) {
+  for (const policyType of orgPolicyTypes) {
     let nextToken: string | undefined;
-    const policyIds: string[] = [];
+    const policyIds: Array<string> = [];
     do {
       const response = await props.organizationsClient.send(
         new ListPoliciesCommand({ Filter: policyType, NextToken: nextToken }),
@@ -376,7 +376,7 @@ export async function scanIdentityCenter(props: {
 async function scanAccessControlAttributes(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
-}): Promise<AccessControlAttributeState[]> {
+}): Promise<Array<AccessControlAttributeState>> {
   let response;
   try {
     response = await props.ssoAdminClient.send(
@@ -557,7 +557,7 @@ async function listPermissionSets(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
 }): Promise<StateFile["identityCenter"]["permissionSets"]> {
-  const permissionSetArns: string[] = [];
+  const permissionSetArns: Array<string> = [];
   let nextToken: string | undefined;
   do {
     const response = await props.ssoAdminClient.send(
@@ -686,8 +686,8 @@ async function listManagedPoliciesInPermissionSet(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
   permissionSetArn: string;
-}): Promise<string[]> {
-  const managedPolicies: string[] = [];
+}): Promise<Array<string>> {
+  const managedPolicies: Array<string> = [];
   let nextToken: string | undefined;
   do {
     const response = await props.ssoAdminClient.send(
@@ -745,8 +745,8 @@ async function listAccountAssignments(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
   permissionSets: StateFile["identityCenter"]["permissionSets"];
-}): Promise<AccountAssignmentState[]> {
-  const assignments: AccountAssignmentState[] = [];
+}): Promise<Array<AccountAssignmentState>> {
+  const assignments: Array<AccountAssignmentState> = [];
   for (const permissionSet of props.permissionSets) {
     const accountIds = await listAccountsForPermissionSet({
       ssoAdminClient: props.ssoAdminClient,
@@ -791,8 +791,8 @@ async function listAccountsForPermissionSet(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
   permissionSetArn: string;
-}): Promise<string[]> {
-  const accountIds: string[] = [];
+}): Promise<Array<string>> {
+  const accountIds: Array<string> = [];
   let nextToken: string | undefined;
   do {
     const response = await props.ssoAdminClient.send(
@@ -808,15 +808,15 @@ async function listAccountsForPermissionSet(props: {
   return accountIds;
 }
 
-const ALTERNATE_CONTACT_TYPES = ["BILLING", "OPERATIONS", "SECURITY"] as const;
+const alternateContactTypes = ["BILLING", "OPERATIONS", "SECURITY"] as const;
 
 async function scanAlternateContacts(props: {
   accountClient: AccountClient;
   accountId: string;
   isManagementAccount: boolean;
-}): Promise<AlternateContactState[]> {
+}): Promise<Array<AlternateContactState>> {
   const results = await Promise.all(
-    ALTERNATE_CONTACT_TYPES.map(async (contactType) => {
+    alternateContactTypes.map(async (contactType) => {
       try {
         const response = await props.accountClient.send(
           new GetAlternateContactCommand({

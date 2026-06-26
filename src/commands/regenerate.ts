@@ -3,7 +3,7 @@ import type { Logger } from "../logger.js";
 
 type RegenerateCommandInput = {
   logger: Logger;
-  overwriteConfirmation: (props: { fileSummaries: string[] }) => Promise<boolean>;
+  overwriteConfirmation: (props: { fileSummaries: Array<string> }) => Promise<boolean>;
   configPath?: string;
   typesPath?: string;
 };

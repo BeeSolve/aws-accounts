@@ -83,7 +83,7 @@ export type PickStringProps<T> = Pick<
  * When needed the object can be converted back to an array by calling Object.values(object).
  */
 export function toRecordByProperty<T extends { [key: string]: any }>(
-  input: T[],
+  input: Array<T>,
   key: keyof PickStringProps<T> | ((value: T) => string),
   keyTransformer: (key: string) => string = (key) => key,
 ): Record<string, T> {

@@ -142,9 +142,9 @@ async function writeFixtures(props: {
   ]);
 }
 
-function createCollectingLogger(): Logger & { logs: string[] } {
-  const logs: string[] = [];
-  const write = (...args: unknown[]): void => {
+function createCollectingLogger(): Logger & { logs: Array<string> } {
+  const logs: Array<string> = [];
+  const write = (...args: Array<unknown>): void => {
     logs.push(args.map((arg) => String(arg)).join(" "));
   };
   return { log: write, info: write, warn: write, error: write, debug: write, trace: write, logs };

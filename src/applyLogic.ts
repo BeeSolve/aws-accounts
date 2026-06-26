@@ -370,7 +370,7 @@ export async function executeOperation(props: ExecuteOperationInput): Promise<Wo
       state: props.state,
       userName: props.operation.userName,
     });
-    const operations: AttributeOperation[] = [];
+    const operations: Array<AttributeOperation> = [];
     if (user.displayName !== props.operation.displayName) {
       operations.push({
         AttributePath: "displayName",

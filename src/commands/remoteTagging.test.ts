@@ -10,10 +10,10 @@ import { getStandardTags } from "../tags.js";
 
 type SdkCall = { commandName: string; input: unknown };
 
-const s3Calls: SdkCall[] = [];
-const iamCalls: SdkCall[] = [];
-const lambdaCalls: SdkCall[] = [];
-const stsCalls: SdkCall[] = [];
+const s3Calls: Array<SdkCall> = [];
+const iamCalls: Array<SdkCall> = [];
+const lambdaCalls: Array<SdkCall> = [];
+const stsCalls: Array<SdkCall> = [];
 
 function resetAllCalls(): void {
   s3Calls.length = 0;

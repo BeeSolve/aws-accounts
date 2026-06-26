@@ -48,7 +48,7 @@ const remoteCommandSchema = v.object({
 
 export type RemoteCommandInput = v.InferOutput<typeof remoteCommandSchema> & {
   logger: Logger;
-  overwriteConfirmation: (props: { fileSummaries: string[] }) => Promise<boolean>;
+  overwriteConfirmation: (props: { fileSummaries: Array<string> }) => Promise<boolean>;
   stsClient: STSClient;
   s3Client: S3Client;
   iamClient: IAMClient;
@@ -153,7 +153,7 @@ export async function fetchCurrentState(props: {
 
 export function displayPlan(props: {
   plan: Plan;
-  stackSetOperations?: StackSetOperation[];
+  stackSetOperations?: Array<StackSetOperation>;
   logger: Logger;
 }): void {
   const stackSetCount = props.stackSetOperations?.length ?? 0;
@@ -589,10 +589,10 @@ export function computeStackSetOperations(
     organizationId: string | undefined;
     region: string;
     ouIdsByName: Record<string, string>;
-    deployedStackSets?: Array<{ name: string; targets: string[] }>;
+    deployedStackSets?: Array<{ name: string; targets: Array<string> }>;
     forceRedeploy?: boolean;
   },
-): StackSetOperation[] | undefined {
+): Array<StackSetOperation> | undefined {
   const baseline = config.securityBaseline;
   if (baseline == null || baseline.stackSets.length === 0) return undefined;
   if (!context.organizationId) {
@@ -638,7 +638,7 @@ export function computeStackSetOperations(
 }
 
 export async function executeStackSetOperations(props: {
-  stackSetOperations: StackSetOperation[];
+  stackSetOperations: Array<StackSetOperation>;
   lambdaClient: LambdaClient;
   lambdaArn: string;
   logger: Logger;

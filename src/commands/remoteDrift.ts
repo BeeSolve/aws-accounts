@@ -121,15 +121,15 @@ type DriftEntry = {
 
 type DriftSection = {
   label: string;
-  additions: DriftEntry[];
-  removals: DriftEntry[];
-  modifications: DriftEntry[];
+  additions: Array<DriftEntry>;
+  removals: Array<DriftEntry>;
+  modifications: Array<DriftEntry>;
 };
 
 function computeConfigDrift(props: {
   config: AwsConfigModel;
   liveConfig: AwsConfigModel;
-}): DriftSection[] {
+}): Array<DriftSection> {
   const sections = new Array<DriftSection>();
 
   sections.push(computeOrganizationalUnitsDrift(props));

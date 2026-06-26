@@ -533,8 +533,8 @@ async function ensureLambdaFunction(props: {
   }
 }
 
-const IAM_PROPAGATION_MAX_ATTEMPTS = 10;
-const IAM_PROPAGATION_RETRY_INTERVAL_MS = 2_000;
+const iamPropagationMaxAttempts = 10;
+const iamPropagationRetryIntervalMs = 2_000;
 
 async function createLambdaFunctionWithRetry(props: {
   lambdaClient: LambdaClient;
@@ -545,7 +545,7 @@ async function createLambdaFunctionWithRetry(props: {
   lambdaTimeoutSeconds?: number;
   logger: Logger;
 }): Promise<string> {
-  for (let attempt = 1; attempt <= IAM_PROPAGATION_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= iamPropagationMaxAttempts; attempt++) {
     try {
       const createResult = await props.lambdaClient.send(
         new CreateFunctionCommand({
@@ -575,13 +575,13 @@ async function createLambdaFunctionWithRetry(props: {
       return lambdaArn;
     } catch (error: unknown) {
       const isRoleNotReady = (error as any).name === "InvalidParameterValueException";
-      if (!isRoleNotReady || attempt === IAM_PROPAGATION_MAX_ATTEMPTS) {
+      if (!isRoleNotReady || attempt === iamPropagationMaxAttempts) {
         throw error;
       }
       props.logger.log(
-        `Waiting for IAM role to propagate (attempt ${attempt}/${IAM_PROPAGATION_MAX_ATTEMPTS})...`,
+        `Waiting for IAM role to propagate (attempt ${attempt}/${iamPropagationMaxAttempts})...`,
       );
-      await delay(IAM_PROPAGATION_RETRY_INTERVAL_MS);
+      await delay(iamPropagationRetryIntervalMs);
     }
   }
   throw new Error("Unreachable: retry loop exhausted without throwing.");
@@ -620,7 +620,7 @@ async function findPermissionSetByName(props: {
 async function ensureOrganizationManagementPermissionSet(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
-  tags: AwsTag[];
+  tags: Array<AwsTag>;
   logger: Logger;
 }): Promise<{ permissionSetArn: string }> {
   const permissionSetName = "OrganizationManagement";
@@ -689,7 +689,7 @@ async function ensureOrganizationRemoteManagementPermissionSet(props: {
   ssoAdminClient: SSOAdminClient;
   instanceArn: string;
   lambdaArn: string;
-  tags: AwsTag[];
+  tags: Array<AwsTag>;
   logger: Logger;
 }): Promise<{ permissionSetArn: string }> {
   const permissionSetName = "OrganizationRemoteManagement";
@@ -780,7 +780,7 @@ async function createNewPermissionSet(props: {
   permissionSetName: string;
   description: string;
   sessionDuration: string;
-  tags: AwsTag[];
+  tags: Array<AwsTag>;
   logger: Logger;
 }): Promise<string> {
   const createResponse = await props.ssoAdminClient.send(

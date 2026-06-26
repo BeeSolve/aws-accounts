@@ -1,19 +1,19 @@
 export interface Logger {
-  log: (...args: any[]) => void;
-  info: (...args: any[]) => void;
-  warn: (...args: any[]) => void;
-  error: (...args: any[]) => void;
-  debug: (...args: any[]) => void;
-  trace: (...args: any[]) => void;
+  log: (...args: Array<any>) => void;
+  info: (...args: Array<any>) => void;
+  warn: (...args: Array<any>) => void;
+  error: (...args: Array<any>) => void;
+  debug: (...args: Array<any>) => void;
+  trace: (...args: Array<any>) => void;
 }
 
 export const consoleLogger: Logger = {
-  log: (...args: any[]) => console.log(...args),
-  info: (...args: any[]) => console.info(...args),
-  warn: (...args: any[]) => console.warn(...args),
-  error: (...args: any[]) => console.error(...args),
-  debug: (...args: any[]) => console.debug(...args),
-  trace: (...args: any[]) => console.trace(...args),
+  log: (...args: Array<any>) => console.log(...args),
+  info: (...args: Array<any>) => console.info(...args),
+  warn: (...args: Array<any>) => console.warn(...args),
+  error: (...args: Array<any>) => console.error(...args),
+  debug: (...args: Array<any>) => console.debug(...args),
+  trace: (...args: Array<any>) => console.trace(...args),
 };
 
 export const noopLogger: Logger = {

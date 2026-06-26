@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import type { Logger } from "../logger.js";
 
 const moduleDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const DEFAULT_TEMPLATES_DIR = join(moduleDir, "templates");
-const TEMPLATE_FILES = ["config-recorder.yaml", "guardduty-member.yaml"];
+const defaultTemplatesDir = join(moduleDir, "templates");
+const templateFiles = ["config-recorder.yaml", "guardduty-member.yaml"];
 
 export async function runConfigRevealCommand(input: {
   logger: Logger;
@@ -18,14 +18,14 @@ export async function runConfigRevealCommand(input: {
   await mkdir(outputDir, { recursive: true });
 
   let skippedCount = 0;
-  for (const file of TEMPLATE_FILES) {
+  for (const file of templateFiles) {
     const destPath = join(outputDir, file);
     if (existsSync(destPath) && !input.force) {
       input.logger.log(`Skipped ${destPath} (already exists)`);
       skippedCount++;
       continue;
     }
-    const srcPath = join(DEFAULT_TEMPLATES_DIR, file);
+    const srcPath = join(defaultTemplatesDir, file);
     const content = await readFile(srcPath, "utf8");
     await writeFile(destPath, content, "utf8");
     input.logger.log(`${existsSync(destPath) ? "Overwritten" : "Copied"} ${destPath}`);

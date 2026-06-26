@@ -10,11 +10,11 @@ import { getStandardTags } from "../tags.js";
 
 type SdkCall = { commandName: string; input: unknown };
 
-const s3Calls: SdkCall[] = [];
-const iamCalls: SdkCall[] = [];
-const lambdaCalls: SdkCall[] = [];
-const stsCalls: SdkCall[] = [];
-const ssoCalls: SdkCall[] = [];
+const s3Calls: Array<SdkCall> = [];
+const iamCalls: Array<SdkCall> = [];
+const lambdaCalls: Array<SdkCall> = [];
+const stsCalls: Array<SdkCall> = [];
+const ssoCalls: Array<SdkCall> = [];
 
 function resetAllCalls(): void {
   s3Calls.length = 0;
@@ -229,7 +229,7 @@ mock.module("@aws-sdk/client-sso-admin", {
         ssoCalls.push({ commandName, input });
 
         if (commandName === "ListPermissionSetsCommand") {
-          const arns: string[] = [];
+          const arns: Array<string> = [];
           if (orgMgmtPermissionSetExists)
             arns.push("arn:aws:sso:::permissionSet/ssoins-123/ps-org-mgmt");
           if (remoteMgmtPermissionSetExists)
@@ -404,8 +404,8 @@ function createValidContextFile(opts?: { withIdentityCenter?: boolean }) {
 }
 
 function createCollectingLogger() {
-  const logs: string[] = [];
-  const write = (...args: any[]): void => {
+  const logs: Array<string> = [];
+  const write = (...args: Array<any>): void => {
     logs.push(args.map((arg) => String(arg)).join(" "));
   };
   return {

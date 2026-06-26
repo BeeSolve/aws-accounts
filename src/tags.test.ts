@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getStandardTags, MANAGED_BY_TAG_VALUE } from "./tags.js";
+import { getStandardTags, managedByTagValue } from "./tags.js";
 
-test("MANAGED_BY_TAG_VALUE is beesolve-aws-accounts", () => {
-  assert.equal(MANAGED_BY_TAG_VALUE, "beesolve-aws-accounts");
+test("managedByTagValue is beesolve-aws-accounts", () => {
+  assert.equal(managedByTagValue, "beesolve-aws-accounts");
 });
 
 test("getStandardTags returns correct tags for a given purpose", () => {
