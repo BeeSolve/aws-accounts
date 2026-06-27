@@ -375,6 +375,60 @@ async function handleDeployStackSet(props: {
   };
 }
 
+async function createManagedBucket(props: {
+  s3Client: S3Client;
+  bucketName: string;
+  region: string;
+  purposeTag: string;
+  policy: string;
+}): Promise<boolean> {
+  let created = false;
+  try {
+    await props.s3Client.send(
+      new CreateBucketCommand({
+        Bucket: props.bucketName,
+        ...(props.region !== "us-east-1" && {
+          CreateBucketConfiguration: { LocationConstraint: props.region as any },
+        }),
+      }),
+    );
+    created = true;
+  } catch (error: unknown) {
+    const name = (error as { name?: string }).name;
+    if (name !== "BucketAlreadyOwnedByYou" && name !== "BucketAlreadyExists") {
+      throw error;
+    }
+  }
+
+  await props.s3Client.send(
+    new PutPublicAccessBlockCommand({
+      Bucket: props.bucketName,
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true,
+        BlockPublicPolicy: true,
+        IgnorePublicAcls: true,
+        RestrictPublicBuckets: true,
+      },
+    }),
+  );
+
+  await props.s3Client.send(
+    new PutBucketTaggingCommand({
+      Bucket: props.bucketName,
+      Tagging: { TagSet: [managedByTag, { Key: "Purpose", Value: props.purposeTag }] },
+    }),
+  );
+
+  await props.s3Client.send(
+    new PutBucketPolicyCommand({
+      Bucket: props.bucketName,
+      Policy: props.policy,
+    }),
+  );
+
+  return created;
+}
+
 async function handleCreateConfigDeliveryBucket(props: {
   targetAccountId: string;
   bucketName: string;
@@ -392,47 +446,7 @@ async function handleCreateConfigDeliveryBucket(props: {
     sessionName: "beesolve-aws-accounts-config-bucket",
   });
 
-  const targetS3 = new S3Client({
-    region: props.region,
-    credentials,
-  });
-
-  let created = false;
-  try {
-    await targetS3.send(
-      new CreateBucketCommand({
-        Bucket: props.bucketName,
-        ...(props.region !== "us-east-1" && {
-          CreateBucketConfiguration: { LocationConstraint: props.region as any }, //kiro we've already created bucket in this project and we've solved types so you shoudln't use `as any` here
-        }),
-      }),
-    );
-    created = true;
-  } catch (error: unknown) {
-    const name = (error as { name?: string }).name;
-    if (name !== "BucketAlreadyOwnedByYou" && name !== "BucketAlreadyExists") {
-      throw error;
-    }
-  }
-
-  await targetS3.send(
-    new PutPublicAccessBlockCommand({
-      Bucket: props.bucketName,
-      PublicAccessBlockConfiguration: {
-        BlockPublicAcls: true,
-        BlockPublicPolicy: true,
-        IgnorePublicAcls: true,
-        RestrictPublicBuckets: true,
-      },
-    }),
-  );
-
-  await targetS3.send(
-    new PutBucketTaggingCommand({
-      Bucket: props.bucketName,
-      Tagging: { TagSet: [managedByTag, { Key: "Purpose", Value: "config-delivery" }] },
-    }),
-  );
+  const targetS3 = new S3Client({ region: props.region, credentials });
 
   const bucketPolicy = JSON.stringify({
     Version: "2012-10-17",
@@ -461,12 +475,13 @@ async function handleCreateConfigDeliveryBucket(props: {
     ],
   });
 
-  await targetS3.send(
-    new PutBucketPolicyCommand({
-      Bucket: props.bucketName,
-      Policy: bucketPolicy,
-    }),
-  );
+  const created = await createManagedBucket({
+    s3Client: targetS3,
+    bucketName: props.bucketName,
+    region: props.region,
+    purposeTag: "config-delivery",
+    policy: bucketPolicy,
+  });
 
   return {
     action: "createConfigDeliveryBucket" as const,
@@ -540,47 +555,7 @@ async function handleCreateCloudTrailBucket(props: {
     sessionName: "beesolve-aws-accounts-cloudtrail-bucket",
   });
 
-  const targetS3 = new S3Client({
-    region: props.region,
-    credentials,
-  });
-
-  let created = false;
-  try {
-    await targetS3.send(
-      new CreateBucketCommand({
-        Bucket: props.bucketName,
-        ...(props.region !== "us-east-1" && {
-          CreateBucketConfiguration: { LocationConstraint: props.region as any },
-        }),
-      }),
-    );
-    created = true;
-  } catch (error: unknown) {
-    const name = (error as { name?: string }).name;
-    if (name !== "BucketAlreadyOwnedByYou" && name !== "BucketAlreadyExists") {
-      throw error;
-    }
-  }
-
-  await targetS3.send(
-    new PutPublicAccessBlockCommand({
-      Bucket: props.bucketName,
-      PublicAccessBlockConfiguration: {
-        BlockPublicAcls: true,
-        BlockPublicPolicy: true,
-        IgnorePublicAcls: true,
-        RestrictPublicBuckets: true,
-      },
-    }),
-  );
-
-  await targetS3.send(
-    new PutBucketTaggingCommand({
-      Bucket: props.bucketName,
-      Tagging: { TagSet: [managedByTag, { Key: "Purpose", Value: "cloudtrail-logs" }] },
-    }),
-  );
+  const targetS3 = new S3Client({ region: props.region, credentials });
 
   const bucketPolicy = JSON.stringify({
     Version: "2012-10-17",
@@ -609,12 +584,13 @@ async function handleCreateCloudTrailBucket(props: {
     ],
   });
 
-  await targetS3.send(
-    new PutBucketPolicyCommand({
-      Bucket: props.bucketName,
-      Policy: bucketPolicy,
-    }),
-  );
+  const created = await createManagedBucket({
+    s3Client: targetS3,
+    bucketName: props.bucketName,
+    region: props.region,
+    purposeTag: "cloudtrail-logs",
+    policy: bucketPolicy,
+  });
 
   return {
     action: "createCloudTrailBucket" as const,

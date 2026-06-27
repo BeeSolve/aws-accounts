@@ -1221,121 +1221,68 @@ function getOperationExecutionPriority(operation: Operation): number {
   return operationExecutionPriority[operation.kind];
 }
 
+const operationSortKeyFields: Record<Operation["kind"], Array<string>> = {
+  moveAccount: ["accountName", "accountId"],
+  createOu: ["ouName", "parentOuName"],
+  renameOu: ["fromOuName", "toOuName"],
+  createAccount: ["accountName", "targetOuName"],
+  updateAccountTags: ["accountName", "accountId"],
+  updateAccountName: ["accountId", "toAccountName"],
+  removeAccount: ["accountName", "accountId"],
+  deleteOu: ["ouName", "parentOuName"],
+  createIdcUser: ["userName"],
+  updateIdcUser: ["userName"],
+  deleteIdcUser: ["userName"],
+  createIdcGroup: ["groupDisplayName"],
+  updateIdcGroupDescription: ["groupDisplayName"],
+  deleteIdcGroup: ["groupDisplayName"],
+  addIdcGroupMembership: ["groupDisplayName", "userName"],
+  removeIdcGroupMembership: ["groupDisplayName", "userName"],
+  createIdcPermissionSet: ["permissionSetName"],
+  deleteIdcPermissionSet: ["permissionSetName"],
+  putIdcPermissionSetInlinePolicy: ["permissionSetName"],
+  deleteIdcPermissionSetInlinePolicy: ["permissionSetName"],
+  updateIdcPermissionSetDescription: ["permissionSetName"],
+  provisionIdcPermissionSet: ["permissionSetName"],
+  attachIdcManagedPolicyToPermissionSet: ["permissionSetName", "managedPolicyArn"],
+  detachIdcManagedPolicyFromPermissionSet: ["permissionSetName", "managedPolicyArn"],
+  attachIdcCustomerManagedPolicyReferenceToPermissionSet: [
+    "permissionSetName",
+    "customerManagedPolicyPath",
+    "customerManagedPolicyName",
+  ],
+  detachIdcCustomerManagedPolicyReferenceFromPermissionSet: [
+    "permissionSetName",
+    "customerManagedPolicyPath",
+    "customerManagedPolicyName",
+  ],
+  grantIdcAccountAssignment: ["accountName", "permissionSetName", "principalType", "principalName"],
+  revokeIdcAccountAssignment: [
+    "accountName",
+    "permissionSetName",
+    "principalType",
+    "principalName",
+  ],
+  updateIdcPermissionSetSessionDuration: ["permissionSetName"],
+  putIdcPermissionSetPermissionsBoundary: ["permissionSetName"],
+  deleteIdcPermissionSetPermissionsBoundary: ["permissionSetName"],
+  createOrgPolicy: ["policyType", "policyName"],
+  updateOrgPolicyContent: ["policyName"],
+  updateOrgPolicyDescription: ["policyName"],
+  deleteOrgPolicy: ["policyName"],
+  attachOrgPolicy: ["policyName", "targetName"],
+  detachOrgPolicy: ["policyName", "targetName"],
+  putAlternateContact: ["accountName", "contactType"],
+  deleteAlternateContact: ["accountName", "contactType"],
+  setIdcAccessControlAttributes: [],
+  registerDelegatedAdministrator: ["accountName", "servicePrincipal"],
+  deregisterDelegatedAdministrator: ["accountName", "servicePrincipal"],
+};
+
 function getOperationSortKey(operation: Operation): string {
-  if (operation.kind === "moveAccount") {
-    return `${operation.kind}|${operation.accountName}|${operation.accountId}`;
-  }
-  if (operation.kind === "createOu") {
-    return `${operation.kind}|${operation.ouName}|${operation.parentOuName}`;
-  }
-  if (operation.kind === "renameOu") {
-    return `${operation.kind}|${operation.fromOuName}|${operation.toOuName}`;
-  }
-  if (operation.kind === "createAccount") {
-    return `${operation.kind}|${operation.accountName}|${operation.targetOuName}`;
-  }
-  if (operation.kind === "updateAccountTags") {
-    return `${operation.kind}|${operation.accountName}|${operation.accountId}`;
-  }
-  if (operation.kind === "updateAccountName") {
-    return `${operation.kind}|${operation.accountId}|${operation.toAccountName}`;
-  }
-  if (operation.kind === "removeAccount") {
-    return `${operation.kind}|${operation.accountName}|${operation.accountId}`;
-  }
-  if (operation.kind === "deleteOu") {
-    return `${operation.kind}|${operation.ouName}|${operation.parentOuName}`;
-  }
-  if (operation.kind === "createIdcUser") {
-    return `${operation.kind}|${operation.userName}`;
-  }
-  if (operation.kind === "updateIdcUser") {
-    return `${operation.kind}|${operation.userName}`;
-  }
-  if (operation.kind === "deleteIdcUser") {
-    return `${operation.kind}|${operation.userName}`;
-  }
-  if (operation.kind === "createIdcGroup") {
-    return `${operation.kind}|${operation.groupDisplayName}`;
-  }
-  if (operation.kind === "updateIdcGroupDescription") {
-    return `${operation.kind}|${operation.groupDisplayName}`;
-  }
-  if (operation.kind === "deleteIdcGroup") {
-    return `${operation.kind}|${operation.groupDisplayName}`;
-  }
-  if (operation.kind === "addIdcGroupMembership" || operation.kind === "removeIdcGroupMembership") {
-    return `${operation.kind}|${operation.groupDisplayName}|${operation.userName}`;
-  }
-  if (operation.kind === "createIdcPermissionSet") {
-    return `${operation.kind}|${operation.permissionSetName}`;
-  }
-  if (operation.kind === "deleteIdcPermissionSet") {
-    return `${operation.kind}|${operation.permissionSetName}`;
-  }
-  if (
-    operation.kind === "putIdcPermissionSetInlinePolicy" ||
-    operation.kind === "deleteIdcPermissionSetInlinePolicy" ||
-    operation.kind === "updateIdcPermissionSetDescription" ||
-    operation.kind === "provisionIdcPermissionSet"
-  ) {
-    return `${operation.kind}|${operation.permissionSetName}`;
-  }
-  if (
-    operation.kind === "attachIdcManagedPolicyToPermissionSet" ||
-    operation.kind === "detachIdcManagedPolicyFromPermissionSet"
-  ) {
-    return [operation.kind, operation.permissionSetName, operation.managedPolicyArn].join("|");
-  }
-  if (
-    operation.kind === "attachIdcCustomerManagedPolicyReferenceToPermissionSet" ||
-    operation.kind === "detachIdcCustomerManagedPolicyReferenceFromPermissionSet"
-  ) {
-    return [
-      operation.kind,
-      operation.permissionSetName,
-      operation.customerManagedPolicyPath,
-      operation.customerManagedPolicyName,
-    ].join("|");
-  }
-  if (
-    operation.kind === "grantIdcAccountAssignment" ||
-    operation.kind === "revokeIdcAccountAssignment"
-  ) {
-    return [
-      operation.kind,
-      operation.accountName,
-      operation.permissionSetName,
-      operation.principalType,
-      operation.principalName,
-    ].join("|");
-  }
-  if (operation.kind === "createOrgPolicy") {
-    return `${operation.kind}|${operation.policyType}|${operation.policyName}`;
-  }
-  if (
-    operation.kind === "updateOrgPolicyContent" ||
-    operation.kind === "updateOrgPolicyDescription" ||
-    operation.kind === "deleteOrgPolicy"
-  ) {
-    return `${operation.kind}|${operation.policyName}`;
-  }
-  if (operation.kind === "attachOrgPolicy" || operation.kind === "detachOrgPolicy") {
-    return [operation.kind, operation.policyName, operation.targetName].join("|");
-  }
-  if (operation.kind === "putAlternateContact" || operation.kind === "deleteAlternateContact") {
-    return [operation.kind, operation.accountName, operation.contactType].join("|");
-  }
-  if (operation.kind === "setIdcAccessControlAttributes") {
-    return operation.kind;
-  }
-  if (
-    operation.kind === "registerDelegatedAdministrator" ||
-    operation.kind === "deregisterDelegatedAdministrator"
-  ) {
-    return [operation.kind, operation.accountName, operation.servicePrincipal].join("|");
-  }
-  return "zzzz";
+  const fields = operationSortKeyFields[operation.kind];
+  const values = fields.map((field) => (operation as Record<string, unknown>)[field] ?? "");
+  return [operation.kind, ...values].join("|");
 }
 
 function normalizeJsonContent(content: string): string {
