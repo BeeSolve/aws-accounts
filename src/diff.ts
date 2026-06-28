@@ -92,10 +92,12 @@ type NormalizedIdcView = {
   assignmentsByKey: Map<string, NormalizedIdcAssignment>;
 };
 
-export function diffStates(props: DiffStatesProps): Plan {
-  const operations: Array<Operation> = [];
-  const unsupported: Array<UnsupportedDiff> = [];
+type DiffResult = {
+  operations: Array<Operation>;
+  unsupported: Array<UnsupportedDiff>;
+};
 
+export function diffStates(props: DiffStatesProps): Plan {
   const currentOrganization = normalizeOrganizationState({
     state: props.current,
     includeDepthById: true,
@@ -103,35 +105,138 @@ export function diffStates(props: DiffStatesProps): Plan {
   const nextOrganization = normalizeOrganizationState({
     state: props.next,
   });
+  const currentIdcView = normalizeIdentityCenterState({
+    state: props.current,
+  });
+  const nextIdcView = normalizeIdentityCenterState({
+    state: props.next,
+  });
+
+  const accounts = diffAccounts({
+    current: props.current,
+    next: props.next,
+    currentOrganization,
+    nextOrganization,
+  });
+
+  const ous = diffOrganizationalUnits({
+    currentOrganization,
+    nextOrganization,
+    existingOperations: accounts.operations,
+  });
+
+  const idcUsersGroups = diffIdcUsersAndGroups({
+    current: props.current,
+    next: props.next,
+    currentIdcView,
+    nextIdcView,
+  });
+
+  const permissionSets = diffPermissionSets({
+    current: props.current,
+    next: props.next,
+    currentIdcView,
+    nextIdcView,
+  });
+
+  const assignments = diffAssignments({
+    current: props.current,
+    next: props.next,
+    currentIdcView,
+    nextIdcView,
+  });
+
+  const accessControlAttributes = diffAccessControlAttributes({
+    current: props.current,
+    next: props.next,
+  });
+
+  const delegatedAdmins = diffDelegatedAdministrators({
+    current: props.current,
+    next: props.next,
+  });
+
+  const policies = diffOrgPolicies({
+    current: props.current,
+    next: props.next,
+  });
+
+  const operations = new Array<Operation>(
+    ...accounts.operations,
+    ...ous.operations,
+    ...idcUsersGroups.operations,
+    ...permissionSets.operations,
+    ...assignments.operations,
+    ...accessControlAttributes.operations,
+    ...delegatedAdmins.operations,
+    ...policies.operations,
+  );
+
+  const unsupported = new Array<UnsupportedDiff>(
+    ...accounts.unsupported,
+    ...ous.unsupported,
+    ...idcUsersGroups.unsupported,
+    ...permissionSets.unsupported,
+    ...assignments.unsupported,
+    ...accessControlAttributes.unsupported,
+    ...delegatedAdmins.unsupported,
+    ...policies.unsupported,
+  );
+
+  sortOperations({ operations, currentOrganization });
+  unsupported.sort((left, right) => {
+    const kindComparison = left.kind.localeCompare(right.kind);
+    if (kindComparison !== 0) {
+      return kindComparison;
+    }
+    return left.description.localeCompare(right.description);
+  });
+
+  return v.parse(planSchema, {
+    operations,
+    unsupported,
+  });
+}
+
+type DiffAccountsProps = {
+  current: StateFile;
+  next: StateFile;
+  currentOrganization: NormalizedOrganizationView;
+  nextOrganization: NormalizedOrganizationView;
+};
+
+function diffAccounts(props: DiffAccountsProps): DiffResult {
+  const operations = new Array<Operation>();
+  const unsupported = new Array<UnsupportedDiff>();
 
   const nextAccountIds = new Set(
-    nextOrganization.accounts
+    props.nextOrganization.accounts
       .filter((account) => account.id !== pendingCreationId)
       .map((account) => account.id),
   );
 
   const ouNamesBeingCreated = new Set(
-    nextOrganization.organizationalUnits
-      .filter((ou) => !currentOrganization.organizationalUnitByName.has(ou.name))
+    props.nextOrganization.organizationalUnits
+      .filter((ou) => !props.currentOrganization.organizationalUnitByName.has(ou.name))
       .map((ou) => ou.name),
   );
 
-  for (const nextAccount of nextOrganization.accounts) {
+  for (const nextAccount of props.nextOrganization.accounts) {
     const currentAccount =
       nextAccount.id !== pendingCreationId
-        ? currentOrganization.accountById.get(nextAccount.id)
+        ? props.currentOrganization.accountById.get(nextAccount.id)
         : undefined;
     if (currentAccount == null) {
       if (nextAccount.id === pendingCreationId) {
         const targetOuName = resolveOrganizationalUnitName({
-          organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
-          rootId: nextOrganization.rootId,
+          organizationalUnitNameById: props.nextOrganization.organizationalUnitNameById,
+          rootId: props.nextOrganization.rootId,
           organizationalUnitId: nextAccount.parentId,
         });
         if (
           isResolvableOrganizationalUnitId({
-            rootId: nextOrganization.rootId,
-            organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
+            rootId: props.nextOrganization.rootId,
+            organizationalUnitNameById: props.nextOrganization.organizationalUnitNameById,
             organizationalUnitId: nextAccount.parentId,
           }) === false
         ) {
@@ -205,13 +310,13 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     const fromOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
-      rootId: currentOrganization.rootId,
+      organizationalUnitNameById: props.currentOrganization.organizationalUnitNameById,
+      rootId: props.currentOrganization.rootId,
       organizationalUnitId: currentAccount.parentId,
     });
     const toOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
-      rootId: nextOrganization.rootId,
+      organizationalUnitNameById: props.nextOrganization.organizationalUnitNameById,
+      rootId: props.nextOrganization.rootId,
       organizationalUnitId: nextAccount.parentId,
     });
     if (nextAccount.parentId === pendingCreationId) {
@@ -275,8 +380,9 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
-  const graveyardOrganizationalUnit = currentOrganization.organizationalUnitByName.get("Graveyard");
-  for (const currentAccount of currentOrganization.accounts) {
+  const graveyardOrganizationalUnit =
+    props.currentOrganization.organizationalUnitByName.get("Graveyard");
+  for (const currentAccount of props.currentOrganization.accounts) {
     if (currentAccount.id !== pendingCreationId && nextAccountIds.has(currentAccount.id)) {
       continue;
     }
@@ -292,8 +398,8 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     const fromOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
-      rootId: currentOrganization.rootId,
+      organizationalUnitNameById: props.currentOrganization.organizationalUnitNameById,
+      rootId: props.currentOrganization.rootId,
       organizationalUnitId: currentAccount.parentId,
     });
     operations.push({
@@ -307,8 +413,27 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
-  for (const nextOrganizationalUnit of nextOrganization.organizationalUnits) {
-    const currentOrganizationalUnit = currentOrganization.organizationalUnitByName.get(
+  return { operations, unsupported };
+}
+
+type DiffOrganizationalUnitsProps = {
+  currentOrganization: NormalizedOrganizationView;
+  nextOrganization: NormalizedOrganizationView;
+  existingOperations: Array<Operation>;
+};
+
+function diffOrganizationalUnits(props: DiffOrganizationalUnitsProps): DiffResult {
+  const operations = new Array<Operation>();
+  const unsupported = new Array<UnsupportedDiff>();
+
+  const ouNamesBeingCreated = new Set(
+    props.nextOrganization.organizationalUnits
+      .filter((ou) => !props.currentOrganization.organizationalUnitByName.has(ou.name))
+      .map((ou) => ou.name),
+  );
+
+  for (const nextOrganizationalUnit of props.nextOrganization.organizationalUnits) {
+    const currentOrganizationalUnit = props.currentOrganization.organizationalUnitByName.get(
       nextOrganizationalUnit.name,
     );
     if (currentOrganizationalUnit == null) {
@@ -318,13 +443,13 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     const fromParentOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
-      rootId: currentOrganization.rootId,
+      organizationalUnitNameById: props.currentOrganization.organizationalUnitNameById,
+      rootId: props.currentOrganization.rootId,
       organizationalUnitId: currentOrganizationalUnit.parentId,
     });
     const toParentOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
-      rootId: nextOrganization.rootId,
+      organizationalUnitNameById: props.nextOrganization.organizationalUnitNameById,
+      rootId: props.nextOrganization.rootId,
       organizationalUnitId: nextOrganizationalUnit.parentId,
     });
     unsupported.push({
@@ -336,14 +461,14 @@ export function diffStates(props: DiffStatesProps): Plan {
 
   const addedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] = [];
   const removedOrganizationalUnits: StateFile["organization"]["organizationalUnits"] = [];
-  for (const nextOrganizationalUnit of nextOrganization.organizationalUnits) {
-    if (currentOrganization.organizationalUnitByName.has(nextOrganizationalUnit.name)) {
+  for (const nextOrganizationalUnit of props.nextOrganization.organizationalUnits) {
+    if (props.currentOrganization.organizationalUnitByName.has(nextOrganizationalUnit.name)) {
       continue;
     }
     addedOrganizationalUnits.push(nextOrganizationalUnit);
   }
-  for (const currentOrganizationalUnit of currentOrganization.organizationalUnits) {
-    if (nextOrganization.organizationalUnitByName.has(currentOrganizationalUnit.name)) {
+  for (const currentOrganizationalUnit of props.currentOrganization.organizationalUnits) {
+    if (props.nextOrganization.organizationalUnitByName.has(currentOrganizationalUnit.name)) {
       continue;
     }
     removedOrganizationalUnits.push(currentOrganizationalUnit);
@@ -356,7 +481,7 @@ export function diffStates(props: DiffStatesProps): Plan {
     organizationalUnits: removedOrganizationalUnits,
   });
   const plannedMoveAccountDeparturesByOuId = countMoveAccountDeparturesByOuId({
-    operations,
+    operations: props.existingOperations,
   });
   const consumedAddedOrganizationalUnitNames = new Set<string>();
   const consumedRemovedOrganizationalUnitNames = new Set<string>();
@@ -378,8 +503,8 @@ export function diffStates(props: DiffStatesProps): Plan {
       consumedAddedOrganizationalUnitNames.add(added.name);
       consumedRemovedOrganizationalUnitNames.add(removed.name);
       const parentOuName = resolveOrganizationalUnitName({
-        organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
-        rootId: nextOrganization.rootId,
+        organizationalUnitNameById: props.nextOrganization.organizationalUnitNameById,
+        rootId: props.nextOrganization.rootId,
         organizationalUnitId: parentId,
       });
       operations.push({
@@ -395,8 +520,8 @@ export function diffStates(props: DiffStatesProps): Plan {
 
     if (parentAdded.length > 0 && parentRemoved.length > 0) {
       const parentOuName = resolveOrganizationalUnitName({
-        organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
-        rootId: nextOrganization.rootId,
+        organizationalUnitNameById: props.nextOrganization.organizationalUnitNameById,
+        rootId: props.nextOrganization.rootId,
         organizationalUnitId: parentId,
       });
       unsupported.push({
@@ -425,14 +550,14 @@ export function diffStates(props: DiffStatesProps): Plan {
       continue;
     }
     const parentOuName = resolveOrganizationalUnitName({
-      organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
-      rootId: nextOrganization.rootId,
+      organizationalUnitNameById: props.nextOrganization.organizationalUnitNameById,
+      rootId: props.nextOrganization.rootId,
       organizationalUnitId: addedOrganizationalUnit.parentId,
     });
     if (
       isResolvableOrganizationalUnitId({
-        rootId: nextOrganization.rootId,
-        organizationalUnitNameById: nextOrganization.organizationalUnitNameById,
+        rootId: props.nextOrganization.rootId,
+        organizationalUnitNameById: props.nextOrganization.organizationalUnitNameById,
         organizationalUnitId: addedOrganizationalUnit.parentId,
       }) === false
     ) {
@@ -469,15 +594,15 @@ export function diffStates(props: DiffStatesProps): Plan {
   const deleteEligibilityByOuId = createDeleteEligibilityByOuId({
     removedOrganizationalUnits: pendingRemovedOrganizationalUnits,
     removedOrganizationalUnitIds: pendingRemovedOrganizationalUnitIds,
-    currentOrganizationalUnitsByParentId: currentOrganization.organizationalUnitsByParentId,
-    currentAccountsByParentId: currentOrganization.accountsByParentId,
+    currentOrganizationalUnitsByParentId: props.currentOrganization.organizationalUnitsByParentId,
+    currentAccountsByParentId: props.currentOrganization.accountsByParentId,
     plannedMoveAccountDeparturesByOuId,
   });
   for (const removedOrganizationalUnit of pendingRemovedOrganizationalUnits) {
     if (deleteEligibilityByOuId.get(removedOrganizationalUnit.id) === true) {
       const parentOuName = resolveOrganizationalUnitName({
-        organizationalUnitNameById: currentOrganization.organizationalUnitNameById,
-        rootId: currentOrganization.rootId,
+        organizationalUnitNameById: props.currentOrganization.organizationalUnitNameById,
+        rootId: props.currentOrganization.rootId,
         organizationalUnitId: removedOrganizationalUnit.parentId,
       });
       operations.push({
@@ -496,15 +621,22 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
-  const currentIdcView = normalizeIdentityCenterState({
-    state: props.current,
-  });
-  const nextIdcView = normalizeIdentityCenterState({
-    state: props.next,
-  });
+  return { operations, unsupported };
+}
+
+type DiffIdcUsersAndGroupsProps = {
+  current: StateFile;
+  next: StateFile;
+  currentIdcView: NormalizedIdcView;
+  nextIdcView: NormalizedIdcView;
+};
+
+function diffIdcUsersAndGroups(props: DiffIdcUsersAndGroupsProps): DiffResult {
+  const operations = new Array<Operation>();
+  const unsupported = new Array<UnsupportedDiff>();
 
   for (const nextUser of props.next.identityCenter.users) {
-    if (currentIdcView.usersByUserName.has(nextUser.userName)) {
+    if (props.currentIdcView.usersByUserName.has(nextUser.userName)) {
       continue;
     }
     operations.push({
@@ -516,7 +648,7 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const nextUser of props.next.identityCenter.users) {
-    const currentUser = currentIdcView.usersByUserName.get(nextUser.userName);
+    const currentUser = props.currentIdcView.usersByUserName.get(nextUser.userName);
     if (currentUser == null) {
       continue;
     }
@@ -533,7 +665,7 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const nextGroup of props.next.identityCenter.groups) {
-    if (currentIdcView.groupsByDisplayName.has(nextGroup.displayName)) {
+    if (props.currentIdcView.groupsByDisplayName.has(nextGroup.displayName)) {
       continue;
     }
     operations.push({
@@ -544,7 +676,7 @@ export function diffStates(props: DiffStatesProps): Plan {
   }
 
   for (const nextGroup of props.next.identityCenter.groups) {
-    const currentGroup = currentIdcView.groupsByDisplayName.get(nextGroup.displayName);
+    const currentGroup = props.currentIdcView.groupsByDisplayName.get(nextGroup.displayName);
     if (currentGroup == null) {
       continue;
     }
@@ -560,28 +692,20 @@ export function diffStates(props: DiffStatesProps): Plan {
 
   const removedUserNames = new Set(
     props.current.identityCenter.users
-      .filter((user) => nextIdcView.usersByUserName.has(user.userName) === false)
+      .filter((user) => props.nextIdcView.usersByUserName.has(user.userName) === false)
       .map((user) => user.userName),
   );
   const removedGroupDisplayNames = new Set(
     props.current.identityCenter.groups
-      .filter((group) => nextIdcView.groupsByDisplayName.has(group.displayName) === false)
+      .filter((group) => props.nextIdcView.groupsByDisplayName.has(group.displayName) === false)
       .map((group) => group.displayName),
   );
-  const removedPermissionSetNames = new Set(
-    props.current.identityCenter.permissionSets
-      .filter((permissionSet) => nextIdcView.permissionSetsByName.has(permissionSet.name) === false)
-      .map((permissionSet) => permissionSet.name),
-  );
-  const permissionSetNamesWithDesiredAssignments = new Set(
-    [...nextIdcView.assignmentsByKey.values()].map((assignment) => assignment.permissionSetName),
-  );
 
-  for (const nextMembership of nextIdcView.membershipsByKey.values()) {
+  for (const nextMembership of props.nextIdcView.membershipsByKey.values()) {
     const membershipKey = createNormalizedIdcMembershipKey({
       membership: nextMembership,
     });
-    if (currentIdcView.membershipsByKey.has(membershipKey)) {
+    if (props.currentIdcView.membershipsByKey.has(membershipKey)) {
       continue;
     }
     operations.push({
@@ -590,12 +714,12 @@ export function diffStates(props: DiffStatesProps): Plan {
       userName: nextMembership.userName,
     });
   }
-  for (const currentMembership of currentIdcView.membershipsByKey.values()) {
+  for (const currentMembership of props.currentIdcView.membershipsByKey.values()) {
     const membershipKey = createNormalizedIdcMembershipKey({
       membership: currentMembership,
     });
     if (
-      nextIdcView.membershipsByKey.has(membershipKey) &&
+      props.nextIdcView.membershipsByKey.has(membershipKey) &&
       removedUserNames.has(currentMembership.userName) === false &&
       removedGroupDisplayNames.has(currentMembership.groupDisplayName) === false
     ) {
@@ -608,8 +732,50 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
+  for (const removedUserName of removedUserNames) {
+    operations.push({
+      kind: "deleteIdcUser",
+      userName: removedUserName,
+    });
+  }
+  for (const removedGroupDisplayName of removedGroupDisplayNames) {
+    operations.push({
+      kind: "deleteIdcGroup",
+      groupDisplayName: removedGroupDisplayName,
+    });
+  }
+
+  return { operations, unsupported };
+}
+
+type DiffPermissionSetsProps = {
+  current: StateFile;
+  next: StateFile;
+  currentIdcView: NormalizedIdcView;
+  nextIdcView: NormalizedIdcView;
+};
+
+function diffPermissionSets(props: DiffPermissionSetsProps): DiffResult {
+  const operations = new Array<Operation>();
+  const unsupported = new Array<UnsupportedDiff>();
+
+  const removedPermissionSetNames = new Set(
+    props.current.identityCenter.permissionSets
+      .filter(
+        (permissionSet) => props.nextIdcView.permissionSetsByName.has(permissionSet.name) === false,
+      )
+      .map((permissionSet) => permissionSet.name),
+  );
+  const permissionSetNamesWithDesiredAssignments = new Set(
+    [...props.nextIdcView.assignmentsByKey.values()].map(
+      (assignment) => assignment.permissionSetName,
+    ),
+  );
+
   for (const nextPermissionSet of props.next.identityCenter.permissionSets) {
-    const currentPermissionSet = currentIdcView.permissionSetsByName.get(nextPermissionSet.name);
+    const currentPermissionSet = props.currentIdcView.permissionSetsByName.get(
+      nextPermissionSet.name,
+    );
     if (currentPermissionSet == null) {
       operations.push({
         kind: "createIdcPermissionSet",
@@ -747,11 +913,50 @@ export function diffStates(props: DiffStatesProps): Plan {
     }
   }
 
-  for (const nextAssignment of nextIdcView.assignmentsByKey.values()) {
+  for (const removedPermissionSetName of removedPermissionSetNames) {
+    operations.push({
+      kind: "deleteIdcPermissionSet",
+      permissionSetName: removedPermissionSetName,
+    });
+  }
+
+  return { operations, unsupported };
+}
+
+type DiffAssignmentsProps = {
+  current: StateFile;
+  next: StateFile;
+  currentIdcView: NormalizedIdcView;
+  nextIdcView: NormalizedIdcView;
+};
+
+function diffAssignments(props: DiffAssignmentsProps): DiffResult {
+  const operations = new Array<Operation>();
+  const unsupported = new Array<UnsupportedDiff>();
+
+  const removedUserNames = new Set(
+    props.current.identityCenter.users
+      .filter((user) => props.nextIdcView.usersByUserName.has(user.userName) === false)
+      .map((user) => user.userName),
+  );
+  const removedGroupDisplayNames = new Set(
+    props.current.identityCenter.groups
+      .filter((group) => props.nextIdcView.groupsByDisplayName.has(group.displayName) === false)
+      .map((group) => group.displayName),
+  );
+  const removedPermissionSetNames = new Set(
+    props.current.identityCenter.permissionSets
+      .filter(
+        (permissionSet) => props.nextIdcView.permissionSetsByName.has(permissionSet.name) === false,
+      )
+      .map((permissionSet) => permissionSet.name),
+  );
+
+  for (const nextAssignment of props.nextIdcView.assignmentsByKey.values()) {
     const assignmentKey = createNormalizedIdcAssignmentKey({
       assignment: nextAssignment,
     });
-    if (currentIdcView.assignmentsByKey.has(assignmentKey)) {
+    if (props.currentIdcView.assignmentsByKey.has(assignmentKey)) {
       continue;
     }
     operations.push({
@@ -762,12 +967,12 @@ export function diffStates(props: DiffStatesProps): Plan {
       principalName: nextAssignment.principalName,
     });
   }
-  for (const currentAssignment of currentIdcView.assignmentsByKey.values()) {
+  for (const currentAssignment of props.currentIdcView.assignmentsByKey.values()) {
     const assignmentKey = createNormalizedIdcAssignmentKey({
       assignment: currentAssignment,
     });
     if (
-      nextIdcView.assignmentsByKey.has(assignmentKey) &&
+      props.nextIdcView.assignmentsByKey.has(assignmentKey) &&
       removedPermissionSetNames.has(currentAssignment.permissionSetName) === false &&
       (currentAssignment.principalType === "USER"
         ? removedUserNames.has(currentAssignment.principalName) === false
@@ -783,38 +988,46 @@ export function diffStates(props: DiffStatesProps): Plan {
       principalName: currentAssignment.principalName,
     });
   }
-  for (const removedUserName of removedUserNames) {
-    operations.push({
-      kind: "deleteIdcUser",
-      userName: removedUserName,
-    });
-  }
-  for (const removedGroupDisplayName of removedGroupDisplayNames) {
-    operations.push({
-      kind: "deleteIdcGroup",
-      groupDisplayName: removedGroupDisplayName,
-    });
-  }
-  for (const removedPermissionSetName of removedPermissionSetNames) {
-    operations.push({
-      kind: "deleteIdcPermissionSet",
-      permissionSetName: removedPermissionSetName,
-    });
-  }
+
+  return { operations, unsupported };
+}
+
+type DiffAccessControlAttributesProps = {
+  current: StateFile;
+  next: StateFile;
+};
+
+function diffAccessControlAttributes(props: DiffAccessControlAttributesProps): DiffResult {
+  const operations = new Array<Operation>();
+  const unsupported = new Array<UnsupportedDiff>();
 
   const currentAccessControlAttributes = props.current.identityCenter.accessControlAttributes ?? [];
   const nextAccessControlAttributes = props.next.identityCenter.accessControlAttributes ?? [];
   if (
     JSON.stringify(
-      [...currentAccessControlAttributes].sort((a, b) => a.key.localeCompare(b.key)),
+      [...currentAccessControlAttributes].sort((left, right) => left.key.localeCompare(right.key)),
     ) !==
-    JSON.stringify([...nextAccessControlAttributes].sort((a, b) => a.key.localeCompare(b.key)))
+    JSON.stringify(
+      [...nextAccessControlAttributes].sort((left, right) => left.key.localeCompare(right.key)),
+    )
   ) {
     operations.push({
       kind: "setIdcAccessControlAttributes",
       attributes: nextAccessControlAttributes,
     });
   }
+
+  return { operations, unsupported };
+}
+
+type DiffDelegatedAdministratorsProps = {
+  current: StateFile;
+  next: StateFile;
+};
+
+function diffDelegatedAdministrators(props: DiffDelegatedAdministratorsProps): DiffResult {
+  const operations = new Array<Operation>();
+  const unsupported = new Array<UnsupportedDiff>();
 
   const nextAccountNameById = new Map(
     props.next.organization.accounts.map((account) => [account.id, account.name]),
@@ -853,6 +1066,18 @@ export function diffStates(props: DiffStatesProps): Plan {
       servicePrincipal: currentDa.servicePrincipal,
     });
   }
+
+  return { operations, unsupported };
+}
+
+type DiffOrgPoliciesProps = {
+  current: StateFile;
+  next: StateFile;
+};
+
+function diffOrgPolicies(props: DiffOrgPoliciesProps): DiffResult {
+  const operations = new Array<Operation>();
+  const unsupported = new Array<UnsupportedDiff>();
 
   const currentPolicies = props.current.organization.policies ?? [];
   const nextPolicies = props.next.organization.policies ?? [];
@@ -902,6 +1127,13 @@ export function diffStates(props: DiffStatesProps): Plan {
 
   const nextPoliciesById = new Map(nextPolicies.map((p) => [p.id, p]));
   const currentPoliciesById = new Map(currentPolicies.map((p) => [p.id, p]));
+
+  const nextAccountNameById = new Map(
+    props.next.organization.accounts.map((account) => [account.id, account.name]),
+  );
+  const currentAccountNameById = new Map(
+    props.current.organization.accounts.map((account) => [account.id, account.name]),
+  );
 
   const nextOuNameById = new Map(
     props.next.organization.organizationalUnits.map((ou) => [ou.id, ou.name]),
@@ -992,7 +1224,16 @@ export function diffStates(props: DiffStatesProps): Plan {
     });
   }
 
-  operations.sort((left, right) => {
+  return { operations, unsupported };
+}
+
+type SortOperationsProps = {
+  operations: Array<Operation>;
+  currentOrganization: NormalizedOrganizationView;
+};
+
+function sortOperations(props: SortOperationsProps): void {
+  props.operations.sort((left, right) => {
     const priorityComparison =
       getOperationExecutionPriority(left) - getOperationExecutionPriority(right);
     if (priorityComparison !== 0) {
@@ -1000,8 +1241,8 @@ export function diffStates(props: DiffStatesProps): Plan {
     }
     if (left.kind === "deleteOu" && right.kind === "deleteOu") {
       const depthComparison =
-        (currentOrganization.organizationalUnitDepthById.get(right.ouId) ?? 0) -
-        (currentOrganization.organizationalUnitDepthById.get(left.ouId) ?? 0);
+        (props.currentOrganization.organizationalUnitDepthById.get(right.ouId) ?? 0) -
+        (props.currentOrganization.organizationalUnitDepthById.get(left.ouId) ?? 0);
       if (depthComparison !== 0) {
         return depthComparison;
       }
@@ -1011,10 +1252,10 @@ export function diffStates(props: DiffStatesProps): Plan {
 
   // Topo-sort createOu ops so parent OUs are always created before children.
   // Only the subset where parentOuId is pendingCreationId has ordering constraints.
-  const createOuOps = operations.filter(
+  const createOuOps = props.operations.filter(
     (op): op is Extract<Operation, { kind: "createOu" }> => op.kind === "createOu",
   );
-  const otherOps = operations.filter((op) => op.kind !== "createOu");
+  const otherOps = props.operations.filter((op) => op.kind !== "createOu");
   if (createOuOps.some((op) => op.parentOuId === pendingCreationId)) {
     const createOuByName = new Map(createOuOps.map((op) => [op.ouName, op]));
     const visited = new Set<string>();
@@ -1029,21 +1270,8 @@ export function diffStates(props: DiffStatesProps): Plan {
       topoSorted.push(op);
     }
     for (const op of createOuOps) visitOu(op);
-    operations.splice(0, operations.length, ...topoSorted, ...otherOps);
+    props.operations.splice(0, props.operations.length, ...topoSorted, ...otherOps);
   }
-
-  unsupported.sort((left, right) => {
-    const kindComparison = left.kind.localeCompare(right.kind);
-    if (kindComparison !== 0) {
-      return kindComparison;
-    }
-    return left.description.localeCompare(right.description);
-  });
-
-  return v.parse(planSchema, {
-    operations,
-    unsupported,
-  });
 }
 
 function groupOrganizationalUnitsByParentId(
