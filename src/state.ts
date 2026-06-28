@@ -473,17 +473,10 @@ export function upsertIdcUserInWorkingState(props: {
   const remainingUsers = props.workingState.identityCenter.users.filter(
     (user) => user.userName !== props.user.userName,
   );
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        users: [...remainingUsers, props.user],
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: { users: [...remainingUsers, props.user] },
+  });
 }
 
 export function removeIdcUserFromWorkingState(props: {
@@ -494,27 +487,22 @@ export function removeIdcUserFromWorkingState(props: {
   if (user == null) {
     return props.workingState;
   }
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        users: props.workingState.identityCenter.users.filter(
-          (currentUser) => currentUser.userName !== props.userName,
-        ),
-        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
-          (groupMembership) => groupMembership.userId !== user.userId,
-        ),
-        accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
-          (accountAssignment) =>
-            accountAssignment.principalType !== "USER" ||
-            accountAssignment.principalId !== user.userId,
-        ),
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: {
+      users: props.workingState.identityCenter.users.filter(
+        (currentUser) => currentUser.userName !== props.userName,
+      ),
+      groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
+        (groupMembership) => groupMembership.userId !== user.userId,
+      ),
+      accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
+        (accountAssignment) =>
+          accountAssignment.principalType !== "USER" ||
+          accountAssignment.principalId !== user.userId,
+      ),
+    },
+  });
 }
 
 export function upsertIdcGroupInWorkingState(props: {
@@ -534,17 +522,10 @@ export function upsertIdcGroupInWorkingState(props: {
   const remainingGroups = props.workingState.identityCenter.groups.filter(
     (group) => group.displayName !== props.group.displayName,
   );
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        groups: [...remainingGroups, props.group],
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: { groups: [...remainingGroups, props.group] },
+  });
 }
 
 export function removeIdcGroupFromWorkingState(props: {
@@ -555,27 +536,22 @@ export function removeIdcGroupFromWorkingState(props: {
   if (group == null) {
     return props.workingState;
   }
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        groups: props.workingState.identityCenter.groups.filter(
-          (currentGroup) => currentGroup.displayName !== props.groupDisplayName,
-        ),
-        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
-          (groupMembership) => groupMembership.groupId !== group.groupId,
-        ),
-        accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
-          (accountAssignment) =>
-            accountAssignment.principalType !== "GROUP" ||
-            accountAssignment.principalId !== group.groupId,
-        ),
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: {
+      groups: props.workingState.identityCenter.groups.filter(
+        (currentGroup) => currentGroup.displayName !== props.groupDisplayName,
+      ),
+      groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
+        (groupMembership) => groupMembership.groupId !== group.groupId,
+      ),
+      accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
+        (accountAssignment) =>
+          accountAssignment.principalType !== "GROUP" ||
+          accountAssignment.principalId !== group.groupId,
+      ),
+    },
+  });
 }
 
 export function upsertIdcPermissionSetInWorkingState(props: {
@@ -603,17 +579,10 @@ export function upsertIdcPermissionSetInWorkingState(props: {
   const remainingPermissionSets = props.workingState.identityCenter.permissionSets.filter(
     (permissionSet) => permissionSet.name !== props.permissionSet.name,
   );
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        permissionSets: [...remainingPermissionSets, props.permissionSet],
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: { permissionSets: [...remainingPermissionSets, props.permissionSet] },
+  });
 }
 
 export function removeIdcPermissionSetFromWorkingState(props: {
@@ -625,23 +594,18 @@ export function removeIdcPermissionSetFromWorkingState(props: {
   if (permissionSet == null) {
     return props.workingState;
   }
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        permissionSets: props.workingState.identityCenter.permissionSets.filter(
-          (currentPermissionSet) => currentPermissionSet.name !== props.permissionSetName,
-        ),
-        accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
-          (accountAssignment) =>
-            accountAssignment.permissionSetArn !== permissionSet.permissionSetArn,
-        ),
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: {
+      permissionSets: props.workingState.identityCenter.permissionSets.filter(
+        (currentPermissionSet) => currentPermissionSet.name !== props.permissionSetName,
+      ),
+      accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
+        (accountAssignment) =>
+          accountAssignment.permissionSetArn !== permissionSet.permissionSetArn,
+      ),
+    },
+  });
 }
 
 export function addAccountAssignmentToWorkingState(props: {
@@ -657,20 +621,15 @@ export function addAccountAssignmentToWorkingState(props: {
   if (props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] != null) {
     return props.workingState;
   }
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        accountAssignments: [
-          ...props.workingState.identityCenter.accountAssignments,
-          props.accountAssignment,
-        ],
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: {
+      accountAssignments: [
+        ...props.workingState.identityCenter.accountAssignments,
+        props.accountAssignment,
+      ],
+    },
+  });
 }
 
 export function addGroupMembershipToWorkingState(props: {
@@ -684,20 +643,15 @@ export function addGroupMembershipToWorkingState(props: {
   if (props.workingState.identityCenter.groupMembershipsByKey[membershipKey] != null) {
     return props.workingState;
   }
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        groupMemberships: [
-          ...props.workingState.identityCenter.groupMemberships,
-          props.groupMembership,
-        ],
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: {
+      groupMemberships: [
+        ...props.workingState.identityCenter.groupMemberships,
+        props.groupMembership,
+      ],
+    },
+  });
 }
 
 export function removeGroupMembershipFromWorkingState(props: {
@@ -711,23 +665,18 @@ export function removeGroupMembershipFromWorkingState(props: {
   if (props.workingState.identityCenter.groupMembershipsByKey[membershipKey] == null) {
     return props.workingState;
   }
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
-          (groupMembership) =>
-            createGroupMembershipKey({
-              groupId: groupMembership.groupId,
-              userId: groupMembership.userId,
-            }) !== membershipKey,
-        ),
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: {
+      groupMemberships: props.workingState.identityCenter.groupMemberships.filter(
+        (groupMembership) =>
+          createGroupMembershipKey({
+            groupId: groupMembership.groupId,
+            userId: groupMembership.userId,
+          }) !== membershipKey,
+      ),
+    },
+  });
 }
 
 export function removeAccountAssignmentFromWorkingState(props: {
@@ -743,25 +692,20 @@ export function removeAccountAssignmentFromWorkingState(props: {
   if (props.workingState.identityCenter.accountAssignmentsByKey[assignmentKey] == null) {
     return props.workingState;
   }
-  return {
-    ...props.workingState,
-    identityCenter: createWorkingIdentityCenterState({
-      identityCenter: {
-        ...materializeWorkingIdentityCenterState({
-          identityCenter: props.workingState.identityCenter,
-        }),
-        accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
-          (accountAssignment) =>
-            createAccountAssignmentKey({
-              accountId: accountAssignment.accountId,
-              permissionSetArn: accountAssignment.permissionSetArn,
-              principalId: accountAssignment.principalId,
-              principalType: accountAssignment.principalType,
-            }) !== assignmentKey,
-        ),
-      },
-    }),
-  };
+  return patchIdentityCenterState({
+    workingState: props.workingState,
+    patch: {
+      accountAssignments: props.workingState.identityCenter.accountAssignments.filter(
+        (accountAssignment) =>
+          createAccountAssignmentKey({
+            accountId: accountAssignment.accountId,
+            permissionSetArn: accountAssignment.permissionSetArn,
+            principalId: accountAssignment.principalId,
+            principalType: accountAssignment.principalType,
+          }) !== assignmentKey,
+      ),
+    },
+  });
 }
 
 export function createOrgPolicyAttachmentKey(props: {
@@ -996,6 +940,33 @@ function materializeWorkingIdentityCenterState(props: {
     accountAssignments: structuredClone(props.identityCenter.accountAssignments),
     accessRoles: structuredClone(props.identityCenter.accessRoles),
     accessControlAttributes: structuredClone(props.identityCenter.accessControlAttributes),
+  };
+}
+
+function patchIdentityCenterState(props: {
+  workingState: WorkingState;
+  patch: Partial<
+    Pick<
+      StateFile["identityCenter"],
+      | "users"
+      | "groups"
+      | "groupMemberships"
+      | "permissionSets"
+      | "accountAssignments"
+      | "accessControlAttributes"
+    >
+  >;
+}): WorkingState {
+  return {
+    ...props.workingState,
+    identityCenter: createWorkingIdentityCenterState({
+      identityCenter: {
+        ...materializeWorkingIdentityCenterState({
+          identityCenter: props.workingState.identityCenter,
+        }),
+        ...props.patch,
+      },
+    }),
   };
 }
 
