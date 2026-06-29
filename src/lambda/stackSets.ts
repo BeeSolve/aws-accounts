@@ -9,7 +9,7 @@ import {
 import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-import { getErrorName } from "../helpers.ts";
+import { delay, getErrorName } from "../helpers.ts";
 import type { LambdaResponsePayload } from "../lambdaSchemas.ts";
 import { readStateFromS3, writeStateToS3 } from "./state.ts";
 
@@ -87,7 +87,7 @@ export async function deployStackSet(props: {
       if (status === "FAILED" || status === "STOPPED") {
         throw new Error(`StackSet operation ${operationId} ${status}`);
       }
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await delay(5000);
     }
   }
 
