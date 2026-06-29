@@ -9,9 +9,9 @@ import {
 import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-import { delay, getErrorName } from "../helpers.ts";
-import type { LambdaResponsePayload } from "../lambdaSchemas.ts";
-import { readStateFromS3, writeStateToS3 } from "./state.ts";
+import { delay, getErrorName } from "../helpers.js";
+import type { LambdaResponsePayload } from "../lambdaSchemas.js";
+import { readStateFromS3, writeStateToS3 } from "./state.js";
 
 type LambdaResponse = LambdaResponsePayload;
 

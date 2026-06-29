@@ -1,5 +1,5 @@
-import type { LambdaResponsePayload } from "../lambdaSchemas.ts";
-import type { StateFile } from "../state.ts";
+import type { LambdaResponsePayload } from "../lambdaSchemas.js";
+import type { StateFile } from "../state.js";
 
 type LambdaResponse = LambdaResponsePayload;
 

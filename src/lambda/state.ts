@@ -17,7 +17,7 @@ import type { Operation } from "../operations.js";
 import { scanIdentityCenter, scanOrganization } from "../scanLogic.js";
 import type { StateFile } from "../state.js";
 import { createWorkingState, materializeWorkingState, stateSchema } from "../state.js";
-import { buildErrorResponse, stateKey } from "./helpers.ts";
+import { buildErrorResponse, stateKey } from "./helpers.js";
 
 type LambdaResponse = LambdaResponsePayload;
 const presignedUrlExpirySeconds = 3600;

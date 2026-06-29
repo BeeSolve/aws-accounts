@@ -13,7 +13,7 @@ import {
   lambdaResponseSchema,
   type LambdaResponsePayload,
 } from "../lambdaSchemas.js";
-import { buildErrorResponse } from "./helpers.ts";
+import { buildErrorResponse } from "./helpers.js";
 import {
   createCloudTrailBucket,
   createConfigAggregator,
@@ -25,7 +25,7 @@ import {
   deployStackSet,
   getUploadUrl,
   recordDeployedStackSets,
-} from "./stackSets.ts";
+} from "./stackSets.js";
 import { apply, getStateUrl, scan } from "./state.js";
 
 type LambdaResponse = LambdaResponsePayload;
