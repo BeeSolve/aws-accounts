@@ -144,3 +144,17 @@ export function sortJsonValue(value: unknown): unknown {
   }
   return value;
 }
+
+export function getErrorName(error: unknown): string | undefined {
+  if (error != null && typeof error === "object" && "name" in error) {
+    return (error as { name: string }).name;
+  }
+  return undefined;
+}
+
+export function getErrorCode(error: unknown): string | undefined {
+  if (error != null && typeof error === "object" && "code" in error) {
+    return (error as { code: string }).code;
+  }
+  return undefined;
+}

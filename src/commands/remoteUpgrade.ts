@@ -7,6 +7,7 @@ import {
 } from "@aws-sdk/client-lambda";
 
 import { readAwsContextFromFile, readPackageVersion } from "../awsConfig.js";
+import { getErrorName } from "../helpers.js";
 import type { RemoteCommandInput } from "./remote.js";
 import {
   contextFilePath,
@@ -61,7 +62,7 @@ export async function runRemoteUpgrade(input: RemoteCommandInput): Promise<void>
     );
     input.logger.log("Reserved concurrency set to 1.");
   } catch (concurrencyError: unknown) {
-    if ((concurrencyError as { name?: string }).name === "InvalidParameterValueException") {
+    if (getErrorName(concurrencyError) === "InvalidParameterValueException") {
       input.logger.log("Reserved concurrency not set (account quota still too low).");
     } else {
       throw concurrencyError;

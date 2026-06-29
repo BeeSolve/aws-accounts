@@ -47,7 +47,7 @@ import {
 import type { AwsContextFile, Deployment } from "../awsConfig.js";
 import { readAwsContextFromFile, readPackageVersion } from "../awsConfig.js";
 import { toPreconditionError } from "../error.js";
-import { delay } from "../helpers.js";
+import { delay, getErrorName } from "../helpers.js";
 import type { Logger } from "../logger.js";
 import type { AwsTag } from "../tags.js";
 import { getStandardTags } from "../tags.js";
@@ -234,7 +234,7 @@ async function ensureOrganization(props: { input: RemoteCommandInput }): Promise
     );
     featureSet = response.Organization?.FeatureSet;
   } catch (error: unknown) {
-    if ((error as { name?: string }).name === "AWSOrganizationsNotInUseException") {
+    if (getErrorName(error) === "AWSOrganizationsNotInUseException") {
       orgExists = false;
     } else {
       throw error;
@@ -395,7 +395,7 @@ async function getOrCreateIamRole(props: {
     );
     return { roleArn };
   } catch (error: unknown) {
-    if ((error as any).name !== "NoSuchEntityException") {
+    if (getErrorName(error) !== "NoSuchEntityException") {
       throw error;
     }
   }
@@ -477,7 +477,7 @@ async function ensureLambdaFunction(props: {
       );
       props.logger.log(`Reserved concurrency set to 1.`);
     } catch (concurrencyError: unknown) {
-      if ((concurrencyError as { name?: string }).name !== "InvalidParameterValueException") {
+      if (getErrorName(concurrencyError) !== "InvalidParameterValueException") {
         throw concurrencyError;
       }
       props.logger.log(
@@ -510,7 +510,7 @@ async function ensureLambdaFunction(props: {
         );
         props.logger.log(`Set reserved concurrency to 1`);
       } catch (concurrencyError: unknown) {
-        if ((concurrencyError as { name?: string }).name === "InvalidParameterValueException") {
+        if (getErrorName(concurrencyError) === "InvalidParameterValueException") {
           props.logger.log(
             "Could not set reserved concurrency (account concurrency quota too low for new accounts).",
           );
@@ -574,7 +574,7 @@ async function createLambdaFunctionWithRetry(props: {
       }
       return lambdaArn;
     } catch (error: unknown) {
-      const isRoleNotReady = (error as any).name === "InvalidParameterValueException";
+      const isRoleNotReady = getErrorName(error) === "InvalidParameterValueException";
       if (!isRoleNotReady || attempt === iamPropagationMaxAttempts) {
         throw error;
       }

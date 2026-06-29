@@ -18,6 +18,7 @@ import {
   renderTsValue as renderTsValueImpl,
   sortAwsConfigModel,
 } from "./awsConfigRender.js";
+import { getErrorCode } from "./helpers.js";
 import type { Logger } from "./logger.js";
 import type { StateFile } from "./state.js";
 
@@ -644,8 +645,7 @@ async function readIfExists(path: string): Promise<string | undefined> {
   try {
     return await readFile(path, "utf8");
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") {
+    if (getErrorCode(error) === "ENOENT") {
       return undefined;
     }
     throw error;
@@ -656,8 +656,7 @@ async function safeUnlink(path: string): Promise<void> {
   try {
     await unlink(path);
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") {
+    if (getErrorCode(error) === "ENOENT") {
       return;
     }
     throw error;

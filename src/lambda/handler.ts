@@ -29,6 +29,7 @@ import {
   PutPublicAccessBlockCommand,
   S3Client,
   S3ServiceException,
+  type BucketLocationConstraint,
 } from "@aws-sdk/client-s3";
 import { SSOAdminClient } from "@aws-sdk/client-sso-admin";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
@@ -36,7 +37,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import * as v from "valibot";
 
 import { executeOperation } from "../applyLogic.js";
-import { assertUnreachable } from "../helpers.js";
+import { assertUnreachable, getErrorName } from "../helpers.js";
 import {
   lambdaRequestSchema,
   lambdaResponseSchema,
@@ -304,8 +305,7 @@ async function handleDeployStackSet(props: {
         }),
       );
     } catch (updateError: unknown) {
-      const name = (updateError as { name?: string }).name;
-      if (name !== "OperationInProgressException") throw updateError;
+      if (getErrorName(updateError) !== "OperationInProgressException") throw updateError;
     }
     stackSetId = props.stackSetName;
     try {
@@ -322,7 +322,7 @@ async function handleDeployStackSet(props: {
       operationId = "instances-already-exist";
     }
   } catch (error: unknown) {
-    if ((error as { name?: string }).name === "StackSetNotFoundException") {
+    if (getErrorName(error) === "StackSetNotFoundException") {
       const createResult = await props.cloudFormationClient.send(
         new CreateStackSetCommand({
           StackSetName: props.stackSetName,
@@ -388,13 +388,15 @@ async function createManagedBucket(props: {
       new CreateBucketCommand({
         Bucket: props.bucketName,
         ...(props.region !== "us-east-1" && {
-          CreateBucketConfiguration: { LocationConstraint: props.region as any },
+          CreateBucketConfiguration: {
+            LocationConstraint: props.region as BucketLocationConstraint,
+          },
         }),
       }),
     );
     created = true;
   } catch (error: unknown) {
-    const name = (error as { name?: string }).name;
+    const name = getErrorName(error);
     if (name !== "BucketAlreadyOwnedByYou" && name !== "BucketAlreadyExists") {
       throw error;
     }
@@ -626,8 +628,7 @@ async function handleCreateOrgTrail(props: {
       created: false,
     };
   } catch (error: unknown) {
-    const name = (error as { name?: string }).name;
-    if (name !== "TrailNotFoundException") {
+    if (getErrorName(error) !== "TrailNotFoundException") {
       throw error;
     }
   }

@@ -34,6 +34,7 @@ import {
   ListPermissionSetsCommand,
 } from "@aws-sdk/client-sso-admin";
 
+import { getErrorName } from "./helpers.js";
 import {
   createAccessRoleName,
   type AccessControlAttributeState,
@@ -386,12 +387,7 @@ async function scanAccessControlAttributes(props: {
     );
   } catch (err) {
     // ABAC is not configured on this SSO instance — treat as empty
-    if (
-      err != null &&
-      typeof err === "object" &&
-      "name" in err &&
-      err.name === "ResourceNotFoundException"
-    ) {
+    if (getErrorName(err) === "ResourceNotFoundException") {
       return [];
     }
     throw err;
@@ -670,12 +666,7 @@ async function getPermissionsBoundaryForPermissionSet(props: {
     }
     return null;
   } catch (err) {
-    if (
-      err != null &&
-      typeof err === "object" &&
-      "name" in err &&
-      err.name === "ResourceNotFoundException"
-    ) {
+    if (getErrorName(err) === "ResourceNotFoundException") {
       return null;
     }
     throw err;
@@ -836,12 +827,7 @@ async function scanAlternateContacts(props: {
           ...(c.Title != null ? { title: c.Title } : {}),
         } satisfies AlternateContactState;
       } catch (error: unknown) {
-        if (
-          error != null &&
-          typeof error === "object" &&
-          "name" in error &&
-          error.name === "ResourceNotFoundException"
-        ) {
+        if (getErrorName(error) === "ResourceNotFoundException") {
           return null;
         }
         throw error;
