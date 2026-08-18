@@ -33,6 +33,7 @@ export async function readConfigModelForTest<T>(props: { configPath: string }): 
   }
 
   // Test fixtures only need the authored config object, not full TS bundling.
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   return runInNewContext(`(${matched[1]})`, {
     iam: createIamHelper(),
   }) as T;
@@ -59,5 +60,5 @@ function createIamHelper(): IamHelper {
         return (action) => `${String(servicePrefix)}:${action}`;
       },
     },
-  ) as IamHelper;
+  );
 }

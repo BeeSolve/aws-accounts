@@ -785,9 +785,9 @@ test("diffStates topologically sorts createOu ops when parent and child OU are b
   const plan = diffStates({ current, next });
   assert.deepEqual(plan.unsupported, []);
   assert.equal(plan.operations.length, 2);
-  assert.equal(plan.operations[0]!.kind, "createOu");
+  assert.equal(plan.operations[0]?.kind, "createOu");
   assert.equal((plan.operations[0] as { ouName: string }).ouName, "platform");
-  assert.equal(plan.operations[1]!.kind, "createOu");
+  assert.equal(plan.operations[1]?.kind, "createOu");
   assert.equal((plan.operations[1] as { ouName: string }).ouName, "platform-dev");
 });
 

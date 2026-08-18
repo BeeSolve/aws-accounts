@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import * as v from "valibot";
 
-import { sortJsonValue, toRecordByProperty } from "./helpers.js";
+import { toRecordByProperty } from "./helpers.js";
 
 const nonEmptyString = v.pipe(v.string(), v.minLength(1));
 const principalTypeSchema = v.picklist(["GROUP", "USER"]);
@@ -992,17 +992,6 @@ function compareByKeys(...values: Array<string>): number {
     }
   }
   return 0;
-}
-
-function normalizeInlinePolicyString(value: string | null): string | null {
-  if (value == null) {
-    return null;
-  }
-  try {
-    return JSON.stringify(sortJsonValue(JSON.parse(value) as unknown));
-  } catch {
-    return value;
-  }
 }
 
 function normalizeAccountTags(

@@ -8,8 +8,38 @@ import { toScpCollection } from "./scpCollection.js";
 
 const collection = toScpCollection<string, string>();
 
-function getStatements(result: { content: Record<string, unknown> }) {
-  return (result.content as { Statement: Array<Record<string, unknown>> }).Statement;
+interface PolicyStatement {
+  Sid?: string;
+  Effect?: string;
+  Action?: unknown;
+  NotAction?: unknown;
+  Resource?: unknown;
+  Condition?: Record<string, Record<string, unknown>>;
+}
+
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function getStatements(result: { content: Record<string, unknown> }): Array<PolicyStatement> {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return (result.content as unknown as { Statement: Array<PolicyStatement> }).Statement;
+}
+
+function getCondition(stmt: PolicyStatement): Record<string, Record<string, unknown>> {
+  return stmt.Condition ?? {};
+}
+
+function getAction(stmt: PolicyStatement): Array<string> {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return (stmt.Action ?? []) as Array<string>;
+}
+
+function getNotAction(stmt: PolicyStatement): Array<string> {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return (stmt.NotAction ?? []) as Array<string>;
+}
+
+function asStringArray(value: unknown): Array<string> {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return value as Array<string>;
 }
 
 describe("foundation.denyRootUser", () => {
@@ -25,7 +55,7 @@ describe("foundation.denyRootUser", () => {
     assert.equal(stmt.Effect, "Deny");
     assert.equal(stmt.Action, "*");
     assert.equal(stmt.Resource, "*");
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.StringLike["aws:PrincipalArn"], "arn:aws:iam::*:root");
   });
 
@@ -55,7 +85,7 @@ describe("foundation.denyUnsupportedRegions", () => {
     const stmt = getStatements(result)[0];
     assert.equal(stmt.Effect, "Deny");
     assert.ok(Array.isArray(stmt.NotAction));
-    const notAction = stmt.NotAction as Array<string>;
+    const notAction = getNotAction(stmt);
     assert.ok(notAction.includes("iam:*"));
     assert.ok(notAction.includes("sts:*"));
     assert.ok(notAction.includes("cloudfront:*"));
@@ -76,7 +106,7 @@ describe("foundation.denyUnsupportedRegions", () => {
       allowedRegions: ["us-east-1", "eu-west-1"],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition.StringNotEquals["aws:RequestedRegion"], ["us-east-1", "eu-west-1"]);
   });
 
@@ -86,7 +116,7 @@ describe("foundation.denyUnsupportedRegions", () => {
       exemptRoles: ["arn:aws:iam::*:role/Admin"],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition.StringNotLike["aws:PrincipalARN"], ["arn:aws:iam::*:role/Admin"]);
   });
 
@@ -96,7 +126,7 @@ describe("foundation.denyUnsupportedRegions", () => {
       exemptRoles: [],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.StringNotLike, undefined);
   });
 
@@ -131,7 +161,7 @@ describe("foundation.enforceS3BucketOwnerEnforced", () => {
     assert.equal(stmt.Effect, "Deny");
     assert.equal(stmt.Action, "s3:CreateBucket");
     assert.equal(stmt.Resource, "*");
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.StringNotEquals["s3:x-amz-object-ownership"], "BucketOwnerEnforced");
   });
 
@@ -191,7 +221,7 @@ describe("foundation.denyIamUserCreation", () => {
       exemptRoles: ["arn:aws:iam::*:role/BreakGlass"],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition.StringNotLike["aws:PrincipalARN"], [
       "arn:aws:iam::*:role/BreakGlass",
     ]);
@@ -255,7 +285,7 @@ describe("foundation.protectPasswordPolicy", () => {
       "iam:UpdateAccountPasswordPolicy",
     ]);
     assert.equal(stmt.Resource, "*");
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition.StringNotLike["aws:PrincipalARN"], ["arn:aws:iam::*:role/Admin"]);
   });
 
@@ -294,10 +324,10 @@ describe("foundation.enforceDataPerimeter", () => {
     assert.equal(stmt.Effect, "Deny");
     assert.equal(stmt.Action, "*");
     assert.equal(stmt.Resource, "*");
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.StringNotEqualsIfExists["aws:PrincipalOrgID"], "o-abc123def4");
     assert.equal(condition.BoolIfExists["aws:PrincipalIsAWSService"], "false");
-    const arnPatterns = condition.StringNotLike["aws:PrincipalARN"] as Array<string>;
+    const arnPatterns = asStringArray(condition.StringNotLike["aws:PrincipalARN"]);
     assert.ok(arnPatterns.includes("arn:aws:iam::*:role/aws-service-role/*"));
   });
 
@@ -307,8 +337,8 @@ describe("foundation.enforceDataPerimeter", () => {
       exemptRoles: ["arn:aws:iam::*:role/CrossAccountRole"],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
-    const arnPatterns = condition.StringNotLike["aws:PrincipalARN"] as Array<string>;
+    const condition = getCondition(stmt);
+    const arnPatterns = asStringArray(condition.StringNotLike["aws:PrincipalARN"]);
     assert.ok(arnPatterns.includes("arn:aws:iam::*:role/aws-service-role/*"));
     assert.ok(arnPatterns.includes("arn:aws:iam::*:role/CrossAccountRole"));
   });
@@ -345,7 +375,7 @@ describe("security.protectSecurityServicesComprehensive", () => {
       exemptRoles: ["arn:aws:iam::*:role/SecurityAdmin"],
     });
     const stmt = getStatements(result)[0];
-    const actions = stmt.Action as Array<string>;
+    const actions = getAction(stmt);
     assert.ok(actions.includes("cloudtrail:DeleteTrail"));
     assert.ok(actions.includes("cloudtrail:StopLogging"));
     assert.ok(actions.includes("config:DeleteConfigRule"));
@@ -361,7 +391,7 @@ describe("security.protectSecurityServicesComprehensive", () => {
       exemptRoles: ["arn:aws:iam::*:role/SecurityAdmin"],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition.StringNotLike["aws:PrincipalARN"], [
       "arn:aws:iam::*:role/SecurityAdmin",
     ]);
@@ -425,7 +455,7 @@ describe("security.enforceMfaForIam", () => {
       "iam:CreateAccessKey",
       "iam:CreatePolicyVersion",
     ]);
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.BoolIfExists["aws:MultiFactorAuthPresent"], "false");
   });
 
@@ -434,7 +464,7 @@ describe("security.enforceMfaForIam", () => {
       exemptRoles: ["arn:aws:iam::*:role/PipelineRole"],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition.StringNotLike["aws:PrincipalARN"], [
       "arn:aws:iam::*:role/PipelineRole",
     ]);
@@ -443,7 +473,7 @@ describe("security.enforceMfaForIam", () => {
   it("omits StringNotLike when exemptRoles is empty", () => {
     const result = collection.security.enforceMfaForIam({ exemptRoles: [] });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.StringNotLike, undefined);
   });
 });
@@ -465,7 +495,7 @@ describe("production.enforceEncryption", () => {
     const result = collection.production.enforceEncryption();
     const stmt = getStatements(result)[0];
     assert.equal(stmt.Action, "s3:PutObject");
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.Null["s3:x-amz-server-side-encryption"], "true");
   });
 
@@ -474,7 +504,7 @@ describe("production.enforceEncryption", () => {
     const stmt = getStatements(result)[1];
     assert.equal(stmt.Action, "ec2:RunInstances");
     assert.equal(stmt.Resource, "arn:aws:ec2:*:*:volume/*");
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.Bool["ec2:Encrypted"], "false");
   });
 
@@ -482,7 +512,7 @@ describe("production.enforceEncryption", () => {
     const result = collection.production.enforceEncryption();
     const stmt = getStatements(result)[2];
     assert.equal(stmt.Action, "rds:CreateDBInstance");
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.Bool["rds:StorageEncrypted"], "false");
   });
 
@@ -516,7 +546,7 @@ describe("production.preventUnauthorizedTermination", () => {
       "rds:DeleteDBInstance",
       "dynamodb:DeleteTable",
     ]);
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition.StringNotLike["aws:PrincipalARN"], [
       "arn:aws:iam::*:role/DeployRole",
     ]);
@@ -552,7 +582,7 @@ describe("production.protectTaggedStacks", () => {
       "cloudformation:DeleteStackInstances",
       "cloudformation:DeleteStackSet",
     ]);
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.StringEquals["aws:ResourceTag/organization"], "beesolve");
     assert.deepEqual(condition.StringNotLike["aws:PrincipalARN"], ["arn:aws:iam::*:role/CDKRole"]);
   });
@@ -564,7 +594,7 @@ describe("production.protectTaggedStacks", () => {
       tagKey: "managed-by",
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.StringEquals["aws:ResourceTag/managed-by"], "myorg");
   });
 
@@ -601,7 +631,7 @@ describe("production.enforceImdsV2", () => {
     assert.equal(stmt.Effect, "Deny");
     assert.equal(stmt.Action, "ec2:RunInstances");
     assert.equal(stmt.Resource, "arn:aws:ec2:*:*:instance/*");
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.StringNotEquals["ec2:MetadataHttpTokens"], "required");
   });
 
@@ -662,7 +692,7 @@ describe("development.preventExpensiveInstances", () => {
       allowedEc2InstanceTypes: ["t3.micro", "t3.small"],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition["ForAnyValue:StringNotLike"]["ec2:InstanceType"], [
       "t3.micro",
       "t3.small",
@@ -674,7 +704,7 @@ describe("development.preventExpensiveInstances", () => {
       allowedRdsInstanceClasses: ["db.t3.micro"],
     });
     const stmt = getStatements(result)[1];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition["ForAnyValue:StringNotLike"]["rds:DatabaseClass"], ["db.t3.micro"]);
   });
 
@@ -699,7 +729,7 @@ describe("development.blockReservedPurchases", () => {
     const result = collection.development.blockReservedPurchases();
     const stmt = getStatements(result)[0];
     assert.equal(stmt.Effect, "Deny");
-    const actions = stmt.Action as Array<string>;
+    const actions = getAction(stmt);
     assert.ok(actions.includes("ec2:PurchaseReservedInstancesOffering"));
     assert.ok(actions.includes("ec2:PurchaseHostReservation"));
     assert.ok(actions.includes("ec2:PurchaseScheduledInstances"));
@@ -732,7 +762,7 @@ describe("development.preventExpensiveAiMl", () => {
     const result = collection.development.preventExpensiveAiMl();
     const stmt = getStatements(result)[0];
     assert.equal(stmt.Effect, "Deny");
-    const actions = stmt.Action as Array<string>;
+    const actions = getAction(stmt);
     assert.ok(actions.includes("sagemaker:CreateTrainingJob"));
     assert.ok(actions.includes("sagemaker:CreateHyperParameterTuningJob"));
     assert.ok(actions.includes("sagemaker:CreateNotebookInstance"));
@@ -763,7 +793,7 @@ describe("development.enforceResourceTagging", () => {
   it("uses default requiredTags of Environment and Owner", () => {
     const result = collection.development.enforceResourceTagging();
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.Null["aws:RequestTag/Environment"], "true");
     assert.equal(condition.Null["aws:RequestTag/Owner"], "true");
   });
@@ -779,7 +809,7 @@ describe("development.enforceResourceTagging", () => {
       requiredTags: ["CostCenter", "Team"],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.Null["aws:RequestTag/CostCenter"], "true");
     assert.equal(condition.Null["aws:RequestTag/Team"], "true");
     assert.equal(condition.Null["aws:RequestTag/Environment"], undefined);
@@ -820,7 +850,7 @@ describe("sandbox.restrictToBasicServices", () => {
     const stmt = getStatements(result)[0];
     assert.equal(stmt.Effect, "Deny");
     assert.ok(Array.isArray(stmt.NotAction));
-    const notAction = stmt.NotAction as Array<string>;
+    const notAction = getNotAction(stmt);
     assert.ok(notAction.includes("ec2:*"));
     assert.ok(notAction.includes("s3:*"));
     assert.ok(notAction.includes("lambda:*"));
@@ -833,7 +863,7 @@ describe("sandbox.restrictToBasicServices", () => {
     const result = collection.sandbox.restrictToBasicServices();
     const stmt = getStatements(result)[1];
     assert.equal(stmt.Action, "ec2:RunInstances");
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition["ForAnyValue:StringNotLike"]["ec2:InstanceType"], [
       "t2.micro",
       "t2.small",
@@ -845,7 +875,7 @@ describe("sandbox.restrictToBasicServices", () => {
   it("denies network connectivity actions", () => {
     const result = collection.sandbox.restrictToBasicServices();
     const stmt = getStatements(result)[2];
-    const actions = stmt.Action as Array<string>;
+    const actions = getAction(stmt);
     assert.ok(actions.includes("ec2:CreateVpcPeeringConnection"));
     assert.ok(actions.includes("ec2:AcceptVpcPeeringConnection"));
     assert.ok(actions.includes("ec2:CreateTransitGatewayVpcAttachment"));
@@ -866,7 +896,7 @@ describe("sandbox.restrictToBasicServices", () => {
       allowedInstanceTypes: ["t3.nano"],
     });
     const stmt = getStatements(result)[1];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition["ForAnyValue:StringNotLike"]["ec2:InstanceType"], ["t3.nano"]);
   });
 
@@ -927,7 +957,7 @@ describe("suspended.completeLockdown", () => {
     assert.equal(stmt.Effect, "Deny");
     assert.equal(stmt.Action, "*");
     assert.equal(stmt.Resource, "*");
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition.StringNotLike["aws:PrincipalARN"], ["arn:aws:iam::*:role/OrgAdmin"]);
   });
 
@@ -967,7 +997,7 @@ describe("infrastructure.restrictToNetworking", () => {
     const stmt = getStatements(result)[0];
     assert.equal(stmt.Effect, "Deny");
     assert.ok(Array.isArray(stmt.NotAction));
-    const notAction = stmt.NotAction as Array<string>;
+    const notAction = getNotAction(stmt);
     assert.ok(notAction.includes("directconnect:*"));
     assert.ok(notAction.includes("route53:*"));
     assert.ok(notAction.includes("route53resolver:*"));
@@ -981,7 +1011,7 @@ describe("infrastructure.restrictToNetworking", () => {
     const result = collection.infrastructure.restrictToNetworking();
     const stmt = getStatements(result)[1];
     assert.equal(stmt.Effect, "Deny");
-    const actions = stmt.Action as Array<string>;
+    const actions = getAction(stmt);
     assert.ok(actions.includes("ec2:RunInstances"));
     assert.ok(actions.includes("rds:*"));
     assert.ok(actions.includes("s3:CreateBucket"));
@@ -1020,7 +1050,7 @@ describe("infrastructure.protectVpcFlowLogs", () => {
       exemptRoles: ["arn:aws:iam::*:role/NetworkAdmin"],
     });
     const stmt = getStatements(result)[0];
-    const condition = stmt.Condition as Record<string, Record<string, unknown>>;
+    const condition = getCondition(stmt);
     assert.deepEqual(condition.StringNotLike["aws:PrincipalARN"], [
       "arn:aws:iam::*:role/NetworkAdmin",
     ]);
@@ -1054,7 +1084,7 @@ describe("modern.controlBedrockModels", () => {
     const stmt = getStatements(result)[0];
     assert.equal(stmt.Effect, "Deny");
     assert.deepEqual(stmt.Action, ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]);
-    const resource = stmt.Resource as Array<string>;
+    const resource = asStringArray(stmt.Resource);
     assert.ok(resource.some((pattern) => pattern.includes("anthropic.claude-3-opus")));
     assert.ok(resource.some((pattern) => pattern.includes("meta.llama3-1-405b")));
   });
@@ -1095,7 +1125,7 @@ describe("modern.restrictQDeveloperIam", () => {
     const result = collection.modern.restrictQDeveloperIam();
     const stmt = getStatements(result)[0];
     assert.equal(stmt.Effect, "Deny");
-    const actions = stmt.Action as Array<string>;
+    const actions = getAction(stmt);
     assert.ok(actions.includes("iam:CreateUser"));
     assert.ok(actions.includes("iam:DeleteUser"));
     assert.ok(actions.includes("iam:CreateRole"));
@@ -1103,7 +1133,7 @@ describe("modern.restrictQDeveloperIam", () => {
     assert.ok(actions.includes("iam:AttachUserPolicy"));
     assert.ok(actions.includes("iam:AttachRolePolicy"));
     assert.ok(actions.includes("iam:CreateAccessKey"));
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.StringEquals["aws:CalledViaFirst"], "chatbot.amazonaws.com");
   });
 
@@ -1133,7 +1163,7 @@ describe("modern.requireVpcForSageMaker", () => {
       "sagemaker:CreateTrainingJob",
     ]);
     assert.equal(stmt.Resource, "*");
-    const condition = stmt.Condition as Record<string, Record<string, string>>;
+    const condition = getCondition(stmt);
     assert.equal(condition.Null["sagemaker:VpcSubnets"], "true");
   });
 
@@ -1194,6 +1224,7 @@ describe("all policies have valid document structure", () => {
     ];
 
     for (const policy of allPolicies) {
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const content = policy.content as { Version: string; Statement: Array<unknown> };
       assert.equal(content.Version, "2012-10-17", `${policy.name} should have correct Version`);
       assert.ok(

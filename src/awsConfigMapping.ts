@@ -3,7 +3,7 @@ import * as v from "valibot";
 
 import { awsConfigModelSchema, type AwsConfigModel, type AwsContextFile } from "./awsConfig.js";
 import { sortJsonRecord, isJsonRecord } from "./awsConfigRender.js";
-import { assertUnreachable, sortJsonValue, toRecordByProperty } from "./helpers.js";
+import { assertUnreachable, toRecordByProperty } from "./helpers.js";
 import {
   createAccessRoleName,
   type OrgPolicyState,
@@ -112,7 +112,7 @@ function mapAssignmentPrincipal(props: {
   }
   assertUnreachable(
     principalType,
-    `Unsupported principal type "${principalType}" in account assignment.`,
+    `Unsupported principal type "${String(principalType)}" in account assignment.`,
   );
 }
 
@@ -193,9 +193,12 @@ function resolveAccountNamesInPolicyContent(
     ...content,
     Statement: statements.map((stmt) => {
       if (stmt == null || typeof stmt !== "object") return stmt;
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const s = stmt as Record<string, unknown>;
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const condition = s.Condition as Record<string, unknown> | undefined;
       if (condition == null) return stmt;
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const sne = condition.StringNotEquals as Record<string, unknown> | undefined;
       if (sne == null) return stmt;
       const accounts = sne["aws:PrincipalAccount"];
@@ -224,9 +227,12 @@ function resolveAccountIdsInPolicyContent(
     ...content,
     Statement: statements.map((stmt) => {
       if (stmt == null || typeof stmt !== "object") return stmt;
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const s = stmt as Record<string, unknown>;
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const condition = s.Condition as Record<string, unknown> | undefined;
       if (condition == null) return stmt;
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const sne = condition.StringNotEquals as Record<string, unknown> | undefined;
       if (sne == null) return stmt;
       const accounts = sne["aws:PrincipalAccount"];
@@ -419,10 +425,12 @@ export function mapStateToAwsConfig(props: { state: StateFile }): AwsConfigModel
     content:
       p.type === "SERVICE_CONTROL_POLICY"
         ? resolveAccountIdsInPolicyContent(
+            // eslint-disable-next-line typescript/no-unsafe-type-assertion
             JSON.parse(p.content) as Record<string, unknown>,
             orgAccountById,
           )
-        : (JSON.parse(p.content) as Record<string, unknown>),
+        : // eslint-disable-next-line typescript/no-unsafe-type-assertion
+          (JSON.parse(p.content) as Record<string, unknown>),
     targets: [...(attachmentsByPolicyId.get(p.id) ?? [])].sort((left, right) =>
       left.localeCompare(right),
     ),

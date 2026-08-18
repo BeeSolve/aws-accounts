@@ -1,6 +1,5 @@
 import type { AwsContextFile } from "./awsConfig.js";
 import type { Plan } from "./operations.js";
-import type { StateFile } from "./state.js";
 
 export function applyReservedOuDeletionGuard(props: { plan: Plan; context: AwsContextFile }): Plan {
   const reservedOuNamesById = new Map<string, string>([

@@ -73,6 +73,7 @@ export async function executeOperation(props: ExecuteOperationInput): Promise<Wo
       logger: props.logger,
       context: props.context,
       runtime: { createAccount: props.runtime.createAccount },
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       operation: props.operation as Parameters<typeof executeOrganizationOperation>[0]["operation"],
     });
   }
@@ -82,6 +83,7 @@ export async function executeOperation(props: ExecuteOperationInput): Promise<Wo
       organizationsClient: props.organizationsClient,
       logger: props.logger,
       context: props.context,
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       operation: props.operation as Parameters<typeof executePolicyOperation>[0]["operation"],
     });
   }
@@ -94,6 +96,7 @@ export async function executeOperation(props: ExecuteOperationInput): Promise<Wo
       accountAssignment: props.runtime.accountAssignment,
       permissionSetProvisioning: props.runtime.permissionSetProvisioning,
     },
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
     operation: props.operation as Parameters<typeof executeIdentityCenterOperation>[0]["operation"],
   });
 }

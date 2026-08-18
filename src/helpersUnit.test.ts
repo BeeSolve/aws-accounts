@@ -45,19 +45,23 @@ test("getErrorCode returns undefined for primitives", () => {
 
 test("sortJsonValue sorts object keys alphabetically", () => {
   const input = { z: 1, a: 2, m: 3 };
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   const result = sortJsonValue(input) as Record<string, number>;
   assert.deepEqual(Object.keys(result), ["a", "m", "z"]);
 });
 
 test("sortJsonValue recurses into nested objects", () => {
   const input = { b: { z: 1, a: 2 }, a: 1 };
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   const result = sortJsonValue(input) as Record<string, unknown>;
   assert.deepEqual(Object.keys(result), ["a", "b"]);
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   assert.deepEqual(Object.keys(result.b as Record<string, unknown>), ["a", "z"]);
 });
 
 test("sortJsonValue recurses into arrays", () => {
   const input = [{ b: 1, a: 2 }];
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   const result = sortJsonValue(input) as Array<Record<string, number>>;
   assert.deepEqual(Object.keys(result[0]), ["a", "b"]);
 });

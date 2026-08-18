@@ -1509,7 +1509,8 @@ const operationSortKeyFields: Record<Operation["kind"], Array<string>> = {
 
 function getOperationSortKey(operation: Operation): string {
   const fields = operationSortKeyFields[operation.kind];
-  const values = fields.map((field) => (operation as Record<string, unknown>)[field] ?? "");
+  // eslint-disable-next-line typescript/no-base-to-string
+  const values = fields.map((field) => String((operation as Record<string, unknown>)[field] ?? ""));
   return [operation.kind, ...values].join("|");
 }
 

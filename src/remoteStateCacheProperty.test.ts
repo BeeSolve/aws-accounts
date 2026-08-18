@@ -224,10 +224,10 @@ test("Property 3: State cache round-trip — write then read produces identical 
         const result = await readStateCache(cachePath);
 
         assert.notEqual(result, null, "readStateCache should not return null after write");
-        assert.deepEqual(result!.state, state, "Round-trip state should be identical");
-        assert.equal(typeof result!.fetchedAt, "string", "fetchedAt should be a string");
+        assert.deepEqual(result?.state, state, "Round-trip state should be identical");
+        assert.equal(typeof result?.fetchedAt, "string", "fetchedAt should be a string");
         // Verify fetchedAt is a valid ISO timestamp
-        const parsedDate = new Date(result!.fetchedAt);
+        const parsedDate = new Date(result?.fetchedAt ?? "");
         assert.ok(!isNaN(parsedDate.getTime()), "fetchedAt should be a valid ISO timestamp");
       } finally {
         await unlink(cachePath).catch(() => {});

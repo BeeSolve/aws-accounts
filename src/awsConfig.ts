@@ -473,7 +473,7 @@ export async function loadAwsConfigModelFromTsFile(props: {
   const typesModule = await loadAwsConfigTypesModule({
     typesPath: props.typesPath,
   });
-  return await loadAwsConfigFromTsFile({
+  return loadAwsConfigFromTsFile({
     configPath: props.configPath,
     schema: typesModule.awsConfigSchema,
   });
@@ -494,6 +494,7 @@ export async function checkForNewVersionIfNeeded(props: {
     let rawContext: Record<string, unknown> | undefined;
     try {
       const raw = await readFile(props.contextPath, "utf8");
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       rawContext = JSON.parse(raw) as Record<string, unknown>;
       lastCheckedAt =
         typeof rawContext.versionCheckLastRunAt === "string"
@@ -535,6 +536,7 @@ export async function checkForNewVersionIfNeeded(props: {
 async function fetchLatestNpmVersion(): Promise<string> {
   const response = await fetch("https://registry.npmjs.org/@beesolve/aws-accounts/latest");
   if (!response.ok) throw new Error(`npm registry returned ${response.status}`);
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   const body = (await response.json()) as { version?: unknown };
   if (typeof body.version !== "string") throw new Error("Unexpected npm registry response.");
   return body.version;
@@ -545,6 +547,7 @@ export async function readPackageVersion(): Promise<string> {
   // thisFile = <root>/dist/awsConfig.js → go up 2 levels to package root
   const packageDir = dirname(dirname(thisFile));
   const raw = await readFile(join(packageDir, "package.json"), "utf8");
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   const pkg = JSON.parse(raw) as { version?: unknown };
   if (typeof pkg.version !== "string") {
     throw new Error("Could not read version from package.json.");
@@ -565,6 +568,7 @@ async function loadAwsConfigTypesModule(props: {
   ) {
     throw new Error(`Types module "${props.typesPath}" does not export awsConfigSchema.`);
   }
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   const moduleWithSchema = loadedModule as {
     awsConfigSchema?: v.GenericSchema;
   };
@@ -661,68 +665,6 @@ async function safeUnlink(path: string): Promise<void> {
     }
     throw error;
   }
-}
-
-function resolveAccountNamesInPolicyContent(
-  content: Record<string, unknown>,
-  accountByName: Record<string, { id: string }>,
-): Record<string, unknown> {
-  const statements = (content as { Statement?: Array<unknown> }).Statement;
-  if (!Array.isArray(statements)) return content;
-  return {
-    ...content,
-    Statement: statements.map((stmt) => {
-      if (stmt == null || typeof stmt !== "object") return stmt;
-      const s = stmt as Record<string, unknown>;
-      const condition = s.Condition as Record<string, unknown> | undefined;
-      if (condition == null) return stmt;
-      const sne = condition.StringNotEquals as Record<string, unknown> | undefined;
-      if (sne == null) return stmt;
-      const accounts = sne["aws:PrincipalAccount"];
-      if (!Array.isArray(accounts)) return stmt;
-      return {
-        ...s,
-        Condition: {
-          ...condition,
-          StringNotEquals: {
-            ...sne,
-            "aws:PrincipalAccount": accounts.map((name: string) => accountByName[name]?.id ?? name),
-          },
-        },
-      };
-    }),
-  };
-}
-
-function resolveAccountIdsInPolicyContent(
-  content: Record<string, unknown>,
-  accountById: Record<string, { name: string }>,
-): Record<string, unknown> {
-  const statements = (content as { Statement?: Array<unknown> }).Statement;
-  if (!Array.isArray(statements)) return content;
-  return {
-    ...content,
-    Statement: statements.map((stmt) => {
-      if (stmt == null || typeof stmt !== "object") return stmt;
-      const s = stmt as Record<string, unknown>;
-      const condition = s.Condition as Record<string, unknown> | undefined;
-      if (condition == null) return stmt;
-      const sne = condition.StringNotEquals as Record<string, unknown> | undefined;
-      if (sne == null) return stmt;
-      const accounts = sne["aws:PrincipalAccount"];
-      if (!Array.isArray(accounts)) return stmt;
-      return {
-        ...s,
-        Condition: {
-          ...condition,
-          StringNotEquals: {
-            ...sne,
-            "aws:PrincipalAccount": accounts.map((id: string) => accountById[id]?.name ?? id),
-          },
-        },
-      };
-    }),
-  };
 }
 
 function isValiErrorLike(error: unknown): error is Error {

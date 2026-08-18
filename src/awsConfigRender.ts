@@ -259,6 +259,7 @@ function renderPolicyActionString(value: string): string {
 
   const servicePrefix = value.slice(0, separatorIndex);
   const actionName = value.slice(separatorIndex + 1);
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   const knownActions = iamActionCatalog[servicePrefix as keyof typeof iamActionCatalog] as
     | ReadonlyArray<string>
     | undefined;
@@ -532,6 +533,7 @@ export function renderPicklistSchema(props: { values: Array<string> }): string {
 }
 
 export function sortJsonRecord<T extends Record<string, unknown>>(input: T): T {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   return Object.fromEntries(
     Object.entries(input)
       .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))

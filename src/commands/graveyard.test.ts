@@ -303,7 +303,7 @@ async function writeFixtureFiles(props: {
 
 function createCollectingLogger(): Logger & { logs: Array<string> } {
   const logs: Array<string> = [];
-  const write = (...args: Array<any>): void => {
+  const write = (...args: Array<unknown>): void => {
     logs.push(args.map((arg) => String(arg)).join(" "));
   };
   return {

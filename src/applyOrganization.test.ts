@@ -1,9 +1,24 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 
+import type { AccountClient } from "@aws-sdk/client-account";
+import type { OrganizationsClient } from "@aws-sdk/client-organizations";
+
 import { executeOrganizationOperation } from "./applyOrganization.js";
 import type { Logger } from "./logger.js";
 import { createWorkingState, type StateFile } from "./state.js";
+
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function mockOrgsClient(sendFn: (...args: Array<unknown>) => unknown): OrganizationsClient {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return { send: sendFn } as unknown as OrganizationsClient;
+}
+
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function mockAccountClient(): AccountClient {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return {} as unknown as AccountClient;
+}
 
 function createNoopLogger(): Logger {
   return {
@@ -57,8 +72,8 @@ test("executeOrganizationOperation createOu adds OU to state", async () => {
   const sendMock = mock.fn(async () => ({
     OrganizationalUnit: { Id: "ou-new", Arn: "arn:ou-new", Name: "Data" },
   }));
-  const organizationsClient = { send: sendMock } as any;
-  const accountClient = {} as any;
+  const organizationsClient = mockOrgsClient(sendMock);
+  const accountClient = mockAccountClient();
 
   const result = await executeOrganizationOperation({
     state,
@@ -79,8 +94,8 @@ test("executeOrganizationOperation createOu adds OU to state", async () => {
 test("executeOrganizationOperation createOu throws on incomplete response", async () => {
   const state = createWorkingState({ state: createBaseState() });
   const sendMock = mock.fn(async () => ({ OrganizationalUnit: { Id: null } }));
-  const organizationsClient = { send: sendMock } as any;
-  const accountClient = {} as any;
+  const organizationsClient = mockOrgsClient(sendMock);
+  const accountClient = mockAccountClient();
 
   await assert.rejects(
     () =>
@@ -100,8 +115,8 @@ test("executeOrganizationOperation createOu throws on incomplete response", asyn
 test("executeOrganizationOperation moveAccount updates account parentId", async () => {
   const state = createWorkingState({ state: createBaseState() });
   const sendMock = mock.fn(async () => ({}));
-  const organizationsClient = { send: sendMock } as any;
-  const accountClient = {} as any;
+  const organizationsClient = mockOrgsClient(sendMock);
+  const accountClient = mockAccountClient();
 
   const result = await executeOrganizationOperation({
     state,

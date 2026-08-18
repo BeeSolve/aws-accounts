@@ -14,11 +14,17 @@ import {
   type RemoteCommandInput,
 } from "./remote.js";
 
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function mockClient<T>(sendFn: (...args: Array<unknown>) => unknown = async () => ({})): T {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return { send: sendFn } as unknown as T;
+}
+
 // --- Helpers ---
 
 function createCollectingLogger(): Logger & { logs: Array<string> } {
   const logs: Array<string> = [];
-  const write = (...args: Array<any>): void => {
+  const write = (...args: Array<unknown>): void => {
     logs.push(args.map((arg) => String(arg)).join(" "));
   };
   return {
@@ -47,12 +53,12 @@ function createBaseInput(overrides?: Partial<RemoteCommandInput>): RemoteCommand
     },
     logger: overrides?.logger ?? noopLogger,
     overwriteConfirmation: overrides?.overwriteConfirmation ?? (async () => true),
-    stsClient: overrides?.stsClient ?? ({ send: async () => ({}) } as any),
-    s3Client: overrides?.s3Client ?? ({ send: async () => ({}) } as any),
-    iamClient: overrides?.iamClient ?? ({ send: async () => ({}) } as any),
-    lambdaClient: overrides?.lambdaClient ?? ({ send: async () => ({}) } as any),
-    ssoAdminClient: overrides?.ssoAdminClient ?? ({ send: async () => ({}) } as any),
-    organizationsClient: overrides?.organizationsClient ?? ({ send: async () => ({}) } as any),
+    stsClient: overrides?.stsClient ?? mockClient(),
+    s3Client: overrides?.s3Client ?? mockClient(),
+    iamClient: overrides?.iamClient ?? mockClient(),
+    lambdaClient: overrides?.lambdaClient ?? mockClient(),
+    ssoAdminClient: overrides?.ssoAdminClient ?? mockClient(),
+    organizationsClient: overrides?.organizationsClient ?? mockClient(),
   };
 }
 
@@ -739,8 +745,8 @@ test("runRemoteApply creates aggregator when deploying security baseline StackSe
 
     const lambdaPayloads = new Array<unknown>();
     const mockLambdaClient = {
-      send: async (command: any) => {
-        const payloadText = new TextDecoder().decode(command.input.Payload);
+      send: async (command: { input?: { Payload?: Uint8Array } }) => {
+        const payloadText = new TextDecoder().decode(command.input?.Payload);
         const payload = JSON.parse(payloadText);
         lambdaPayloads.push(payload);
 
@@ -822,7 +828,7 @@ test("runRemoteApply creates aggregator when deploying security baseline StackSe
     };
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => new Response("", { status: 200 }) as any;
+    globalThis.fetch = async () => new Response("", { status: 200 });
 
     const logger = createCollectingLogger();
     const input = createBaseInput({
@@ -835,7 +841,7 @@ test("runRemoteApply creates aggregator when deploying security baseline StackSe
         redeployStacksets: false,
       },
       logger,
-      lambdaClient: mockLambdaClient as any,
+      lambdaClient: mockClient(mockLambdaClient.send),
     });
 
     const originalCwd = process.cwd();
@@ -847,9 +853,11 @@ test("runRemoteApply creates aggregator when deploying security baseline StackSe
       globalThis.fetch = originalFetch;
     }
 
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
     const aggregatorCall = lambdaPayloads.find(
-      (p: any) => p.action === "createConfigAggregator",
-    ) as any;
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
+      (p) => (p as Record<string, unknown>).action === "createConfigAggregator",
+    ) as Record<string, unknown>;
     assert.ok(aggregatorCall, "Expected createConfigAggregator Lambda invocation");
     assert.equal(aggregatorCall.targetAccountId, "222222222222");
     assert.equal(aggregatorCall.region, "us-east-1");

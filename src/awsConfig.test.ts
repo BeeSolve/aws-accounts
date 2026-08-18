@@ -168,6 +168,7 @@ test("writeAwsConfigFromState fails on context mismatch", async () => {
       contextPath,
     });
     const contextRaw = await readFile(contextPath, "utf8");
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
     const context = JSON.parse(contextRaw) as {
       organization: { graveyardOuId: string };
     };
@@ -1022,6 +1023,7 @@ async function updateConfigModel(props: {
 }): Promise<void> {
   const typesPath = props.typesPath ?? join(dirname(props.configPath), "aws.config.types.ts");
   void typesPath;
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   const parsedConfig = (await readConfigModelForTest({
     configPath: props.configPath,
   })) as {

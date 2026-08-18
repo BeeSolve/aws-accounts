@@ -48,8 +48,8 @@ const commands = [
   "drift",
 ] as const;
 type CommandName = (typeof commands)[number];
-function isCommandName(value: any): value is CommandName {
-  return commands.includes(value);
+function isCommandName(value: unknown): value is CommandName {
+  return typeof value === "string" && (commands as ReadonlyArray<string>).includes(value);
 }
 
 const contextPath = "aws.context.json";
@@ -228,7 +228,7 @@ async function main(): Promise<void> {
     await runRemoteDrift(remoteInput);
     return;
   }
-  assertUnreachable(command, `Unhandled remote command: "${command}"`);
+  assertUnreachable(command, `Unhandled remote command: "${String(command)}"`);
 }
 
 function printHelp(logger: Logger): void {

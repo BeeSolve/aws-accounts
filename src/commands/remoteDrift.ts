@@ -102,7 +102,9 @@ function deepEqual(left: unknown, right: unknown): boolean {
     !Array.isArray(left) &&
     !Array.isArray(right)
   ) {
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
     const leftObj = left as Record<string, unknown>;
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
     const rightObj = right as Record<string, unknown>;
     const leftKeys = Object.keys(leftObj).filter((k) => leftObj[k] !== undefined);
     const rightKeys = Object.keys(rightObj).filter((k) => rightObj[k] !== undefined);

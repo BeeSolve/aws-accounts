@@ -3,6 +3,10 @@ import test, { mock } from "node:test";
 
 import fc from "fast-check";
 
+interface MockSdkCommand {
+  constructor: { name: string };
+  input?: Record<string, unknown>;
+}
 import type { Operation } from "../operations.js";
 import type { StateFile } from "../state.js";
 
@@ -54,8 +58,8 @@ const minimalState: StateFile = {
 // Mock S3Client.send:
 // - GetObjectCommand → return valid state with ETag
 // - PutObjectCommand → throw PreconditionFailed (S3ServiceException)
-const mockS3Send = mock.fn(async (command: unknown) => {
-  const commandName = (command as { constructor: { name: string } }).constructor.name;
+const mockS3Send = mock.fn(async (command: MockSdkCommand) => {
+  const commandName = command.constructor.name;
   if (commandName === "GetObjectCommand") {
     return {
       Body: {
@@ -77,7 +81,7 @@ const mockS3Send = mock.fn(async (command: unknown) => {
 });
 
 mock.module("@aws-sdk/client-s3", {
-  namedExports: {
+  exports: {
     S3Client: class {
       send = mockS3Send;
     },
@@ -122,13 +126,13 @@ mock.module("@aws-sdk/client-s3", {
 });
 
 mock.module("@aws-sdk/s3-request-presigner", {
-  namedExports: {
+  exports: {
     getSignedUrl: async () => "https://mock-presigned-url.example.com",
   },
 });
 
 mock.module("@aws-sdk/client-sts", {
-  namedExports: {
+  exports: {
     STSClient: class {
       send = async () => ({});
     },
@@ -139,7 +143,7 @@ mock.module("@aws-sdk/client-sts", {
 });
 
 mock.module("@aws-sdk/client-organizations", {
-  namedExports: {
+  exports: {
     OrganizationsClient: class {
       send = async () => ({});
     },
@@ -150,7 +154,7 @@ mock.module("@aws-sdk/client-organizations", {
 });
 
 mock.module("@aws-sdk/client-sso-admin", {
-  namedExports: {
+  exports: {
     SSOAdminClient: class {
       send = async () => ({});
     },
@@ -158,7 +162,7 @@ mock.module("@aws-sdk/client-sso-admin", {
 });
 
 mock.module("@aws-sdk/client-identitystore", {
-  namedExports: {
+  exports: {
     IdentitystoreClient: class {
       send = async () => ({});
     },
@@ -166,7 +170,7 @@ mock.module("@aws-sdk/client-identitystore", {
 });
 
 mock.module("@aws-sdk/client-account", {
-  namedExports: {
+  exports: {
     AccountClient: class {
       send = async () => ({});
     },
@@ -177,13 +181,13 @@ mock.module("@aws-sdk/client-account", {
 const mockExecuteOperation = mock.fn(async (props: { state: unknown }) => props.state);
 
 mock.module("../applyLogic.js", {
-  namedExports: {
+  exports: {
     executeOperation: mockExecuteOperation,
   },
 });
 
 mock.module("../scanLogic.js", {
-  namedExports: {
+  exports: {
     scanOrganization: async () => minimalState.organization,
     scanIdentityCenter: async () => minimalState.identityCenter,
   },

@@ -1,5 +1,11 @@
 import type { IamPolicyDocument } from "@beesolve/iam-policy-ts";
 
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function rootTarget<T extends string>(): Array<T> {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return ["root"] as Array<T>;
+}
+
 export function toPolicies<T extends string, A extends string>() {
   return {
     scp: {
@@ -108,7 +114,7 @@ function blockExpensiveResources<T extends string, A extends string>(
     description:
       "Prevents expensive resource creation (GPU/accelerator instances, Bedrock, SageMaker, ECS, and expensive purchases). Exempt accounts by adding their IDs to exemptAccounts.",
     content: { Version: "2012-10-17", Statement: statements },
-    targets: options.targets ?? (["root"] as Array<T>),
+    targets: options.targets ?? rootTarget<T>(),
   };
 }
 
@@ -183,7 +189,7 @@ function protectSecurityServices<T extends string, A extends string>(
     name: options.name ?? "ProtectSecurityServices",
     description: "Prevents member accounts from disabling CloudTrail, AWS Config, and GuardDuty.",
     content: { Version: "2012-10-17", Statement: statements },
-    targets: options.targets ?? (["root"] as Array<T>),
+    targets: options.targets ?? rootTarget<T>(),
   };
 }
 
@@ -213,7 +219,7 @@ function denyRootWithoutMfa<T extends string>(
         },
       ],
     },
-    targets: options.targets ?? (["root"] as Array<T>),
+    targets: options.targets ?? rootTarget<T>(),
   };
 }
 
@@ -267,7 +273,7 @@ function dailyWithRetention<T extends string>(
         },
       },
     },
-    targets: options.targets ?? (["root"] as Array<T>),
+    targets: options.targets ?? rootTarget<T>(),
   };
 }
 

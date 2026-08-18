@@ -255,7 +255,7 @@ async function scanOrganizationPolicies(props: {
           if (target.TargetId == null || target.Type == null) {
             continue;
           }
-          const targetType = target.Type as OrgPolicyAttachmentState["targetType"];
+          const targetType = target.Type;
           if (
             targetType !== "ROOT" &&
             targetType !== "ORGANIZATIONAL_UNIT" &&
@@ -397,6 +397,7 @@ async function scanAccessControlAttributes(props: {
   return attributes
     .filter((attr) => attr.Key != null)
     .map((attr) => ({
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       key: attr.Key as string,
       source: attr.Value?.Source ?? [],
     }));

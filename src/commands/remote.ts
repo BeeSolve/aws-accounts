@@ -77,6 +77,7 @@ export async function readDeploymentFromContext(): Promise<Deployment> {
   try {
     context = await readAwsContextFromFile(contextFilePath);
   } catch (err) {
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       throw toPreconditionError("aws.context.json not found. Run `aws-accounts bootstrap` first.");
     }
@@ -350,16 +351,16 @@ function formatPrincipalLabel(principalType: "GROUP" | "USER", principalName: st
 
 export function formatLambdaError(error: { kind: string; [key: string]: unknown }): string {
   if (error.kind === "validation") {
-    return `Lambda validation error: ${error.details}`;
+    return `Lambda validation error: ${String(error.details)}`;
   }
   if (error.kind === "concurrencyConflict") {
-    return `Lambda concurrency conflict: ${error.message}`;
+    return `Lambda concurrency conflict: ${String(error.message)}`;
   }
   if (error.kind === "operationFailed") {
-    return `Lambda operation failed: ${error.error}`;
+    return `Lambda operation failed: ${String(error.error)}`;
   }
   if (error.kind === "invocationError") {
-    return `Lambda invocation error: ${error.message}`;
+    return `Lambda invocation error: ${String(error.message)}`;
   }
   return `Lambda error: ${JSON.stringify(error)}`;
 }
@@ -617,6 +618,7 @@ export function computeStackSetOperations(
     return [
       {
         action: "create" as const,
+        // eslint-disable-next-line typescript/no-unsafe-type-assertion
         stackSetName: ss.templateKey as "security-setup" | "config-recorder" | "guardduty-member",
         targets: resolvedTargets,
         parameters: ss.parameters.map((p) => ({
@@ -715,6 +717,6 @@ async function resolveTemplateContent(templateKey: string): Promise<string> {
   } catch {
     const packageDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
     const defaultPath = join(packageDir, "templates", `${templateKey}.yaml`);
-    return await readFile(defaultPath, "utf8");
+    return readFile(defaultPath, "utf8");
   }
 }

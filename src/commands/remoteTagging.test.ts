@@ -6,6 +6,11 @@ import test, { mock } from "node:test";
 import { createTestWorkspace } from "../helpers.test.js";
 import { getStandardTags } from "../tags.js";
 
+interface MockSdkCommand {
+  constructor: { name: string };
+  input?: Record<string, unknown>;
+}
+
 // --- Track all AWS SDK calls ---
 
 type SdkCall = { commandName: string; input: unknown };
@@ -30,11 +35,11 @@ let lambdaFunctionExists = false;
 // --- Mock AWS SDK modules BEFORE importing remote.ts ---
 
 mock.module("@aws-sdk/client-s3", {
-  namedExports: {
+  exports: {
     S3Client: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
-        const input = (command as { input?: unknown }).input;
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
+        const input = command.input;
         s3Calls.push({ commandName, input });
 
         if (commandName === "CreateBucketCommand") {
@@ -64,11 +69,11 @@ mock.module("@aws-sdk/client-s3", {
 });
 
 mock.module("@aws-sdk/client-iam", {
-  namedExports: {
+  exports: {
     IAMClient: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
-        const input = (command as { input?: unknown }).input;
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
+        const input = command.input;
         iamCalls.push({ commandName, input });
 
         if (commandName === "GetRoleCommand") {
@@ -78,7 +83,7 @@ mock.module("@aws-sdk/client-iam", {
             };
           }
           const error = new Error("NoSuchEntity");
-          (error as any).name = "NoSuchEntityException";
+          error.name = "NoSuchEntityException";
           throw error;
         }
         if (commandName === "CreateRoleCommand") {
@@ -131,11 +136,11 @@ class MockResourceNotFoundException extends Error {
 }
 
 mock.module("@aws-sdk/client-lambda", {
-  namedExports: {
+  exports: {
     LambdaClient: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
-        const input = (command as { input?: unknown }).input;
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
+        const input = command.input;
         lambdaCalls.push({ commandName, input });
 
         if (commandName === "GetFunctionCommand") {
@@ -224,11 +229,11 @@ mock.module("@aws-sdk/client-lambda", {
 });
 
 mock.module("@aws-sdk/client-sts", {
-  namedExports: {
+  exports: {
     STSClient: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
-        stsCalls.push({ commandName, input: (command as { input?: unknown }).input });
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
+        stsCalls.push({ commandName, input: command.input });
         if (commandName === "GetCallerIdentityCommand") {
           return { Account: "123456789012" };
         }
@@ -245,10 +250,10 @@ mock.module("@aws-sdk/client-sts", {
 });
 
 mock.module("@aws-sdk/client-sso-admin", {
-  namedExports: {
+  exports: {
     SSOAdminClient: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
         if (commandName === "ListInstancesCommand") {
           return {
             Instances: [
@@ -313,13 +318,13 @@ mock.module("@aws-sdk/client-sso-admin", {
 });
 
 mock.module("@aws-sdk/credential-providers", {
-  namedExports: {
+  exports: {
     fromIni: () => undefined,
   },
 });
 
 mock.module("@aws-sdk/client-cloudwatch-logs", {
-  namedExports: {
+  exports: {
     CloudWatchLogsClient: class {
       send = async () => ({});
     },
@@ -345,7 +350,7 @@ mock.module("@aws-sdk/client-cloudwatch-logs", {
 });
 
 mock.module("@aws-sdk/client-organizations", {
-  namedExports: {
+  exports: {
     OrganizationsClient: class {
       send = async () => ({ Organization: { FeatureSet: "ALL" } });
     },
@@ -435,6 +440,7 @@ test("runRemoteBootstrap applies PutBucketTagging with standard tags after bucke
       const putTaggingCalls = s3Calls.filter((c) => c.commandName === "PutBucketTaggingCommand");
       assert.equal(putTaggingCalls.length, 1, "Expected exactly one PutBucketTaggingCommand call");
 
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const taggingInput = putTaggingCalls[0].input as {
         Bucket: string;
         Tagging: { TagSet: Array<{ Key: string; Value: string }> };
@@ -495,6 +501,7 @@ test("runRemoteBootstrap includes standard tags in CreateRoleCommand when role d
       const createRoleCalls = iamCalls.filter((c) => c.commandName === "CreateRoleCommand");
       assert.equal(createRoleCalls.length, 1, "Expected exactly one CreateRoleCommand call");
 
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const createRoleInput = createRoleCalls[0].input as {
         RoleName: string;
         Tags: Array<{ Key: string; Value: string }>;
@@ -557,6 +564,7 @@ test("runRemoteBootstrap calls TagRoleCommand with standard tags when role alrea
       const tagRoleCalls = iamCalls.filter((c) => c.commandName === "TagRoleCommand");
       assert.equal(tagRoleCalls.length, 1, "Expected exactly one TagRoleCommand call");
 
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const tagRoleInput = tagRoleCalls[0].input as {
         RoleName: string;
         Tags: Array<{ Key: string; Value: string }>;
@@ -617,6 +625,7 @@ test("runRemoteBootstrap includes tags in CreateFunctionCommand when Lambda does
       const createFnCalls = lambdaCalls.filter((c) => c.commandName === "CreateFunctionCommand");
       assert.equal(createFnCalls.length, 1, "Expected exactly one CreateFunctionCommand call");
 
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const createFnInput = createFnCalls[0].input as {
         FunctionName: string;
         Tags: Record<string, string>;
@@ -688,6 +697,7 @@ test("runRemoteBootstrap calls TagResourceCommand with standard tags when Lambda
       const tagResourceCalls = lambdaCalls.filter((c) => c.commandName === "TagResourceCommand");
       assert.equal(tagResourceCalls.length, 1, "Expected exactly one TagResourceCommand call");
 
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const tagResourceInput = tagResourceCalls[0].input as {
         Resource: string;
         Tags: Record<string, string>;
@@ -719,7 +729,6 @@ test("runRemoteBootstrap applies PutBucketTagging even when bucket already exist
     lambdaFunctionExists = false;
 
     // Override S3 mock to simulate BucketAlreadyOwnedByYou
-    const originalS3Send = s3Calls; // just reset
     resetAllCalls();
 
     const contextPath = join(workspace.workspacePath, "aws.context.json");
@@ -765,6 +774,7 @@ test("runRemoteBootstrap applies PutBucketTagging even when bucket already exist
         "PutBucketTaggingCommand should be called even for existing buckets",
       );
 
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       const taggingInput = putTaggingCalls[0].input as {
         Bucket: string;
         Tagging: { TagSet: Array<{ Key: string; Value: string }> };

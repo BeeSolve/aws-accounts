@@ -41,8 +41,15 @@ type PolicyContent = {
   Statement: Array<Record<string, unknown>>;
 };
 
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
 function getContent(result: { content: Record<string, unknown> }): PolicyContent {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   return result.content as PolicyContent;
+}
+
+function getCondition(stmt: Record<string, unknown>): Record<string, Record<string, unknown>> {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return (stmt.Condition ?? {}) as Record<string, Record<string, unknown>>;
 }
 
 function allScpFunctionsWithDefaults(): Array<{
@@ -292,7 +299,7 @@ describe("Property 5: Exempt roles condition generation", () => {
         for (const result of results) {
           const content = getContent(result);
           for (const statement of content.Statement) {
-            const condition = statement.Condition as Record<string, Record<string, unknown>>;
+            const condition = getCondition(statement);
             assert.ok(condition != null);
             assert.ok(condition.StringNotLike != null);
             assert.ok(condition.StringNotLike["aws:PrincipalARN"] != null);
@@ -318,6 +325,7 @@ describe("Property 5: Exempt roles condition generation", () => {
         for (const result of results) {
           const content = getContent(result);
           for (const statement of content.Statement) {
+            // eslint-disable-next-line typescript/no-unsafe-type-assertion
             const condition = statement.Condition as
               | Record<string, Record<string, unknown>>
               | undefined;
@@ -345,7 +353,7 @@ describe("Property 6: Region restriction round-trip", () => {
         const result = collection.foundation.denyUnsupportedRegions({ allowedRegions: regions });
         const content = getContent(result);
         const statement = content.Statement[0];
-        const condition = statement.Condition as Record<string, Record<string, unknown>>;
+        const condition = getCondition(statement);
         assert.ok(condition.StringNotEquals != null);
         const requestedRegion = condition.StringNotEquals["aws:RequestedRegion"];
         assert.deepEqual(requestedRegion, regions);
@@ -399,6 +407,8 @@ describe("Property 8: Organization ID validation", () => {
   it("enforceDataPerimeter throws on empty or null organizationId", () => {
     fc.assert(
       fc.property(
+        // eslint-disable-next-line typescript/no-unsafe-type-assertion
+        // eslint-disable-next-line typescript/no-unsafe-type-assertion
         fc.constantFrom("", undefined as unknown as string, null as unknown as string),
         (orgId) => {
           assert.throws(
@@ -427,7 +437,7 @@ describe("Property 9: Development instance type filtering", () => {
           (statement) => statement.Sid === "DenyExpensiveEc2Instances",
         );
         assert.ok(ec2Statement != null);
-        const condition = ec2Statement.Condition as Record<string, Record<string, unknown>>;
+        const condition = getCondition(ec2Statement);
         assert.ok(condition["ForAnyValue:StringNotLike"] != null);
         assert.deepEqual(condition["ForAnyValue:StringNotLike"]["ec2:InstanceType"], instanceTypes);
       }),
@@ -446,7 +456,7 @@ describe("Property 10: Tag enforcement null condition", () => {
         const result = collection.development.enforceResourceTagging({ requiredTags: tags });
         const content = getContent(result);
         for (const statement of content.Statement) {
-          const condition = statement.Condition as Record<string, Record<string, string>>;
+          const condition = getCondition(statement);
           assert.ok(condition.Null != null);
           for (const tagKey of tags) {
             assert.equal(condition.Null[`aws:RequestTag/${tagKey}`], "true");

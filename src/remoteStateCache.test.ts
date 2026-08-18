@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFile, unlink, mkdir } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -68,8 +68,8 @@ test("readStateCache returns the written state", async () => {
   const result = await readStateCache(cachePath);
 
   assert.notEqual(result, null);
-  assert.deepEqual(result!.state, state);
-  assert.equal(typeof result!.fetchedAt, "string");
+  assert.deepEqual(result?.state, state);
+  assert.equal(typeof result?.fetchedAt, "string");
 
   await unlink(cachePath);
 });

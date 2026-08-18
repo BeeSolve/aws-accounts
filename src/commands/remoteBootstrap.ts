@@ -89,6 +89,7 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
         CreateBucketConfiguration:
           resolvedRegion !== "us-east-1"
             ? {
+                // eslint-disable-next-line typescript/no-unsafe-type-assertion
                 LocationConstraint: resolvedRegion as BucketLocationConstraint,
               }
             : undefined,
@@ -96,6 +97,7 @@ export async function runRemoteBootstrap(input: RemoteCommandInput): Promise<voi
     );
     input.logger.log(`Created S3 bucket: ${bucketName}`);
   } catch (error: unknown) {
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
     const s3Error = error as S3ServiceException;
     if (s3Error.name === "BucketAlreadyOwnedByYou" || s3Error.name === "BucketAlreadyExists") {
       input.logger.log(`S3 bucket already exists: ${bucketName}`);

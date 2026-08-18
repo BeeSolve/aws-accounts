@@ -259,6 +259,7 @@ async function createManagedBucket(props: {
         Bucket: props.bucketName,
         ...(props.region !== "us-east-1" && {
           CreateBucketConfiguration: {
+            // eslint-disable-next-line typescript/no-unsafe-type-assertion
             LocationConstraint: props.region as BucketLocationConstraint,
           },
         }),

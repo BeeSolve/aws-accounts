@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test, { mock } from "node:test";
+import test from "node:test";
 
 import fc from "fast-check";
 import * as v from "valibot";
@@ -10,7 +10,6 @@ import { handler } from "./handler.js";
 
 // Set required env var before any handler calls
 process.env.STATE_BUCKET_NAME = "test-bucket-dummy";
-import type { Operation } from "../operations.js";
 
 // --- Generators ---
 

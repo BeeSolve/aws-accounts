@@ -1,3 +1,11 @@
 {
-  "extends": ["./node_modules/@beesolve/lint-config/presets/package.oxlintrc.json"]
+  "extends": ["./node_modules/@beesolve/lint-config/presets/package.oxlintrc.json"],
+  "overrides": [
+    {
+      "files": ["**/*.test.ts"],
+      "rules": {
+        "typescript/no-floating-promises": "off"
+      }
+    }
+  ]
 }

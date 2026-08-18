@@ -297,7 +297,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
   if (stackSetOperations != null && stackSetOperations.length > 0) {
     const deliveryBucket = config.securityBaseline?.configDeliveryBucket;
     if (deliveryBucket) {
-      const deliveryBucketName = `config-delivery-${context.organization.id!}-${deployment.region}`;
+      const deliveryBucketName = `config-delivery-${context.organization.id ?? ""}-${deployment.region}`;
       const deliveryAccountId = currentState.organization.accounts.find(
         (a) => a.name === deliveryBucket.accountName,
       )?.id;
@@ -356,7 +356,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
     // Ensure CloudTrail log bucket and org trail exist
     const cloudTrailBucket = config.securityBaseline?.cloudTrailBucket;
     if (cloudTrailBucket) {
-      const trailBucketName = `cloudtrail-logs-${context.organization.id!}-${deployment.region}`;
+      const trailBucketName = `cloudtrail-logs-${context.organization.id ?? ""}-${deployment.region}`;
       const trailBucketAccountId = currentState.organization.accounts.find(
         (a) => a.name === cloudTrailBucket.accountName,
       )?.id;
@@ -372,7 +372,7 @@ export async function runRemoteApply(input: RemoteCommandInput): Promise<void> {
             targetAccountId: trailBucketAccountId,
             bucketName: trailBucketName,
             region: deployment.region,
-            organizationId: context.organization.id!,
+            organizationId: context.organization.id ?? "",
           },
         });
         if (!bucketResult.ok) {

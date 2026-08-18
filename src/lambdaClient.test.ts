@@ -14,6 +14,7 @@ function createScanPayload(): LambdaRequestPayload {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createMockLambdaClient(sendFn: (command: unknown) => Promise<any>): LambdaClient {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
   return { send: sendFn } as unknown as LambdaClient;
 }
 

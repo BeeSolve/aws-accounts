@@ -4,7 +4,11 @@ import { join } from "node:path";
 import test, { mock } from "node:test";
 
 import { createTestWorkspace } from "../helpers.test.js";
-import { getStandardTags } from "../tags.js";
+
+interface MockSdkCommand {
+  constructor: { name: string };
+  input?: Record<string, unknown>;
+}
 
 // --- Track all AWS SDK calls ---
 
@@ -36,11 +40,11 @@ let remoteMgmtShouldFail = false;
 // --- Mock AWS SDK modules BEFORE importing remote.ts ---
 
 mock.module("@aws-sdk/client-s3", {
-  namedExports: {
+  exports: {
     S3Client: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
-        const input = (command as { input?: unknown }).input;
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
+        const input = command.input;
         s3Calls.push({ commandName, input });
         return {};
       };
@@ -62,11 +66,11 @@ mock.module("@aws-sdk/client-s3", {
 });
 
 mock.module("@aws-sdk/client-iam", {
-  namedExports: {
+  exports: {
     IAMClient: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
-        const input = (command as { input?: unknown }).input;
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
+        const input = command.input;
         iamCalls.push({ commandName, input });
 
         if (commandName === "GetRoleCommand") {
@@ -76,7 +80,7 @@ mock.module("@aws-sdk/client-iam", {
             };
           }
           const error = new Error("NoSuchEntity");
-          (error as any).name = "NoSuchEntityException";
+          error.name = "NoSuchEntityException";
           throw error;
         }
         if (commandName === "CreateRoleCommand") {
@@ -122,11 +126,11 @@ class MockResourceNotFoundException extends Error {
 }
 
 mock.module("@aws-sdk/client-lambda", {
-  namedExports: {
+  exports: {
     LambdaClient: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
-        const input = (command as { input?: unknown }).input;
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
+        const input = command.input;
         lambdaCalls.push({ commandName, input });
 
         if (commandName === "GetFunctionCommand") {
@@ -200,11 +204,11 @@ mock.module("@aws-sdk/client-lambda", {
 });
 
 mock.module("@aws-sdk/client-sts", {
-  namedExports: {
+  exports: {
     STSClient: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
-        stsCalls.push({ commandName, input: (command as { input?: unknown }).input });
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
+        stsCalls.push({ commandName, input: command.input });
         if (commandName === "GetCallerIdentityCommand") {
           return { Account: "123456789012" };
         }
@@ -221,11 +225,11 @@ mock.module("@aws-sdk/client-sts", {
 });
 
 mock.module("@aws-sdk/client-sso-admin", {
-  namedExports: {
+  exports: {
     SSOAdminClient: class {
-      send = async (command: unknown) => {
-        const commandName = (command as { constructor: { name: string } }).constructor.name;
-        const input = (command as { input?: unknown }).input;
+      send = async (command: MockSdkCommand) => {
+        const commandName = command.constructor.name;
+        const input = command.input;
         ssoCalls.push({ commandName, input });
 
         if (commandName === "ListPermissionSetsCommand") {
@@ -244,7 +248,7 @@ mock.module("@aws-sdk/client-sso-admin", {
           };
         }
         if (commandName === "DescribePermissionSetCommand") {
-          const psArn = (input as any).PermissionSetArn;
+          const psArn = input?.PermissionSetArn;
           if (psArn === "arn:aws:sso:::permissionSet/ssoins-123/ps-org-mgmt") {
             return { PermissionSet: { Name: "OrganizationManagement", PermissionSetArn: psArn } };
           }
@@ -256,7 +260,7 @@ mock.module("@aws-sdk/client-sso-admin", {
           return { PermissionSet: { Name: "Unknown", PermissionSetArn: psArn } };
         }
         if (commandName === "CreatePermissionSetCommand") {
-          const name = (input as any).Name;
+          const name = input?.Name;
           if (name === "OrganizationManagement" && orgMgmtShouldFail) {
             throw new Error("Simulated OrganizationManagement creation failure");
           }
@@ -265,7 +269,7 @@ mock.module("@aws-sdk/client-sso-admin", {
           }
           return {
             PermissionSet: {
-              PermissionSetArn: `arn:aws:sso:::permissionSet/ssoins-123/ps-new-${name}`,
+              PermissionSetArn: `arn:aws:sso:::permissionSet/ssoins-123/ps-new-${String(name)}`,
             },
           };
         }
@@ -327,13 +331,13 @@ mock.module("@aws-sdk/client-sso-admin", {
 });
 
 mock.module("@aws-sdk/credential-providers", {
-  namedExports: {
+  exports: {
     fromIni: () => undefined,
   },
 });
 
 mock.module("@aws-sdk/client-cloudwatch-logs", {
-  namedExports: {
+  exports: {
     CloudWatchLogsClient: class {
       send = async () => ({});
     },
@@ -359,7 +363,7 @@ mock.module("@aws-sdk/client-cloudwatch-logs", {
 });
 
 mock.module("@aws-sdk/client-organizations", {
-  namedExports: {
+  exports: {
     OrganizationsClient: class {
       send = async () => ({ Organization: { FeatureSet: "ALL" } });
     },
@@ -375,7 +379,6 @@ mock.module("@aws-sdk/client-organizations", {
 // --- Import module under test AFTER mocks ---
 
 const { runRemoteBootstrap } = await import("./remote.js");
-const { noopLogger } = await import("../logger.js");
 const { STSClient } = await import("@aws-sdk/client-sts");
 const { S3Client } = await import("@aws-sdk/client-s3");
 const { IAMClient } = await import("@aws-sdk/client-iam");
@@ -385,7 +388,7 @@ const { OrganizationsClient } = await import("@aws-sdk/client-organizations");
 
 // --- Helpers ---
 
-function createValidContextFile(opts?: { withIdentityCenter?: boolean }) {
+function createValidContextFile(_opts?: { withIdentityCenter?: boolean }) {
   const base: Record<string, unknown> = {
     version: "1",
     generatedAt: "2026-01-01T00:00:00.000Z",
@@ -405,7 +408,7 @@ function createValidContextFile(opts?: { withIdentityCenter?: boolean }) {
 
 function createCollectingLogger() {
   const logs: Array<string> = [];
-  const write = (...args: Array<any>): void => {
+  const write = (...args: Array<unknown>): void => {
     logs.push(args.map((arg) => String(arg)).join(" "));
   };
   return {
@@ -552,7 +555,8 @@ test("runRemoteBootstrap continues with second permission set when first fails",
       const remoteMgmtCreateCalls = ssoCalls.filter(
         (c) =>
           c.commandName === "CreatePermissionSetCommand" &&
-          (c.input as any).Name === "OrganizationRemoteManagement",
+          // eslint-disable-next-line typescript/no-unsafe-type-assertion
+          (c.input as Record<string, unknown>)?.Name === "OrganizationRemoteManagement",
       );
       assert.equal(
         remoteMgmtCreateCalls.length,
@@ -614,7 +618,8 @@ test("runRemoteBootstrap continues with first permission set when second fails",
       const orgMgmtCreateCalls = ssoCalls.filter(
         (c) =>
           c.commandName === "CreatePermissionSetCommand" &&
-          (c.input as any).Name === "OrganizationManagement",
+          // eslint-disable-next-line typescript/no-unsafe-type-assertion
+          (c.input as Record<string, unknown>)?.Name === "OrganizationManagement",
       );
       assert.equal(orgMgmtCreateCalls.length, 1, "OrganizationManagement should be created");
 

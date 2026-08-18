@@ -12,7 +12,7 @@ import type { StateFile } from "./state.js";
 
 function createCollectingLogger(): Logger & { logs: Array<string> } {
   const logs: Array<string> = [];
-  const write = (...args: Array<any>): void => {
+  const write = (...args: Array<unknown>): void => {
     logs.push(args.map((arg) => String(arg)).join(" "));
   };
   return {
@@ -90,6 +90,7 @@ test("regenerateTypesFromState logs warning on failure without throwing", async 
 
     // Pass an invalid state to trigger an error inside mapStateToAwsConfig
     await regenerateTypesFromState({
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
       state: { invalid: true } as unknown as StateFile,
       contextPath: join(workspace.workspacePath, "aws.context.json"),
       configPath: join(workspace.workspacePath, "aws.config.ts"),

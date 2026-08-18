@@ -82,7 +82,7 @@ export type PickStringProps<T> = Pick<
  *
  * When needed the object can be converted back to an array by calling Object.values(object).
  */
-export function toRecordByProperty<T extends { [key: string]: any }>(
+export function toRecordByProperty<T extends Record<string, unknown>>(
   input: Array<T>,
   key: keyof PickStringProps<T> | ((value: T) => string),
   keyTransformer: (key: string) => string = (key) => key,
@@ -147,6 +147,7 @@ export function sortJsonValue(value: unknown): unknown {
 
 export function getErrorName(error: unknown): string | undefined {
   if (error != null && typeof error === "object" && "name" in error) {
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
     return (error as { name: string }).name;
   }
   return undefined;
@@ -154,6 +155,7 @@ export function getErrorName(error: unknown): string | undefined {
 
 export function getErrorCode(error: unknown): string | undefined {
   if (error != null && typeof error === "object" && "code" in error) {
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
     return (error as { code: string }).code;
   }
   return undefined;

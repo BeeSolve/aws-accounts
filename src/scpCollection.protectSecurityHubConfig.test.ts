@@ -3,6 +3,15 @@ import { describe, it } from "node:test";
 
 import { toScpCollection } from "./scpCollection.js";
 
+interface PolicyDoc {
+  Statement: Array<Record<string, unknown>>;
+}
+
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function asPolicy(content: Record<string, unknown>): PolicyDoc {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return content as unknown as PolicyDoc;
+}
 describe("security.protectSecurityHubConfig", () => {
   const collection = toScpCollection<string, string>();
 
@@ -14,7 +23,7 @@ describe("security.protectSecurityHubConfig", () => {
     assert.equal(result.name, "ProtectSecurityHubConfig");
     assert.deepEqual(result.targets, ["root"]);
 
-    const statement = (result.content as any).Statement[0];
+    const statement = asPolicy(result.content).Statement[0];
     assert.equal(statement.Effect, "Deny");
     assert.deepEqual(statement.Action, [
       "securityhub:BatchDisableStandards",
@@ -39,7 +48,7 @@ describe("security.protectSecurityHubConfig", () => {
       exemptRoles: ["arn:aws:iam::*:role/SecurityAdmin", "arn:aws:iam::*:role/OrganizationAdmin"],
     });
 
-    const statement = (result.content as any).Statement[0];
+    const statement = asPolicy(result.content).Statement[0];
     assert.deepEqual(statement.Condition, {
       StringNotLike: {
         "aws:PrincipalARN": [

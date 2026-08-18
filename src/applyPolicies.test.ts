@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 
+import type { OrganizationsClient } from "@aws-sdk/client-organizations";
+
 import { executePolicyOperation } from "./applyPolicies.js";
 import type { Logger } from "./logger.js";
+
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function mockOrgsClient(sendFn: (...args: Array<unknown>) => unknown): OrganizationsClient {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return { send: sendFn } as unknown as OrganizationsClient;
+}
 import { createWorkingState, type StateFile } from "./state.js";
 
 function createNoopLogger(): Logger {
@@ -47,7 +55,7 @@ test("executePolicyOperation createOrgPolicy adds policy to state", async () => 
   const sendMock = mock.fn(async () => ({
     Policy: { PolicySummary: { Id: "p-123", Arn: "arn:policy:p-123" } },
   }));
-  const organizationsClient = { send: sendMock } as any;
+  const organizationsClient = mockOrgsClient(sendMock);
 
   const result = await executePolicyOperation({
     state,
@@ -72,7 +80,7 @@ test("executePolicyOperation createOrgPolicy adds policy to state", async () => 
 test("executePolicyOperation createOrgPolicy throws on incomplete response", async () => {
   const state = createWorkingState({ state: createBaseState() });
   const sendMock = mock.fn(async () => ({ Policy: { PolicySummary: { Id: null } } }));
-  const organizationsClient = { send: sendMock } as any;
+  const organizationsClient = mockOrgsClient(sendMock);
 
   await assert.rejects(
     () =>

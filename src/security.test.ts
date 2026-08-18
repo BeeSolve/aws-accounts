@@ -3,6 +3,37 @@ import { describe, it } from "node:test";
 
 import { toPolicies, toSecurityBaseline } from "./security.js";
 
+interface PolicyDoc {
+  Version?: string;
+  Statement: Array<Record<string, unknown>>;
+}
+
+interface BackupPolicyDoc {
+  plans: Record<string, Record<string, unknown>>;
+}
+
+interface IamPolicyDoc {
+  Statement: Array<Record<string, unknown>>;
+}
+
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function asPolicy(content: Record<string, unknown>): PolicyDoc {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return content as unknown as PolicyDoc;
+}
+
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function asBackupPolicy(content: Record<string, unknown>): BackupPolicyDoc {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return content as unknown as BackupPolicyDoc;
+}
+
+// eslint-disable-next-line typescript/no-unsafe-type-assertion
+function asIamPolicy(content: Record<string, unknown> | undefined): IamPolicyDoc {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  return content as unknown as IamPolicyDoc;
+}
+
 const { scp, backupPolicy, permissionSet } = toPolicies<string, string>();
 
 describe("scp.blockExpensiveResources", () => {
@@ -12,19 +43,19 @@ describe("scp.blockExpensiveResources", () => {
     const result = scp.blockExpensiveResources(opts);
     assert.equal(result.name, "BlockExpensiveResources");
     assert.deepEqual(result.targets, ["root"]);
-    assert.equal((result.content as any).Version, "2012-10-17");
-    assert.equal((result.content as any).Statement.length, 4);
+    assert.equal(asPolicy(result.content).Version, "2012-10-17");
+    assert.equal(asPolicy(result.content).Statement.length, 4);
   });
 
   it("omits Condition when exemptAccounts is empty", () => {
     const result = scp.blockExpensiveResources(opts);
-    const stmt = (result.content as any).Statement[0];
+    const stmt = asPolicy(result.content).Statement[0];
     assert.equal(stmt.Condition, undefined);
   });
 
   it("includes aws:PrincipalAccount condition when exemptAccounts provided", () => {
     const result = scp.blockExpensiveResources({ ...opts, exemptAccounts: ["111", "222"] });
-    const stmt = (result.content as any).Statement[0];
+    const stmt = asPolicy(result.content).Statement[0];
     assert.deepEqual(stmt.Condition, {
       StringNotEquals: { "aws:PrincipalAccount": ["111", "222"] },
     });
@@ -32,7 +63,7 @@ describe("scp.blockExpensiveResources", () => {
 
   it("EC2 statement has ForAnyValue:StringNotLike with allowed types", () => {
     const result = scp.blockExpensiveResources(opts);
-    const stmt = (result.content as any).Statement[1];
+    const stmt = asPolicy(result.content).Statement[1];
     assert.deepEqual(stmt.Condition["ForAnyValue:StringNotLike"]["ec2:InstanceType"], [
       "t3.micro",
       "t3.small",
@@ -57,12 +88,12 @@ describe("scp.protectSecurityServices", () => {
     const result = scp.protectSecurityServices();
     assert.equal(result.name, "ProtectSecurityServices");
     assert.deepEqual(result.targets, ["root"]);
-    assert.equal((result.content as any).Statement.length, 3);
+    assert.equal(asPolicy(result.content).Statement.length, 3);
   });
 
   it("includes exemptAccounts condition", () => {
     const result = scp.protectSecurityServices({ exemptAccounts: ["123"] });
-    const stmt = (result.content as any).Statement[0];
+    const stmt = asPolicy(result.content).Statement[0];
     assert.deepEqual(stmt.Condition, { StringNotEquals: { "aws:PrincipalAccount": ["123"] } });
   });
 
@@ -70,7 +101,7 @@ describe("scp.protectSecurityServices", () => {
     const result = scp.protectSecurityServices({
       protect: { cloudTrail: true, config: true, guardDuty: false },
     });
-    const stmts = (result.content as any).Statement;
+    const stmts = asPolicy(result.content).Statement;
     assert.equal(stmts.length, 2);
     assert.equal(stmts[0].Sid, "ProtectCloudTrail");
     assert.equal(stmts[1].Sid, "ProtectConfig");
@@ -80,7 +111,7 @@ describe("scp.protectSecurityServices", () => {
     const result = scp.protectSecurityServices({
       protect: { guardDuty: true, cloudTrail: false, config: false },
     });
-    const stmts = (result.content as any).Statement;
+    const stmts = asPolicy(result.content).Statement;
     assert.equal(stmts.length, 1);
     assert.equal(stmts[0].Sid, "ProtectGuardDuty");
   });
@@ -101,7 +132,7 @@ describe("backupPolicy.dailyWithRetention", () => {
     const result = backupPolicy.dailyWithRetention({ regions: ["eu-central-1"] });
     assert.equal(result.name, "DailyBackupPolicy");
     assert.deepEqual(result.targets, ["root"]);
-    const plan = (result.content as any).plans.DailyBackup;
+    const plan = asBackupPolicy(result.content).plans.DailyBackup;
     assert.deepEqual(plan.regions, { "@@assign": ["eu-central-1"] });
     assert.equal(plan.rules.Daily.lifecycle.delete_after_days["@@assign"], "35");
   });
@@ -112,7 +143,7 @@ describe("backupPolicy.dailyWithRetention", () => {
       retentionDays: 90,
       backupVaultName: "Fort",
     });
-    const plan = (result.content as any).plans.DailyBackup;
+    const plan = asBackupPolicy(result.content).plans.DailyBackup;
     assert.equal(plan.rules.Daily.lifecycle.delete_after_days["@@assign"], "90");
     assert.equal(plan.rules.Daily.target_backup_vault_name["@@assign"], "Fort");
   });
@@ -131,21 +162,21 @@ describe("permissionSet patterns", () => {
     const result = permissionSet.cloudTrailAnalyst();
     assert.equal(result.name, "CloudTrailAnalyst");
     assert.ok(result.inlinePolicy);
-    const actions = (result.inlinePolicy as any).Statement.flatMap((s: any) => s.Action);
+    const actions = asIamPolicy(result.inlinePolicy).Statement.flatMap((s) => s.Action);
     assert.ok(actions.includes("athena:StartQueryExecution"));
   });
 
   it("configCompliance has Config read actions", () => {
     const result = permissionSet.configCompliance();
     assert.equal(result.name, "ConfigCompliance");
-    const actions = (result.inlinePolicy as any).Statement[0].Action;
+    const actions = asIamPolicy(result.inlinePolicy).Statement[0].Action;
     assert.ok(actions.includes("config:Describe*"));
   });
 
   it("securityInvestigator combines multiple services", () => {
     const result = permissionSet.securityInvestigator();
     assert.equal(result.name, "SecurityInvestigator");
-    assert.equal((result.inlinePolicy as any).Statement.length, 5);
+    assert.equal(asIamPolicy(result.inlinePolicy).Statement.length, 5);
   });
 
   it("respects custom name and sessionDuration", () => {
@@ -283,7 +314,7 @@ describe("securityBaseline stackSet declarations", () => {
         recordAllResourceTypes: false,
       },
     });
-    const ss = result.securityBaseline!.stackSets[1];
+    const ss = result.securityBaseline?.stackSets[1];
     assert.equal(ss.templateKey, "config-recorder");
     assert.deepEqual(ss.targets, ["root"]);
     assert.ok(ss.parameters.some((p) => p.key === "DeliveryFrequency" && p.value === "Six_Hours"));
@@ -299,7 +330,7 @@ describe("securityBaseline stackSet declarations", () => {
         targets: ["Security"],
       },
     });
-    const ss = result.securityBaseline!.stackSets[0];
+    const ss = result.securityBaseline?.stackSets[0];
     assert.equal(ss.templateKey, "guardduty-member");
     assert.deepEqual(ss.targets, ["Security"]);
     assert.ok(
@@ -317,10 +348,10 @@ describe("securityBaseline stackSet declarations", () => {
       },
       guardDuty: { enabled: true, delegatedAdminAccount: "SecurityAudit" },
     });
-    assert.equal(result.securityBaseline!.stackSets.length, 3);
-    assert.equal(result.securityBaseline!.stackSets[0].templateKey, "security-setup");
-    assert.equal(result.securityBaseline!.stackSets[1].templateKey, "config-recorder");
-    assert.equal(result.securityBaseline!.stackSets[2].templateKey, "guardduty-member");
+    assert.equal(result.securityBaseline?.stackSets.length, 3);
+    assert.equal(result.securityBaseline?.stackSets[0].templateKey, "security-setup");
+    assert.equal(result.securityBaseline?.stackSets[1].templateKey, "config-recorder");
+    assert.equal(result.securityBaseline?.stackSets[2].templateKey, "guardduty-member");
   });
 
   it("disabled features produce no stackSets", () => {
@@ -358,7 +389,7 @@ describe("scp.denyRootWithoutMfa", () => {
     const result = scp.denyRootWithoutMfa();
     assert.equal(result.name, "DenyRootWithoutMFA");
     assert.deepEqual(result.targets, ["root"]);
-    const stmt = (result.content as any).Statement[0];
+    const stmt = asPolicy(result.content).Statement[0];
     assert.equal(stmt.Effect, "Deny");
     assert.equal(stmt.Action, "*");
     assert.deepEqual(stmt.Condition.BoolIfExists, { "aws:MultiFactorAuthPresent": "false" });

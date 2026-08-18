@@ -141,11 +141,17 @@ export interface ControlBedrockModelsOptions<T extends string> extends BaseOptio
 }
 
 export function toScpCollection<T extends string, A extends string>(): ScpCollection<T, A> {
+  // eslint-disable-next-line typescript/no-unsafe-type-assertion
+  function rootTarget(): Array<T> {
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
+    return ["root"] as Array<T>;
+  }
+
   return {
     foundation: {
       denyRootUser: (options?: DenyRootUserOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "DenyRootUser";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description: "Denies all actions by the root user across member accounts",
@@ -173,7 +179,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options.name ?? "DenyUnsupportedRegions";
-        const targets = options.targets ?? (["root"] as Array<T>);
+        const targets = options.targets ?? rootTarget();
 
         const notActionList = [
           "a4b:*",
@@ -226,7 +232,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
 
         const exemptRolesCondition = buildExemptRolesCondition(options.exemptRoles ?? []);
         if (exemptRolesCondition != null) {
-          const stringNotLike = exemptRolesCondition.StringNotLike as Record<string, Array<string>>;
+          const stringNotLike = exemptRolesCondition.StringNotLike;
           condition.StringNotLike = stringNotLike;
         }
 
@@ -248,7 +254,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       enforceS3BucketOwnerEnforced: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "EnforceS3BucketOwnerEnforced";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -271,7 +277,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       preventLeavingOrganization: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "PreventLeavingOrganization";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description: "Prevents any member account from leaving the AWS Organization",
@@ -288,7 +294,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       denyIamUserCreation: (options?: DenyIamUserCreationOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "DenyIamUserCreation";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         const condition = buildExemptRolesCondition(options?.exemptRoles ?? []);
         const statement: Record<string, unknown> = {
           Sid: "DenyIamUserCreation",
@@ -309,7 +315,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       preventDisablingEbsEncryption: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "PreventDisablingEbsEncryption";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -333,7 +339,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options.name ?? "ProtectPasswordPolicy";
-        const targets = options.targets ?? (["root"] as Array<T>);
+        const targets = options.targets ?? rootTarget();
         const condition = { StringNotLike: { "aws:PrincipalARN": options.exemptRoles } };
 
         return {
@@ -358,7 +364,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options.name ?? "EnforceDataPerimeter";
-        const targets = options.targets ?? (["root"] as Array<T>);
+        const targets = options.targets ?? rootTarget();
 
         const serviceLinkedRolePattern = "arn:aws:iam::*:role/aws-service-role/*";
         const exemptRolePatterns = [serviceLinkedRolePattern, ...(options.exemptRoles ?? [])];
@@ -401,7 +407,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options.name ?? "ProtectSecurityServicesComprehensive";
-        const targets = options.targets ?? (["root"] as Array<T>);
+        const targets = options.targets ?? rootTarget();
         const condition = { StringNotLike: { "aws:PrincipalARN": options.exemptRoles } };
 
         const denyActions = [
@@ -476,7 +482,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options.name ?? "ProtectSecurityHubConfig";
-        const targets = options.targets ?? (["root"] as Array<T>);
+        const targets = options.targets ?? rootTarget();
         const condition = { StringNotLike: { "aws:PrincipalARN": options.exemptRoles } };
 
         return {
@@ -506,7 +512,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       restrictToSecurityOperations: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "RestrictToSecurityOperations";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -530,7 +536,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       enforceMfaForIam: (options?: EnforceMfaForIamOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "EnforceMfaForIam";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
 
         const condition: Record<string, Record<string, string | Array<string>>> = {
           BoolIfExists: {
@@ -540,7 +546,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
 
         const exemptRolesCondition = buildExemptRolesCondition(options?.exemptRoles ?? []);
         if (exemptRolesCondition != null) {
-          const stringNotLike = exemptRolesCondition.StringNotLike as Record<string, Array<string>>;
+          const stringNotLike = exemptRolesCondition.StringNotLike;
           condition.StringNotLike = stringNotLike;
         }
 
@@ -571,7 +577,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
     production: {
       enforceEncryption: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "EnforceEncryption";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -624,7 +630,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options.name ?? "PreventUnauthorizedTermination";
-        const targets = options.targets ?? (["root"] as Array<T>);
+        const targets = options.targets ?? rootTarget();
 
         return {
           name,
@@ -654,7 +660,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options.name ?? "ProtectTaggedStacks";
-        const targets = options.targets ?? (["root"] as Array<T>);
+        const targets = options.targets ?? rootTarget();
         const tagKey = options.tagKey ?? "organization";
 
         return {
@@ -686,7 +692,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       enforceImdsV2: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "EnforceIMDSv2";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -713,7 +719,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         options?: PreventExpensiveInstancesOptions<T>,
       ): PolicyEntry<T> => {
         const name = options?.name ?? "PreventExpensiveInstances";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         const denyNatGateway = options?.denyNatGateway ?? true;
         const denyIo2Volumes = options?.denyIo2Volumes ?? true;
 
@@ -797,7 +803,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       blockReservedPurchases: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "BlockReservedPurchases";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -824,7 +830,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       preventExpensiveAiMl: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "PreventExpensiveAiMl";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -856,7 +862,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options?.name ?? "EnforceResourceTagging";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
 
         const nullCondition: Record<string, string> = {};
         for (const tagKey of requiredTags) {
@@ -894,7 +900,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
     sandbox: {
       restrictToBasicServices: (options?: RestrictToBasicServicesOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "RestrictToBasicServices";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
 
         const allowedServices = options?.allowedServices ?? [
           "ec2:*",
@@ -957,7 +963,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       preventExternalSharing: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "PreventExternalSharing";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -988,7 +994,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options.name ?? "SuspendedAccountLockdown";
-        const targets = options.targets ?? (["root"] as Array<T>);
+        const targets = options.targets ?? rootTarget();
 
         return {
           name,
@@ -1014,7 +1020,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
     infrastructure: {
       restrictToNetworking: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "RestrictToNetworkingOnly";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -1063,7 +1069,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       protectVpcFlowLogs: (options?: ProtectVpcFlowLogsOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "ProtectVpcFlowLogs";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         const condition = buildExemptRolesCondition(options?.exemptRoles ?? []);
 
         const statement: Record<string, unknown> = {
@@ -1101,7 +1107,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
         }
 
         const name = options?.name ?? "ControlBedrockModels";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
 
         return {
           name,
@@ -1120,7 +1126,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       restrictQDeveloperIam: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "RestrictQDeveloperIam";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -1151,7 +1157,7 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
       },
       requireVpcForSageMaker: (options?: BaseOptions<T>): PolicyEntry<T> => {
         const name = options?.name ?? "RequireVpcForSageMaker";
-        const targets = options?.targets ?? (["root"] as Array<T>);
+        const targets = options?.targets ?? rootTarget();
         return {
           name,
           description:
@@ -1176,7 +1182,9 @@ export function toScpCollection<T extends string, A extends string>(): ScpCollec
   };
 }
 
-function buildExemptRolesCondition(roles: Array<string>): Record<string, unknown> | undefined {
+function buildExemptRolesCondition(
+  roles: Array<string>,
+): { StringNotLike: Record<string, Array<string>> } | undefined {
   if (roles.length === 0) return undefined;
   return { StringNotLike: { "aws:PrincipalARN": roles } };
 }
