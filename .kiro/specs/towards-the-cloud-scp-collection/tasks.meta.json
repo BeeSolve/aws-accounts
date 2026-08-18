@@ -1,0 +1,120 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "9.1 Write property test for valid IAM policy document structure": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041424273
+      }
+    ],
+    "9.2 Write property test for PolicyEntry shape consistency": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041425063
+      }
+    ],
+    "9.3 Write property test for default targets fallback": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041425927
+      }
+    ],
+    "9.4 Write property test for custom name and targets passthrough": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041426831
+      }
+    ],
+    "9.5 Write property test for exempt roles condition generation": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041427580
+      }
+    ],
+    "9.6 Write property test for region restriction round-trip": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041428419
+      }
+    ],
+    "9.7 Write property test for required parameter validation": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041429282
+      }
+    ],
+    "9.8 Write property test for organization ID validation": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041430098
+      }
+    ],
+    "9.9 Write property test for development instance type filtering": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041431062
+      }
+    ],
+    "9.10 Write property test for tag enforcement null condition": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041431744
+      }
+    ],
+    "9.11 Write property test for SCP size constraint": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041432774
+      }
+    ],
+    "9. Write property-based tests": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041432776
+      }
+    ],
+    "10.1 Add package.json export entry for the SCP collection module": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041437794
+      },
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041551069
+      }
+    ],
+    "10.2 Final checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041438742
+      },
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041551911
+      }
+    ],
+    "10. Wire up module export and final checkpoint": [
+      {
+        "executionId": "1e064cf0-cfd0-4fb0-b6e8-947463c09026",
+        "chatSessionId": "sess_9e237234-27be-41b6-a240-b04b1c40c58c",
+        "timestamp": 1787041551913
+      }
+    ]
+  }
+}

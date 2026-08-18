@@ -26,6 +26,10 @@
     "./security": {
       "types": "./dist/security.d.ts",
       "default": "./dist/security.js"
+    },
+    "./scpCollection": {
+      "types": "./dist/scpCollection.d.ts",
+      "default": "./dist/scpCollection.js"
     }
   },
   "publishConfig": {
