@@ -40,9 +40,7 @@ import { withSecurityBaseline } from "./aws.config.types.js";
 
 const awsConfig = withSecurityBaseline(
   {
-    organizationalUnits: [
-      /* your config */
-    ],
+    organizationalUnits: [/* your config */],
     delegatedAdministrators: [],
     // ... rest of standard config
   },

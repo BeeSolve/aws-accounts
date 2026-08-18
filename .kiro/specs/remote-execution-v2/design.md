@@ -153,8 +153,7 @@ type InvokeLambdaProps = {
 };
 
 type LambdaInvokeResult =
-  | { ok: true; response: LambdaResponsePayload }
-  | { ok: false; error: LambdaInvokeError };
+  { ok: true; response: LambdaResponsePayload } | { ok: false; error: LambdaInvokeError };
 
 type LambdaInvokeError =
   | { kind: "validation"; details: string }

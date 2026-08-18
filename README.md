@@ -212,6 +212,32 @@ policies: {
 }
 ```
 
+### SCP Collection
+
+A comprehensive library of 28 production-ready SCPs organized by OU category (foundation, security, production, development, sandbox, suspended, infrastructure, modern). Based on the [Towards the Cloud SCP examples](https://towardsthecloud.com/blog/aws-scp-examples).
+
+```ts
+import { toScpCollection } from "@beesolve/aws-accounts/scpCollection";
+
+const scps = toScpCollection<string, string>();
+
+policies: {
+  serviceControlPolicies: [
+    scps.foundation.denyRootUser(),
+    scps.foundation.denyUnsupportedRegions({ allowedRegions: ["eu-central-1", "us-east-1"] }),
+    scps.foundation.preventLeavingOrganization(),
+    scps.production.enforceEncryption({ targets: ["Production"] }),
+    scps.development.preventExpensiveInstances({ targets: ["Development"] }),
+    scps.suspended.completeLockdown({
+      exemptRoles: ["arn:aws:iam::*:role/OrganizationAdmin"],
+      targets: ["Suspended"],
+    }),
+  ],
+}
+```
+
+See [SCP Collection](./docs/scp-collection.md) for the full reference with all 28 policies and options.
+
 See [Security Baseline](./docs/security-baseline.md) for CloudTrail, AWS Config, GuardDuty, and root access management.
 
 ## FAQ

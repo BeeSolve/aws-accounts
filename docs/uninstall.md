@@ -13,8 +13,9 @@ This tool deploys minimal infrastructure to your AWS account. Here's exactly wha
 | Lambda function | `beesolve-aws-accounts`                            | Executes scan/apply operations remotely |
 
 Optionally (if log group was created):
-| Resource | Name | Purpose |
-|----------|------|--------|
+
+| Resource             | Name                                | Purpose               |
+| -------------------- | ----------------------------------- | --------------------- |
 | CloudWatch Log Group | `/aws/lambda/beesolve-aws-accounts` | Lambda execution logs |
 
 ## What the tool does NOT create

@@ -144,11 +144,7 @@ type SecurityBaselineOptions<T extends string, A extends string> = {
     recordAllResourceTypes?: boolean; // default: true
     includeGlobalResources?: boolean; // default: true
     deliveryFrequency?:
-      | "One_Hour"
-      | "Three_Hours"
-      | "Six_Hours"
-      | "Twelve_Hours"
-      | "TwentyFour_Hours";
+      "One_Hour" | "Three_Hours" | "Six_Hours" | "Twelve_Hours" | "TwentyFour_Hours";
   };
   guardDuty?: {
     enabled: boolean;
