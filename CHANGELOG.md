@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.9.2
+
+### Patch Changes
+
+- cc16151: Resolve all oxlint errors and warnings (728 → 0). Migrate mock.module to new exports API, replace any with unknown, add typed test helpers, remove dead code.
+
 ## 1.9.1
 
 ### Patch Changes
