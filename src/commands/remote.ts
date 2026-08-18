@@ -523,7 +523,7 @@ export async function ensureLogGroup(props: {
   const describeResult = await logsClient.send(
     new DescribeLogGroupsCommand({ logGroupNamePrefix: lambdaLogGroupName, limit: 1 }),
   );
-  const logGroupArn = describeResult.logGroups?.[0]?.arn;
+  const logGroupArn = describeResult.logGroups?.[0]?.logGroupArn;
   if (logGroupArn != null) {
     await logsClient.send(
       new LogsTagResourceCommand({

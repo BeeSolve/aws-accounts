@@ -314,6 +314,7 @@ export function renderAwsConfigTypesTs(props: { config: AwsConfigModel }): strin
   return `import * as v from "valibot";
 import { iamPolicyDocumentSchema } from "@beesolve/iam-policy-ts";
 import { toPolicies, toSecurityBaseline, type SecurityBaselineOptions } from "@beesolve/aws-accounts/security";
+import { toScpCollection } from "@beesolve/aws-accounts/scpCollection";
 export * as iam from "@beesolve/iam-policy-ts";
 export {
   iamActionCatalog,
@@ -517,6 +518,7 @@ export type AwsConfig = v.InferOutput<typeof awsConfigSchema>;
 type PolicyTarget = v.InferOutput<typeof organizationalUnitNameSchema> | v.InferOutput<typeof accountNameSchema>;
 type AccountName = v.InferOutput<typeof accountNameSchema>;
 export const policies = toPolicies<PolicyTarget, AccountName>();
+export const scps = toScpCollection<PolicyTarget, AccountName>();
 export function withSecurityBaseline(config: AwsConfig, options: SecurityBaselineOptions<PolicyTarget, AccountName>) { return toSecurityBaseline(config, options); }
 `;
 }
