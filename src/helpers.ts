@@ -88,7 +88,10 @@ export function toRecordByProperty<T extends Record<string, unknown>>(
   keyTransformer: (key: string) => string = (key) => key,
 ): Record<string, T> {
   return Object.fromEntries(
-    input.map((item) => [keyTransformer(typeof key === "function" ? key(item) : item[key]), item]),
+    input.map((item) => [
+      keyTransformer(typeof key === "function" ? key(item) : String(item[key])),
+      item,
+    ]),
   );
 }
 

@@ -841,7 +841,8 @@ test("runRemoteApply creates aggregator when deploying security baseline StackSe
         redeployStacksets: false,
       },
       logger,
-      lambdaClient: mockClient(mockLambdaClient.send),
+      // eslint-disable-next-line typescript/no-unsafe-type-assertion
+      lambdaClient: mockClient(mockLambdaClient.send as (...args: Array<unknown>) => unknown),
     });
 
     const originalCwd = process.cwd();

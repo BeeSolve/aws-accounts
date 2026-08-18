@@ -3,17 +3,31 @@ import { describe, it } from "node:test";
 
 import { toPolicies, toSecurityBaseline } from "./security.js";
 
+interface PolicyStatement {
+  Effect?: string;
+  Action?: unknown;
+  Resource?: unknown;
+  Condition?: Record<string, Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
 interface PolicyDoc {
   Version?: string;
-  Statement: Array<Record<string, unknown>>;
+  Statement: Array<PolicyStatement>;
+}
+
+interface BackupPolicyPlan {
+  regions?: unknown;
+  rules?: Record<string, Record<string, Record<string, Record<string, unknown>>>>;
+  [key: string]: unknown;
 }
 
 interface BackupPolicyDoc {
-  plans: Record<string, Record<string, unknown>>;
+  plans: Record<string, BackupPolicyPlan>;
 }
 
 interface IamPolicyDoc {
-  Statement: Array<Record<string, unknown>>;
+  Statement: Array<PolicyStatement>;
 }
 
 // eslint-disable-next-line typescript/no-unsafe-type-assertion
@@ -64,7 +78,7 @@ describe("scp.blockExpensiveResources", () => {
   it("EC2 statement has ForAnyValue:StringNotLike with allowed types", () => {
     const result = scp.blockExpensiveResources(opts);
     const stmt = asPolicy(result.content).Statement[1];
-    assert.deepEqual(stmt.Condition["ForAnyValue:StringNotLike"]["ec2:InstanceType"], [
+    assert.deepEqual(stmt.Condition?.["ForAnyValue:StringNotLike"]["ec2:InstanceType"], [
       "t3.micro",
       "t3.small",
       "m8g.medium",
@@ -134,7 +148,7 @@ describe("backupPolicy.dailyWithRetention", () => {
     assert.deepEqual(result.targets, ["root"]);
     const plan = asBackupPolicy(result.content).plans.DailyBackup;
     assert.deepEqual(plan.regions, { "@@assign": ["eu-central-1"] });
-    assert.equal(plan.rules.Daily.lifecycle.delete_after_days["@@assign"], "35");
+    assert.equal(plan.rules?.Daily.lifecycle.delete_after_days["@@assign"], "35");
   });
 
   it("respects custom retention and vault", () => {
@@ -144,8 +158,8 @@ describe("backupPolicy.dailyWithRetention", () => {
       backupVaultName: "Fort",
     });
     const plan = asBackupPolicy(result.content).plans.DailyBackup;
-    assert.equal(plan.rules.Daily.lifecycle.delete_after_days["@@assign"], "90");
-    assert.equal(plan.rules.Daily.target_backup_vault_name["@@assign"], "Fort");
+    assert.equal(plan.rules?.Daily.lifecycle.delete_after_days["@@assign"], "90");
+    assert.equal(plan.rules?.Daily.target_backup_vault_name["@@assign"], "Fort");
   });
 });
 
@@ -169,7 +183,8 @@ describe("permissionSet patterns", () => {
   it("configCompliance has Config read actions", () => {
     const result = permissionSet.configCompliance();
     assert.equal(result.name, "ConfigCompliance");
-    const actions = asIamPolicy(result.inlinePolicy).Statement[0].Action;
+    // eslint-disable-next-line typescript/no-unsafe-type-assertion
+    const actions = asIamPolicy(result.inlinePolicy).Statement[0].Action as Array<string>;
     assert.ok(actions.includes("config:Describe*"));
   });
 
@@ -315,6 +330,7 @@ describe("securityBaseline stackSet declarations", () => {
       },
     });
     const ss = result.securityBaseline?.stackSets[1];
+    assert.ok(ss);
     assert.equal(ss.templateKey, "config-recorder");
     assert.deepEqual(ss.targets, ["root"]);
     assert.ok(ss.parameters.some((p) => p.key === "DeliveryFrequency" && p.value === "Six_Hours"));
@@ -331,6 +347,7 @@ describe("securityBaseline stackSet declarations", () => {
       },
     });
     const ss = result.securityBaseline?.stackSets[0];
+    assert.ok(ss);
     assert.equal(ss.templateKey, "guardduty-member");
     assert.deepEqual(ss.targets, ["Security"]);
     assert.ok(
@@ -392,8 +409,8 @@ describe("scp.denyRootWithoutMfa", () => {
     const stmt = asPolicy(result.content).Statement[0];
     assert.equal(stmt.Effect, "Deny");
     assert.equal(stmt.Action, "*");
-    assert.deepEqual(stmt.Condition.BoolIfExists, { "aws:MultiFactorAuthPresent": "false" });
-    assert.deepEqual(stmt.Condition.StringLike, { "aws:PrincipalArn": "arn:aws:iam::*:root" });
+    assert.deepEqual(stmt.Condition?.BoolIfExists, { "aws:MultiFactorAuthPresent": "false" });
+    assert.deepEqual(stmt.Condition?.StringLike, { "aws:PrincipalArn": "arn:aws:iam::*:root" });
   });
 
   it("respects custom targets", () => {
