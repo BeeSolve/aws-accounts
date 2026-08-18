@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.9.3
+
+### Patch Changes
+
+- 6e0da9d: Fix scpCollection subpath export by generating .d.ts declarations. Wire `scps` export into the generated `aws.config.types.ts` template for typed OU/account autocompletion. Fix `logGroupArn` property access in `ensureLogGroup` (was incorrectly using `arn`).
+
 ## 1.9.2
 
 ### Patch Changes
