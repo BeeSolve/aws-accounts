@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.9.1
+
+### Patch Changes
+
+- 42998b4: refactor + tests
+
 ## 1.7.4
 
 ### Patch Changes
