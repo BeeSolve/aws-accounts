@@ -4,13 +4,20 @@ A reusable library of 28 production-ready AWS Service Control Policies (SCPs) or
 
 ## Overview
 
-Import from the package:
+The `scps` helper is automatically available from your generated `aws.config.types.ts` with full autocompletion for your OU and account names:
 
 ```ts
-import { toScpCollection } from "@beesolve/aws-accounts/scpCollection";
+import { scps } from "./aws.config.types.js";
 ```
 
-The factory function returns SCP rule functions organized into 8 categories matching common OU structures:
+> If you need the factory directly (e.g. outside a managed project), you can import it from the package:
+>
+> ```ts
+> import { toScpCollection } from "@beesolve/aws-accounts/scpCollection";
+> const scps = toScpCollection<string, string>();
+> ```
+
+The `scps` object provides SCP rule functions organized into 8 categories matching common OU structures:
 
 | Category         | SCPs | Purpose                              |
 | ---------------- | ---- | ------------------------------------ |
@@ -28,14 +35,11 @@ Each function returns a `PolicyEntry<T>` compatible with the `serviceControlPoli
 ## Quick Start
 
 ```ts
-import { toScpCollection } from "@beesolve/aws-accounts/scpCollection";
+import { scps, type AwsConfig } from "./aws.config.types.js";
 
-// In your aws.config.types.ts, the types are bound to your OU/account names.
-// For standalone usage, use string generics:
-const scps = toScpCollection<string, string>();
-
-// Apply to your config
-const awsConfig = {
+// targets are type-checked against your actual OU/account names
+const awsConfig: AwsConfig = {
+  // ...
   policies: {
     serviceControlPolicies: [
       scps.foundation.denyRootUser(),
@@ -51,6 +55,8 @@ const awsConfig = {
   },
 };
 ```
+
+After running `aws-accounts regenerate`, the `scps` export is available in `aws.config.types.ts` with typed `targets` matching your organization's OUs and accounts.
 
 ## Common Options
 
@@ -424,10 +430,8 @@ scps.modern.requireVpcForSageMaker({ targets: ["Production"] });
 A comprehensive multi-OU configuration:
 
 ```ts
-import { toScpCollection } from "@beesolve/aws-accounts/scpCollection";
-import type { AwsConfig } from "./aws.config.types.js";
+import { scps, type AwsConfig } from "./aws.config.types.js";
 
-const scps = toScpCollection<string, string>();
 const adminRole = "arn:aws:iam::*:role/OrganizationAdmin";
 
 const awsConfig: AwsConfig = {
