@@ -298,6 +298,7 @@ async function ensureIdentityCenter(props: {
   const response = await props.input.ssoAdminClient.send(new ListInstancesCommand({}));
   if ((response.Instances ?? []).length > 0) {
     props.input.logger.log("IAM Identity Center: enabled");
+    logSignInSetupGuidance(props.input.logger, props.region);
     return;
   }
 
@@ -335,6 +336,7 @@ async function ensureIdentityCenter(props: {
       const retryResponse = await props.input.ssoAdminClient.send(new ListInstancesCommand({}));
       if ((retryResponse.Instances ?? []).length > 0) {
         props.input.logger.log("IAM Identity Center: detected");
+        logSignInSetupGuidance(props.input.logger, props.region);
         return;
       }
       props.input.logger.log(
@@ -344,6 +346,35 @@ async function ensureIdentityCenter(props: {
   } finally {
     readlineInterface.close();
   }
+}
+
+// Several Identity Center sign-in settings are Console-only; there is no
+// sso-admin API (nor CloudFormation/Terraform resource) to change them. Two of
+// them silently break newly created users:
+//   1. MFA enforcement defaults to BLOCKING sign-in for users with no registered
+//      MFA device — a chicken-and-egg, since they can't register without signing
+//      in. Switch to self-registration instead.
+//   2. Users created via the CreateUser API get no password and no invitation
+//      email. Without "Send email OTP" enabled, they can never start sign-in.
+// Guide the operator to configure both so users the tool creates can onboard
+// themselves with zero further admin action.
+function logSignInSetupGuidance(logger: Logger, region: string): void {
+  const settingsUrl = `https://${region}.console.aws.amazon.com/singlesignon/home?region=${region}#!/settings`;
+  logger.log("");
+  logger.log("Configure these Console-only sign-in settings (no API exists for them):");
+  logger.log(`  Open: ${settingsUrl}`);
+  logger.log("");
+  logger.log("  1. Let users self-register MFA (default blocks new users):");
+  logger.log("     Authentication -> Multi-factor authentication -> Configure ->");
+  logger.log('     "Require them to register an MFA device at sign-in", and enable');
+  logger.log('     "Authenticator apps" under the allowed MFA types.');
+  logger.log("");
+  logger.log("  2. Email a one-time password to API/CLI-created users (this tool");
+  logger.log("     creates users with no password or invitation email):");
+  logger.log('     Standard authentication -> Configure -> check "Send email OTP" -> Save.');
+  logger.log("");
+  logger.log("  Without these, users added via aws.config.ts cannot sign in.");
+  logger.log("");
 }
 
 async function ensureIamRole(props: {

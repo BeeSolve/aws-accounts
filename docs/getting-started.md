@@ -2,6 +2,43 @@
 
 This guide covers two paths to getting started with `@beesolve/aws-accounts`.
 
+## Before you start: IAM Identity Center setup
+
+`@beesolve/aws-accounts` manages users, groups, permission sets, and assignments
+through the IAM Identity Center APIs. A few Identity Center settings are
+**Console-only** — there is no public API (nor CloudFormation/Terraform resource)
+to change them, so this tool cannot set them for you. Configure these **once**,
+up front, or newly created users will be unable to sign in.
+
+All three live in the management account under **IAM Identity Center → Settings**
+(region-specific — use the region where Identity Center is enabled).
+
+1. **Enable Identity Center with the built-in directory.**
+   Under **Settings**, enable Identity Center and keep the default identity source
+   ("Identity Center directory") unless you use an external IdP. `bootstrap` guides
+   you through this and waits for you to finish.
+
+2. **Let users self-register MFA (don't block them).**
+   **Settings → Authentication → Multi-factor authentication → Configure** → set
+   "If a user does not yet have a registered MFA device" to **"Require them to
+   register an MFA device at sign-in"** (the default _blocks_ sign-in instead).
+   Also confirm **Authenticator apps (TOTP)** is enabled under "Users can
+   authenticate with these MFA types", otherwise a new user has no device type they
+   are allowed to self-enroll.
+
+3. **Email a one-time password to users created via API/CLI.**
+   **Settings → Standard authentication → Configure** → check **"Send email OTP"** →
+   **Save** (status flips from Disabled to Enabled). This tool creates users through
+   the `CreateUser` API, which does **not** set a password or send an invitation on
+   its own. With this setting on, every user the tool creates is automatically
+   emailed a one-time password to onboard themselves — they set their password and,
+   thanks to step 2, self-enroll their MFA device. No per-user admin action needed.
+
+> Why these are manual: the same way Identity Center _enablement_ has no
+> org-level API, the MFA-enforcement mode and the "Send email OTP" toggle are not
+> exposed by the `sso-admin`/`identitystore` APIs. `bootstrap` prints reminders for
+> all three rather than pretending to automate them.
+
 ## Path A: Starting from Scratch (New AWS Account)
 
 If you don't have an AWS account yet:
@@ -40,8 +77,18 @@ The CLI will guide you through:
   - A direct Console URL for your region
   - Step-by-step instructions to click "Enable"
   - Guidance to keep the default "Identity Center directory" identity source
+  - Reminders for the two Console-only sign-in settings (MFA self-registration
+    and "Send email OTP") — see [Before you start](#before-you-start-iam-identity-center-setup)
   - A polling loop that waits for you to complete the Console action
 - **Infrastructure deployment** — creates the S3 state bucket, IAM role, and Lambda function
+
+> **Configure the Console-only sign-in settings first.** By default Identity
+> Center _blocks_ sign-in for users with no MFA device, and API-created users get
+> no password or invitation email — so a user added via `aws.config.ts` cannot log
+> in until you enable MFA self-registration and "Send email OTP". These are
+> Console-only and covered in
+> [Before you start](#before-you-start-iam-identity-center-setup); `bootstrap`
+> prints reminders but cannot set them for you.
 
 ### 4. Scan and generate config
 
@@ -190,3 +237,73 @@ https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_org_suppo
 ### Identity Center in a different region
 
 Identity Center is region-specific. Use `--region` to match the region where you enabled it.
+
+### A user created via `aws.config.ts` never receives a password / cannot start sign-in
+
+The tool creates users with the `CreateUser` API, which does **not** set a
+password or send an invitation email. If **"Send email OTP"** is not enabled in
+Identity Center, a config-created user lands in limbo — no password, no email, no
+self-service path — and the "reset password" flow dead-ends.
+
+Fix:
+
+- Enable it once for the whole directory: **IAM Identity Center → Settings →
+  Standard authentication → Configure → check "Send email OTP" → Save**. New users
+  the tool creates from then on are automatically emailed a one-time password to
+  onboard (and, with MFA self-registration on, self-enroll their MFA device). This
+  is a Console-only setting — no API/CloudFormation/Terraform equivalent.
+- For a user that was created **before** you enabled the setting: trigger the email
+  manually via **Users → _user_ → Reset password → "Send an email to the user with
+  instructions"**, or delete and recreate the user so the create-time email fires.
+
+### New user cannot sign in: "You are required to provide multi-factor authentication (MFA) that you do not have"
+
+Identity Center's default MFA mode _blocks_ sign-in for users who have no
+registered MFA device. A newly created user then hits a chicken-and-egg: they
+can't register a device without signing in, and can't sign in without a device.
+The self-service "reset password" flow dead-ends on the same MFA gate.
+
+Fix it as the administrator (this cannot be self-serviced by the affected user):
+
+- **Recommended (one-time, fixes it for all future users):** In **IAM Identity
+  Center → Settings → Authentication → Multi-factor authentication → Configure**,
+  set "If a user does not yet have a registered MFA device" to **"Require them to
+  register an MFA device at sign-in"**, and make sure **Authenticator apps (TOTP)**
+  is enabled under "Users can authenticate with these MFA types". New users then
+  enroll a device during first sign-in. These are Console-only settings — there is
+  no API, CloudFormation, or Terraform resource for them.
+- If a user only has the "block" behavior and TOTP is disabled, self-registration
+  still fails with this exact error because there is no permitted device type to
+  enroll — enabling authenticator apps resolves it.
+
+Note: headless/automation identities (e.g. an LLM agent) cannot complete an
+interactive MFA prompt. Don't rely on an interactive SSO human-login user for
+automation — assume a dedicated role non-interactively instead.
+
+### First management-account assignment fails: AccessDenied on `iam:GetSAMLProvider`
+
+Granting a permission set to an account for the _first time_ makes Identity
+Center provision an IAM role whose trust policy references the SSO SAML provider.
+For the **management account** specifically, that provider lives in-account and
+the tool's Lambda role must read it. If you bootstrapped with a version before
+this permission was added, the first management-account assignment fails with:
+
+```
+... is not authorized to perform: iam:GetSAMLProvider on resource:
+arn:aws:iam::<mgmt-account>:saml-provider/AWSSSO_..._DO_NOT_DELETE
+```
+
+and `apply` stops with partial state. Fix by running `upgrade` (which reapplies
+the Lambda role policy, now including `iam:GetSAMLProvider`), then re-sync:
+
+```bash
+npx aws-accounts upgrade
+npx aws-accounts scan --refresh
+npx aws-accounts plan
+npx aws-accounts apply
+```
+
+As a security best practice, keep the management account nearly empty: assign
+only a break-glass admin permission set there (plus, optionally, a read-only
+auditor). Never assign day-to-day developer or automation/agent permission sets
+to the management account.

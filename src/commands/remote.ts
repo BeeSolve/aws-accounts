@@ -421,6 +421,23 @@ export async function applyLambdaRolePolicy(props: {
         Resource: "*",
       },
       {
+        // First-time permission-set assignment into an account provisions an
+        // IAM role whose trust policy references the Identity Center SAML
+        // provider. Provisioning into the *management account* requires reading
+        // that SAML provider (it lives in the management account). Without
+        // iam:GetSAMLProvider, the very first assignment targeting the
+        // management account fails with an AccessDenied on iam:GetSAMLProvider.
+        Effect: "Allow",
+        Action: [
+          "iam:GetSAMLProvider",
+          "iam:GetRole",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListRoleTags",
+        ],
+        Resource: "*",
+      },
+      {
         Effect: "Allow",
         Action: [s3("GetObject"), s3("PutObject"), s3("ListBucket")],
         Resource: [`arn:aws:s3:::${props.bucketName}`, `arn:aws:s3:::${props.bucketName}/*`],
