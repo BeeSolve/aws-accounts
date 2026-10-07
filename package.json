@@ -16,8 +16,12 @@
     "bin",
     "dist",
     "!dist/**/*.test.js",
+    "!dist/**/*.js.map",
+    "!dist/**/*.d.ts.map",
     "dist-lambda",
-    "templates"
+    "templates",
+    "DOCS.md",
+    "docs/how-to"
   ],
   "type": "module",
   "main": "dist/cli.js",
