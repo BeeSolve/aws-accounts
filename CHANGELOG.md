@@ -1,5 +1,11 @@
 # @beesolve/aws-accounts
 
+## 1.9.5
+
+### Patch Changes
+
+- 7675b55: Ship agent-readable documentation (DOCS.md + docs/how-to guides) inside the published tarball so AI agents can learn the CLI and library API directly from node_modules.
+
 ## 1.9.4
 
 ### Patch Changes
